@@ -15,5 +15,6 @@
 #include <amark/export.h>
 #include <amark/version.h>
 #include <amark/error.h>
+#include <amark/memory.h>
 
 #endif /* AMARK_AMARK_H */

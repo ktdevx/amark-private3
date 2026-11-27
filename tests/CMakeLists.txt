@@ -2,10 +2,13 @@
 #
 # 追記専用: 後続の spec は spec 名のコメント付きブロックを末尾に追記し、自分のモジュールの
 # テストを次の形で登録する（他の spec のブロックや本 spec の行を書き換えない）。
-#   naos_add_executable(amark_<module>_test SOURCES <module>_test.c LIBRARIES Amark::amark)
+#   naos_add_executable(amark_<module>_test SOURCES <module>_test.c LIBRARIES Amark::amark amark_test_support)
 #   amark_target_warnings(amark_<module>_test)
-# CTest 名は amark_<module>_test.<suite>.<test> になる。テストは公開ヘッダ（<amark/...>）だけを
-# include し、src/ を include しない。
+# CTest 名は amark_<module>_test.<suite>.<test> になる。テストは公開ヘッダ（<amark/...>）と
+# テスト補助のヘッダ（"support/test_<area>.h"）だけを include し、src/ を include しない。
+# テスト補助を追加する spec は、同じブロックで support/test_<area>.{h,c} を作り、
+#   target_sources(amark_test_support PRIVATE support/test_<area>.c)
+# で amark_test_support のソース一覧に追記する。
 
 # このディレクトリのターゲット（テスト実行ファイルとヘッダ検査）は C99・拡張無効、C++ は C++11 とする
 set(CMAKE_C_STANDARD 99)
@@ -25,17 +28,27 @@ FetchContent_Declare(Naos
 FetchContent_MakeAvailable(Naos)
 
 # foundation
-naos_add_executable(amark_version_test SOURCES version_test.c LIBRARIES Amark::amark)
+# テスト補助の静的ライブラリ。ライブラリ本体には含めず、公開 API だけを使う。補助のヘッダは
+# tests/ からの相対パス（"support/test_<area>.h"）で include する
+add_library(amark_test_support STATIC support/test_allocator.c)
+target_include_directories(amark_test_support PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
+target_link_libraries(amark_test_support PUBLIC Amark::amark)
+amark_target_warnings(amark_test_support)
+
+naos_add_executable(amark_version_test SOURCES version_test.c LIBRARIES Amark::amark amark_test_support)
 amark_target_warnings(amark_version_test)
 # ビルド定義が version.h から読んだバージョンをテストへ渡し、ヘッダの値と一致することを確かめる
 target_compile_definitions(amark_version_test PRIVATE TEST_PROJECT_VERSION="${PROJECT_VERSION}")
 
-naos_add_executable(amark_error_test SOURCES error_test.c LIBRARIES Amark::amark)
+naos_add_executable(amark_error_test SOURCES error_test.c LIBRARIES Amark::amark amark_test_support)
 amark_target_warnings(amark_error_test)
+
+naos_add_executable(amark_memory_test SOURCES memory_test.c LIBRARIES Amark::amark amark_test_support)
+amark_target_warnings(amark_memory_test)
 
 # C++ から包括ヘッダを include して公開 API を呼べることを確かめる（後続 spec は
 # cxx_header_test.cpp に自分のブロックを追記する。ここの登録は変えない）
-naos_add_executable(amark_cxx_header_test SOURCES cxx_header_test.cpp LIBRARIES Amark::amark)
+naos_add_executable(amark_cxx_header_test SOURCES cxx_header_test.cpp LIBRARIES Amark::amark amark_test_support)
 amark_target_warnings(amark_cxx_header_test)
 
 # 公開ヘッダの単独 include 検査。include/amark/*.h のそれぞれについて、そのヘッダだけを
