@@ -1,0 +1,59 @@
+# テスト。トップレベル構成で AMARK_BUILD_TESTS と BUILD_TESTING が真のときだけ読み込まれる。
+#
+# 追記専用: 後続の spec は spec 名のコメント付きブロックを末尾に追記し、自分のモジュールの
+# テストを次の形で登録する（他の spec のブロックや本 spec の行を書き換えない）。
+#   naos_add_executable(amark_<module>_test SOURCES <module>_test.c LIBRARIES Amark::amark)
+#   amark_target_warnings(amark_<module>_test)
+# CTest 名は amark_<module>_test.<suite>.<test> になる。テストは公開ヘッダ（<amark/...>）だけを
+# include し、src/ を include しない。
+
+# このディレクトリのターゲット（テスト実行ファイルとヘッダ検査）は C99・拡張無効、C++ は C++11 とする
+set(CMAKE_C_STANDARD 99)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_C_EXTENSIONS OFF)
+
+enable_language(CXX)
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+include(FetchContent)
+FetchContent_Declare(Naos
+    GIT_REPOSITORY https://github.com/vabelorg/naos.git
+    GIT_TAG v0.4.0
+)
+FetchContent_MakeAvailable(Naos)
+
+# foundation
+naos_add_executable(amark_version_test SOURCES version_test.c LIBRARIES Amark::amark)
+amark_target_warnings(amark_version_test)
+# ビルド定義が version.h から読んだバージョンをテストへ渡し、ヘッダの値と一致することを確かめる
+target_compile_definitions(amark_version_test PRIVATE TEST_PROJECT_VERSION="${PROJECT_VERSION}")
+
+# C++ から包括ヘッダを include して公開 API を呼べることを確かめる（後続 spec は
+# cxx_header_test.cpp に自分のブロックを追記する。ここの登録は変えない）
+naos_add_executable(amark_cxx_header_test SOURCES cxx_header_test.cpp LIBRARIES Amark::amark)
+amark_target_warnings(amark_cxx_header_test)
+
+# 公開ヘッダの単独 include 検査。include/amark/*.h のそれぞれについて、そのヘッダだけを
+# include する翻訳単位をビルドツリーに生成し、オブジェクトライブラリとして既定のビルドに含める。
+# Amark::amark からは公開の include パスと定義だけが伝わり、src/ は include パスに入らないため、
+# 公開ヘッダが非公開ヘッダに依存していればコンパイルに失敗する。公開ヘッダを追加すると
+# 次の構成で自動的に対象になる（ここを書き換える必要はない）。
+file(GLOB amark_public_headers CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/include/amark/*.h")
+set(amark_header_check_sources "")
+foreach(amark_header IN LISTS amark_public_headers)
+    get_filename_component(amark_header_name "${amark_header}" NAME_WE)
+    set(amark_header_check_source "${CMAKE_CURRENT_BINARY_DIR}/header_check/${amark_header_name}_header_check.c")
+    # ヘッダがマクロだけでも空の翻訳単位にならないよう、ダミーの宣言を 1 つ置く
+    file(CONFIGURE OUTPUT "${amark_header_check_source}" CONTENT
+"/* tests/CMakeLists.txt が生成: <amark/${amark_header_name}.h> が単独でコンパイルできることを確かめる */
+#include <amark/${amark_header_name}.h>
+
+extern int header_check_${amark_header_name};
+" @ONLY)
+    list(APPEND amark_header_check_sources "${amark_header_check_source}")
+endforeach()
+add_library(amark_header_check OBJECT ${amark_header_check_sources})
+target_link_libraries(amark_header_check PRIVATE Amark::amark)
+amark_target_warnings(amark_header_check)

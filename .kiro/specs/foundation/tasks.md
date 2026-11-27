@@ -18,7 +18,7 @@
   - 完了状態: 既定の構成で静的ライブラリ、`BUILD_SHARED_LIBS=ON` で動的ライブラリがビルドでき、動的ライブラリの公開シンボルがバージョン問い合わせ関数だけである
   - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 2.5, 2.6, 5.2, 11.1, 11.2, 11.5_
 
-- [ ] 1.3 Naos を取り込み、テスト実行ファイルの登録とヘッダ検査の枠組みを作る
+- [x] 1.3 Naos を取り込み、テスト実行ファイルの登録とヘッダ検査の枠組みを作る
   - テスト有効のトップレベル構成でだけ Naos v0.4.0 をタグ固定で取得する。サブプロジェクトとして取り込まれた場合は取得しない
   - トップレベル構成では実行ファイルと動的ライブラリの出力先を揃え、動的構成でもビルド直後のテスト列挙が成功するようにする
   - モジュールごとのテスト実行ファイルを公開ヘッダだけを使って登録する規約に沿い、最初のテストとしてバージョンの一致（定数、数値から組み立てた文字列、実行時の値、ビルド定義がヘッダから読んだバージョン）を確認するテストを登録する
@@ -110,3 +110,4 @@
 ## Implementation Notes
 - 1.1: `.clang-format` は `BreakBeforeBraces: Allman` のため `#  define AMARK_BEGIN_DECLS extern "C" {` が 3 行に分割される。1.2 の `export.h` では `AMARK_BEGIN_DECLS` / `AMARK_END_DECLS` の定義ブロックを `/* clang-format off */` / `/* clang-format on */` で囲む。末尾の `/* */` コメントは clang-format が 1 スペースに詰めるため、実コードでは 1 スペースで書く
 - 1.2: `export.h` は単独ではマクロだけの翻訳単位になり、`-Wpedantic -Werror` で「ISO C forbids an empty translation unit」となる。1.3 で生成するヘッダ単独検査の翻訳単位にはダミーの宣言を加える。包括ヘッダ `amark.h` の `/* foundation */` ブロックには、各タスクで追加する公開ヘッダを順に足す
+- 1.3: テストの `NAOS_SUITE` / `NAOS_MAIN` の登録は 1 行 1 項目を保つため `/* clang-format off */` / `/* clang-format on */` で囲む。C++ テストでは `NAOS_CHECK*` だけを使う。`naos_add_executable` の `LIBRARIES` は現状 `Amark::amark` だけで、2.2 で `amark_test_support` を作ったら tests/CMakeLists.txt 冒頭の規約コメントと各登録に追加する。ヘッダ単独検査は `include/amark/*.h` の CONFIGURE_DEPENDS glob なので新しい公開ヘッダは自動で検査される

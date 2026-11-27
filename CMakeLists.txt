@@ -23,4 +23,20 @@ list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 include(GNUInstallDirs)
 include(AmarkCompilerWarnings)
 
+# トップレベル時は実行ファイルと DLL を同じディレクトリに出し、動的構成でもビルド直後の
+# テストの列挙（Naos が実行ファイルを起動する）で Windows が DLL を見つけられるようにする。
+# Linux / macOS はビルドツリーの rpath で解決する。
+if(PROJECT_IS_TOP_LEVEL)
+    include(CTest)
+    if(NOT DEFINED CMAKE_RUNTIME_OUTPUT_DIRECTORY)
+        set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}/bin")
+    endif()
+endif()
+
 add_subdirectory(src)
+
+# テストと Naos の取得はトップレベル構成でだけ行う。サブプロジェクトとして取り込まれた場合は
+# AMARK_BUILD_TESTS の値によらず取得しない。
+if(PROJECT_IS_TOP_LEVEL AND AMARK_BUILD_TESTS AND BUILD_TESTING)
+    add_subdirectory(tests)
+endif()
