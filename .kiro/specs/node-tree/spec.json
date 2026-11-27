@@ -1,0 +1,22 @@
+{
+  "feature_name": "node-tree",
+  "created_at": "2026-11-27T09:43:33Z",
+  "updated_at": "2026-11-27T19:00:00Z",
+  "language": "ja",
+  "phase": "tasks-generated",
+  "approvals": {
+    "requirements": {
+      "generated": true,
+      "approved": true
+    },
+    "design": {
+      "generated": true,
+      "approved": true
+    },
+    "tasks": {
+      "generated": true,
+      "approved": true
+    }
+  },
+  "ready_for_implementation": false
+}
