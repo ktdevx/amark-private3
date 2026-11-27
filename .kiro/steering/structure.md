@@ -92,13 +92,14 @@
 ## Include Organization
 
 ```c
-#include <amark/node.h>   /* 公開ヘッダ: 山括弧、amark/ 付き */
+#include <amark/node.h> /* 公開ヘッダ: 山括弧、amark/ 付き */
 
-#include "tree/node_internal.h"  /* 非公開ヘッダ: 二重引用符、src/ からの相対パス */
+#include "tree/node_internal.h" /* 非公開ヘッダ: 二重引用符、src/ からの相対パス */
 ```
 
 - 非公開ヘッダは `src/` を起点にディレクトリ付きで include する。同じディレクトリ内のヘッダも同じ書き方にする
 - 公開ヘッダは非公開ヘッダを include しない
+- テストとテスト補助は公開ヘッダとテスト補助のヘッダ（`tests/` を起点とする `"support/test_<area>.h"`）だけを include し、`src/` のヘッダを include しない
 - 公開ヘッダは単体で include でき、C++ からも使える。include ガードは `AMARK_<NAME>_H`、宣言は `AMARK_BEGIN_DECLS` / `AMARK_END_DECLS` で囲む
 - 公開関数には `AMARK_API` を付け、静的・動的の両方のビルドで同じヘッダを使う
 
@@ -112,4 +113,4 @@
 ---
 _Document patterns, not file trees. New files following patterns shouldn't require updates_
 
-_updated_at: 2026-11-27 — CommonMark モジュールの名前を `cmark` に。`src/` をサブディレクトリに分割。各 spec の設計に合わせて公開ヘッダの配置、テスト補助の命名、テストデータ・生成ツールの置き場所、共有の骨組みファイルの追記規則を反映。レンダラ共通層（旧 `src/render/`）を廃し、フック表と走査駆動部を node-tree の非公開モジュール `src/tree/node_walk` へ移した。`version.h` を生成から手書き（バージョンの唯一の出所）に変更_
+_updated_at: 2026-11-27 — foundation の実装に同期: テストからの include の書き方を追記、例の末尾コメントを clang-format の整形どおり 1 スペースに。CommonMark モジュールの名前を `cmark` に。`src/` をサブディレクトリに分割。各 spec の設計に合わせて公開ヘッダの配置、テスト補助の命名、テストデータ・生成ツールの置き場所、共有の骨組みファイルの追記規則を反映。レンダラ共通層（旧 `src/render/`）を廃し、フック表と走査駆動部を node-tree の非公開モジュール `src/tree/node_walk` へ移した。`version.h` を生成から手書き（バージョンの唯一の出所）に変更_

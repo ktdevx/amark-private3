@@ -96,7 +96,7 @@
   - _Requirements: 4.6, 4.7_
 
 - [ ] 5. 統合と最終確認
-- [ ] 5.1 steering を実装済みの構成に同期する
+- [x] 5.1 steering を実装済みの構成に同期する
   - 設計段階で反映済みの structure.md と tech.md の記述（ディレクトリ構成、依存方向、テスト配置と補助の命名、ビルドオプション、主要コマンド、命名例、所有権規約、エラーコード一覧表の規則、検査する規約と検査しない規約、整形ツールの版、リリース手順）を、実際に作ったファイル・API 名・オプション名・コマンドと突き合わせ、食い違う箇所だけを直す
   - 完了状態: steering の記述が実装済みのファイル構成・API 名・オプション名と一致し、検査できない規約がその旨とともに明記されている。差分がなければ変更しない
   - _Requirements: 11.1, 11.2, 12.1, 12.4, 12.5_
@@ -115,3 +115,4 @@
 - 2.2: 演算順序の括弧付け（`&&` / `||` のオペランドになる比較、比較の左右の算術式）はレビューで差し戻しになる。テストやテスト補助のコードにも適用する。テスト補助は `#include "support/test_<area>.h"` で include し、`naos_add_executable` の `LIBRARIES` は `Amark::amark amark_test_support`。既定アロケータは静的初期化子ではなく実行時に `{malloc, realloc, calloc, free}` を返す（MSVC の dllimport で関数アドレスが一致しないため）
 - 3.1: clang の `-Wstring-plus-int` により、テストで `"xabcx" + 1` のような文字列リテラルへのポインタ演算はエラーになる。配列に置いて `&padded[1]` のように書く。clang の ASan ランタイムはこの環境にないため、サニタイザ検査は gcc で行う
 - 4.1: 利用者プロジェクトの Windows での DLL コピーは `get_target_property(... Amark::amark TYPE)` が `SHARED_LIBRARY` のときだけ行う（静的構成で `$<TARGET_RUNTIME_DLLS>` が空だと `copy_if_different` が失敗するため）。Windows 経路は CI（4.2）で初めて実行される
+- 5.1: 単一構成のジェネレータで `CMAKE_BUILD_TYPE` を指定せずに構成すると、`cmake --install --config Release` が構成別のターゲットファイル（`AmarkTargets-noconfig.cmake`）を入れず、利用者の `find_package` が "IMPORTED_LOCATION not set" で失敗する。steering と CI は `-DCMAKE_BUILD_TYPE=Release` を指定する。ビルド定義側で既定のビルド型を与えるかは今後の検討事項
