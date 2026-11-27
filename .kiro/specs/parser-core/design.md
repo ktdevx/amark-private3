@@ -73,10 +73,10 @@ html-renderer への期待: フックのキーを `const amark_node_kind_t *` �
 
 ## Cross-Spec Change Note（foundation のエラー列挙）
 
-本仕様が使う追加コード `AMARK_ERROR_INVALID_STATE = 7`（`"invalid state"`）は、foundation design.md のエラー表（0〜7 と所有 spec の一覧。値・文字列・意味の唯一の定義元）に登録済みである。node-tree の `AMARK_ERROR_INVALID_CHILD = 5`、`AMARK_ERROR_ALREADY_EXISTS = 6` も同じ表に登録済みである。本書では再定義しない。
+本仕様が使う追加コード `AMARK_ERROR_INVALID_STATE`（`"invalid state"`）は、foundation design.md のエラーコード一覧表（追加した spec・文字列・意味の正本。並びは `AMARK_ERROR_LIST` と同じ）に、追加した spec を parser-core として登録済みである。node-tree が追加する `AMARK_ERROR_INVALID_CHILD`、`AMARK_ERROR_ALREADY_EXISTS` も同じ表で、その前に並ぶ。値は一覧の並び順で決まり、明示しない。本書では再定義しない。
 
 - 本仕様での使い方: `INVALID_STATE` は、終了済み・失敗済みのパーサへの供給と終了、凍結された方言の変更、方言が所有する拡張の別の方言への追加
-- 実装時は parser-core のタスクとして `error.h`、`src/base/error.c`、`tests/error_test.c` に追記する（追記専用。既存の値は変えない）
+- 実装時は parser-core のタスクとして `include/amark/error.h` の `AMARK_ERROR_LIST` の末尾に `X(AMARK_ERROR_INVALID_STATE, "invalid state")` を追記する（追記専用。既存の項目を並べ替えない）。`src/base/error.c` と `tests/error_test.c` は一覧から生成・走査されるため変更しない
 - 既存コードの使い分け: 引数の形の違反は `AMARK_ERROR_INVALID_ARGUMENT`、名前の重複と定義の重複は `AMARK_ERROR_ALREADY_EXISTS`、ノードの親子規則違反は `AMARK_ERROR_INVALID_CHILD`
 
 node-tree との関係: node-tree の design.md は、本設計の決定（拡張ごとに 1 つのレジストリを拡張が所有し、parser-core の API には出さない。方言は拡張間の名前の重複を検査する）に合わせて更新済みである。
@@ -203,7 +203,7 @@ tests/
 
 ### Modified Files
 実装時に本 spec のタスクとして変更する（本 spec の作成時には変更しない）。
-- `include/amark/error.h`、`src/base/error.c`、`tests/error_test.c` — `AMARK_ERROR_INVALID_STATE = 7` の追記（値は foundation design.md のエラー表で登録済み）
+- `include/amark/error.h` — `AMARK_ERROR_LIST` の末尾へ `X(AMARK_ERROR_INVALID_STATE, "invalid state")` を追記（foundation design.md のエラーコード一覧表で登録済み）
 - `include/amark/amark.h` — 6 つの公開ヘッダの include を parser-core のブロックとして追記
 - `src/CMakeLists.txt` — 本 spec の 13 個の `.c` を `parser/<file>.c` の形でソース一覧に追記
 - `tests/CMakeLists.txt` — 12 個のテスト実行ファイルを追記登録し、`test_syntax.c` と `test_tree_dump.c` をテスト補助ライブラリ `amark_test_support` のソースに追記する
@@ -396,6 +396,8 @@ stateDiagram-v2
 | `amark_block_record_t` | `last_line_blank`、インライン対象の内容（所有、なければ空） | ブロック記録の表（ノードのポインタがキー） |
 | `struct amark_definition_table` | ParserMap（名前空間 + `\0` + 鍵 → 値、後片付け関数、user_data） | パーサ |
 
+- サイズ 0 の確保の禁止（foundation の Memory のライブラリ内の規則）: 個数が 0 になりうる配列は、個数が 1 以上のときだけ確保し、空は `NULL` と個数 0 で表す。対象は、拡張の記述子の配列の複製と種別ハンドルの配列（構文・処理器・後処理・ノード種別のいずれかを宣言しない拡張。例: commonmark の各拡張は `node_kind_count = 0`）、attachment の配列、方言の拡張の配列（拡張 0 個の方言）、凍結時の呼び出し表（該当する分類の要素が 0 個の方言の開始判定の配列・処理器と後処理の配列、トリガー表の各文字の構文一覧）、拡張ごとの解析状態の配列、段落の行の終わりの位置の配列、デリミタとブラケットのスタック、openers_bottom の組の配列。伸長する配列は最初の追加で 1 以上の初期容量を確保する。確保の戻り値 `NULL` を `AMARK_ERROR_NO_MEMORY` と扱うのは、個数が 1 以上の確保に限る。開いているブロックのスタックは文書を底に常に 1 段以上、内容は foundation のバッファ（予約は常に 1 以上）、名前と定義の鍵の複製は 1 バイト以上（名前は空を拒否し、鍵は名前空間 + `\0` を含む）なので該当しない
+
 - 内部関数の向きは Architecture の図どおり。ブロック段階（`block_line.c`、`block_context.c`、`paragraph.c`、`block_engine.c`）は 1 つの層として扱い、層の中の相互呼び出し（`block_context.c` の open が `block_engine.c` の内部関数を呼ぶ、など）だけを `parser_internal.h` の宣言で許す。層をまたぐ向きは図の矢印だけ: インライン段階のソースはブロック段階のソースを呼ばず、ブロック段階はインライン段階を呼ばない。両段階をつなぐのは `parser.c` だけである
 
 ### 共有基盤
@@ -407,7 +409,7 @@ stateDiagram-v2
 | Intent | 開番地法のハッシュ表。キーはバイト列（定義テーブル）またはポインタ（ブロック記録、attachment は配列で足りるため使わない） |
 | Requirements | 8.1, 15.1 |
 
-- 操作: 初期化、後片付け、挿入（既存なら既存を返す）、検索。負荷率 0.5 を超えたら 2 倍に伸長し、償却定数時間（15.1）。ハッシュは FNV-1a（64 ビット、`size_t` に畳む）。確保失敗時は表を変更しない
+- 操作: 初期化、後片付け、挿入（既存なら既存を返す）、検索。初期化は確保せず（空は `NULL` と容量 0）、最初の挿入で 1 以上の初期容量を確保する。負荷率 0.5 を超えたら 2 倍に伸長し、償却定数時間（15.1）。ハッシュは FNV-1a（64 ビット、`size_t` に畳む）。確保失敗時は表を変更しない
 - Risks: ハッシュの衝突攻撃で最悪二乗になる。定義テーブルの鍵は構文が正規化した入力由来のため、ハッシュにパーサごとの種（パーサのアドレスと生成順の値の混合）を加えて固定パターンの攻撃を避ける
 
 #### DefinitionTable
@@ -1015,7 +1017,7 @@ AMARK_API amark_error_t amark_parser_parse(amark_dialect_t *dialect, const char 
 ### foundation への追加・統合
 
 #### ErrorCodeAddition
-- foundation design.md のエラー表に登録済みの値（7）と文字列どおりに、`error.h`・`src/base/error.c`・`tests/error_test.c` へ同時に追記する（16.1）
+- foundation design.md のエラーコード一覧表に登録済みの順と文字列どおりに、`include/amark/error.h` の `AMARK_ERROR_LIST` の末尾へ 1 項目を追記する。列挙と文字列化は一覧から生成されるため、`src/base/error.c` と `tests/error_test.c` は変更しない（16.1）
 
 #### ParserIntegration
 
@@ -1058,7 +1060,7 @@ graph TB
 | エラー | 返す操作と条件 |
 |---|---|
 | `AMARK_ERROR_INVALID_ARGUMENT` | 必須引数が `NULL`、オプションが 0、記述子の不正、名前の形式違反、トリガー文字の範囲外、見つからない名前の取り外し・優先順位、文脈関数の誤用 |
-| `AMARK_ERROR_INVALID_STATE`（foundation のエラー表で 7） | 終了済み・失敗済みのパーサへの供給と終了、凍結された方言の変更、所有済みの拡張の追加 |
+| `AMARK_ERROR_INVALID_STATE`（foundation のエラーコード一覧表で parser-core が追加） | 終了済み・失敗済みのパーサへの供給と終了、凍結された方言の変更、所有済みの拡張の追加 |
 | `AMARK_ERROR_ALREADY_EXISTS`（node-tree） | 方言内の名前の重複、拡張内の種別名の重複、定義テーブルの鍵の重複 |
 | `AMARK_ERROR_INVALID_CHILD`（node-tree） | 構文が開いた・作ったノードを受け入れる親がない |
 | `AMARK_ERROR_NO_MEMORY` | すべての確保失敗 |
@@ -1091,7 +1093,7 @@ graph TB
 - `parser_error_test.c`: パーサの生成・供給・終了の失敗注入の網羅パターン（各回で `NO_MEMORY` か成功、破棄後 `live == 0`、16.2、16.5）、構文と処理器と後処理がエラーを返した場合の伝播と失敗状態（12.2、16.3）、失敗後の拒否とリセット、`NULL` 引数（16.4）、契約違反
 - `cxx_header_test.cpp`: C++ から方言の生成、一括パース、文書と方言の破棄
 - 寿命の保証（`parser_stream_test.c`）: 標準種別だけの文書を返した後にパーサと方言を破棄しても、文書の走査と破棄が成功し `live == 0` になる（13.8、14.9）
-- `error_test.c`: 追加コードの値と固有の文字列（16.1）
+- `error_test.c`（foundation、変更しない）: 一覧を走査する既存のテストが、追加コードの連番の値と固有の文字列を確認する（16.1）
 
 ### Performance
 - `parser_limits_test.c`:

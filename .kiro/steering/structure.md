@@ -26,7 +26,7 @@
 ### 公開ヘッダ
 **Location**: `include/amark/`
 **Purpose**: 利用者と拡張の作者に公開する API。ここにあるものだけが互換性の対象になる
-**Pattern**: モジュール単位で `include/amark/<module>.h`（例: `error.h`、`memory.h`、`slice.h`、`utf8.h`、`buffer.h`、`node.h`）。`export.h` が `AMARK_API` と `AMARK_BEGIN_DECLS` / `AMARK_END_DECLS` を、`version.h` は `cmake/version.h.in` からビルドツリーに生成される。包括ヘッダ `amark.h` がすべての公開ヘッダを include する
+**Pattern**: モジュール単位で `include/amark/<module>.h`（例: `error.h`、`memory.h`、`slice.h`、`utf8.h`、`buffer.h`、`node.h`）。`export.h` が `AMARK_API` と `AMARK_BEGIN_DECLS` / `AMARK_END_DECLS` を、`version.h` がバージョンの唯一の出所（手書きの数値定数。ビルド定義とリリースがここから読む）を持つ。公開ヘッダはすべてソースツリーに手書きで置き、ビルドツリーに生成しない。包括ヘッダ `amark.h` がすべての公開ヘッダを include する
 **Example**: `#include <amark/amark.h>`
 
 ### ライブラリ本体
@@ -67,7 +67,7 @@
 
 ### ビルド補助
 **Location**: `cmake/`
-**Purpose**: package config のテンプレート、警告設定、バージョンヘッダのテンプレート、ソースヘッダ検査のスクリプトなど CMake の補助ファイル
+**Purpose**: package config のテンプレート、警告設定、ソースヘッダ検査のスクリプトなど CMake の補助ファイル
 
 ## Shared Skeleton Files（追記専用）
 
@@ -111,4 +111,4 @@
 ---
 _Document patterns, not file trees. New files following patterns shouldn't require updates_
 
-_updated_at: 2026-11-27 — `src/` をサブディレクトリに分割。各 spec の設計に合わせて公開ヘッダの配置、テスト補助の命名、テストデータ・生成ツールの置き場所、共有の骨組みファイルの追記規則を反映。レンダラ共通層（旧 `src/render/`）を廃し、フック表と走査駆動部を node-tree の非公開モジュール `src/tree/node_walk` へ移した_
+_updated_at: 2026-11-27 — `src/` をサブディレクトリに分割。各 spec の設計に合わせて公開ヘッダの配置、テスト補助の命名、テストデータ・生成ツールの置き場所、共有の骨組みファイルの追記規則を反映。レンダラ共通層（旧 `src/render/`）を廃し、フック表と走査駆動部を node-tree の非公開モジュール `src/tree/node_walk` へ移した。`version.h` を生成から手書き（バージョンの唯一の出所）に変更_

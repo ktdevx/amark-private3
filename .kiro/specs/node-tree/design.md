@@ -135,22 +135,20 @@ tests/
 
 ### Modified Files
 実装時に node-tree のタスクとして変更する（本 spec の作成時には変更しない）。
-- `include/amark/error.h` — `AMARK_ERROR_INVALID_CHILD = 5`、`AMARK_ERROR_ALREADY_EXISTS = 6` を末尾に追加（値は foundation design.md のエラー表で登録済み。Cross-Spec Change Note 参照）
-- `src/base/error.c` — 追加コードの文字列を `switch` に追加
-- `tests/error_test.c` — 追加コードの値と文字列の確認を追加
+- `include/amark/error.h` — `AMARK_ERROR_LIST` の末尾に `X(AMARK_ERROR_INVALID_CHILD, "invalid child node")`、`X(AMARK_ERROR_ALREADY_EXISTS, "already exists")` をこの順で追記（foundation design.md のエラーコード一覧表に登録済み。Cross-Spec Change Note 参照）。`src/base/error.c` と `tests/error_test.c` は一覧から生成・走査するため変更しない
 - `include/amark/amark.h` — `node_kind.h`、`node.h`、`node_iter.h` の include を node-tree のブロックとして追記
 - `src/CMakeLists.txt` — `tree/node_kind.c`、`tree/node_registry.c`、`tree/node.c`、`tree/node_value.c`、`tree/node_edit.c`、`tree/node_normalize.c`、`tree/node_iter.c`、`tree/node_walk.c` をソース一覧に追記
 - `tests/CMakeLists.txt` — 8 つのテスト実行ファイル `amark_node_kind_test` ほかを `naos_add_executable` で追記登録。`amark_node_walk_test` だけは `SOURCES node_walk_test.c ${PROJECT_SOURCE_DIR}/src/tree/node_walk.c` とし、`target_include_directories(amark_node_walk_test PRIVATE ${PROJECT_SOURCE_DIR}/src)` を加える（NodeWalk の Validation）
 - `tests/cxx_header_test.cpp` — C++ から木の生成・追加・走査・破棄を呼ぶ確認を追記
-- 上の 4 つ（と `error.h`・`src/base/error.c`・`tests/error_test.c`）は foundation が所有する追記専用の共有ファイルである。node-tree は自分のブロックを末尾に追記するだけで、既存の行を変更・並べ替えしない
+- 上の 4 つは foundation が所有する追記専用の共有ファイルである。node-tree は自分のブロックを末尾に追記するだけで、既存の行を変更・並べ替えしない。`AMARK_ERROR_LIST` も末尾への項目の追記だけを行い、spec 名の区切りコメントは置かない（foundation の Error の規則）
 - `.kiro/steering/tech.md` — 命名の例 `amark_node_t *amark_node_create(amark_node_type_t type);` を確定した `amark_error_t amark_node_create(amark_node_type_t type, amark_node_t **node);` に直す
 
 ## Cross-Spec Change Note（foundation のエラー列挙）
 
-本仕様が使う追加コード `AMARK_ERROR_INVALID_CHILD = 5`（`"invalid child node"`）と `AMARK_ERROR_ALREADY_EXISTS = 6`（`"already exists"`）は、foundation design.md のエラー表（0〜7 と所有 spec の一覧。値・文字列・意味の唯一の定義元）に登録済みである。本書では再定義しない。
+本仕様が使う追加コード `AMARK_ERROR_INVALID_CHILD`（`"invalid child node"`）と `AMARK_ERROR_ALREADY_EXISTS`（`"already exists"`）は、foundation design.md のエラーコード一覧表（追加した spec・文字列・意味の正本。並びは `AMARK_ERROR_LIST` と同じ）に、追加した spec を node-tree として登録済みである。値は一覧の並び順で決まり、明示しない。本書では再定義しない。
 
 - 本仕様での使い方: `INVALID_CHILD` は編集操作の親子規則違反・循環・document を子にする場合、`ALREADY_EXISTS` は種別名の重複（標準名を含む）。`ALREADY_EXISTS` は parser-core の拡張名などにも再利用される汎用の意味である
-- 実装時は node-tree のタスクとして `error.h`、`src/base/error.c`、`tests/error_test.c` に 2 コードを同時に追記する（追記専用。既存の値は変えない）
+- 実装時は node-tree のタスクとして `AMARK_ERROR_LIST` の末尾に 2 項目を表の順で追記する（追記専用。既存の項目を並べ替えない）
 - 種別の不一致（値を持たない種別へのアクセス）、範囲外の値、親を持たない兄弟への挿入などは既存の `AMARK_ERROR_INVALID_ARGUMENT` を使う
 
 ## System Flows
@@ -506,7 +504,7 @@ AMARK_API const amark_node_kind_t *amark_node_registry_find(const amark_node_reg
 - `amark_node_registry_find(registry, name)`: 名前がバイト単位で一致する標準種別、次に登録済みの拡張種別を返す。どれにも一致しない、または `registry` が `NULL` なら `NULL`（4.6）。種別数に対して線形時間
 
 ##### State Management
-- State model: 登録済み拡張種別のハンドル配列（`amark_node_kind_t **items`、`count`、`capacity`。容量は 2 倍で伸長）
+- State model: 登録済み拡張種別のハンドル配列（`amark_node_kind_t **items`、`count`、`capacity`。容量は 2 倍で伸長し、最初の登録で初期容量 4 を確保する）。`amark_node_registry_create` は配列を確保せず、登録 0 件の間は `items == NULL`、`count == capacity == 0` とする（foundation の Memory のライブラリ内の規則: サイズ 0 を要求しない）
 - Persistence & consistency: ハンドルはレジストリの破棄まで有効で不変（4.7）
 - Concurrency strategy: `amark_node_registry_add` と他の操作を同時に行わない。登録が終わった後は、`find` と、そのレジストリの種別を使うノードの生成・操作（異なる木）を複数スレッドから同時に行ってよい（13.4）。種別は登録後に変更されない
 
@@ -846,7 +844,7 @@ void amark_node_walk_skip_children(amark_node_walk_t *walk);
   - 既存の項目なし・`fn == NULL`: 何もせず `AMARK_OK`（14.2）
   - 既存の項目なし・`fn != NULL`: 必要なら容量を 2 倍（初期 4）に伸長して末尾に追加。容量計算のあふれは `AMARK_ERROR_OVERFLOW`、確保失敗は `AMARK_ERROR_NO_MEMORY` で表を変更しない（14.1、14.4）
 - `amark_node_walk_table_find`: `kind` とポインタが等しい項目を返す。なければ、`table` または `kind` が `NULL`、または `count == 0` なら `NULL`（14.3）。計算量は登録数 h に比例
-- `amark_node_walk_table_init` / `_deinit`: 空の表にする / `items` を解放して空に戻す（14.9）。`NULL` は何もしない
+- `amark_node_walk_table_init` / `_deinit`: 空の表にする / `items` を解放して空に戻す（14.9）。`NULL` は何もしない。空の表は `items == NULL`、`count == capacity == 0` で、`init` は確保しない。項目の除去で `count` が 0 になっても縮小の再確保（サイズ 0 の `amark_realloc`）はしない（foundation の Memory のライブラリ内の規則）
 - `amark_node_walk_run(walk, root, table, visit, context)`（`walk`、`root`、`table`、`visit` が `NULL` なら `AMARK_ERROR_INVALID_ARGUMENT`。引数の検査は各レンダラの入口でも行う）:
   1. `amark_node_iter_init(&walk->iter, (amark_node_t *)root)`（const を外すのはここだけ。イテレータは木を変更しない、14.5）
   2. `amark_node_iter_next` が `DONE` を返すまで: `walk->node`・`walk->event` を設定し `skip_children = false`、`hook = find(table, kind)`、`visit(context, walk, hook)` を呼ぶ。非 `AMARK_OK` ならその値を直ちに返す（14.5、14.8）
@@ -869,7 +867,7 @@ void amark_node_walk_skip_children(amark_node_walk_t *walk);
 | Intent | foundation の列挙へ 2 コードを追加する |
 | Requirements | 12.1 |
 
-- foundation design.md のエラー表に登録済みの値（5、6）と文字列どおりに、`error.h`・`src/base/error.c`・`tests/error_test.c` へ同時に追記する。foundation の `-Wswitch` による文字列漏れ検出がそのまま働く
+- foundation design.md のエラーコード一覧表に登録済みの順と文字列どおりに、`include/amark/error.h` の `AMARK_ERROR_LIST` の末尾へ `X(名前, 文字列)` の 2 項目を追記する。列挙と文字列化は一覧から生成されるため、`src/base/error.c` と `tests/error_test.c` は変更しない（foundation の error_test が一覧を走査して新しいコードも確認する）
 
 #### NodeIntegration
 
@@ -942,7 +940,7 @@ graph TB
 - C++ 検査（`cxx_header_test.cpp`）: 包括ヘッダから木の生成・追加・走査・破棄を呼べる
 - ヘッダ単独 include 検査: `node_kind.h`、`node.h`、`node_iter.h` がそれぞれ単独でコンパイルできる
 - `node_iter_test.c` の文書木シナリオ: API だけで「見出し・段落（強調・リンク・コードスパン）・リスト（2 項目）・コードブロック・拡張ブロック（独自判定で拡張の行だけを受け入れる表）」を組み、走査・編集（特定種別の置換）・正規化・破棄を通して `live == 0` になる（1.6、12.6）
-- `error_test.c`: 追加 2 コードの値と固有の文字列（12.1）
+- `error_test.c`（foundation、変更しない）: 一覧を走査する既存のテストが、追加 2 コードの連番の値と固有の文字列を確認する（12.1）
 
 ### Concurrency
 - スレッドの規則（13.3、13.4）は C99 標準にスレッド API がないため自動テストの対象にせず、`node.h` と `node_kind.h` の文書で約束する。実装は可変のグローバル状態を持たない（標準種別の表は `const`）ことをレビューで確認する

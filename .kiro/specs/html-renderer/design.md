@@ -229,6 +229,7 @@ sequenceDiagram
 - 出力先 `amark_buffer_t *` に書く関数は、失敗時に出力先の内容（`length` と `data[0..length]`）を呼び出し前に戻す（容量の増加は残ってよい）（12.3）
 - 木は `const amark_node_t *` で受け取り、変更しない（1.4）。node-tree のイテレータが非 const の根を取るため、内部でだけ const を外して走査する（イテレータは木を変更しない）
 - 確保は `amark_malloc` / `amark_realloc` / `amark_free` だけを使う（12.2）。表はすべて `static const`（13.4）
+- 確保するのはレンダラの構造体（固定長）、フック表（node-tree の NodeWalk。空の表は確保せず、最初の登録で確保する）、出力先の伸長（foundation のバッファ）だけで、いずれもサイズ 0 を要求しない（foundation の Memory のライブラリ内の規則）
 
 ### 公開 API
 

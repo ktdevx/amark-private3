@@ -26,7 +26,7 @@
 - リポジトリのトップレベル構成（`include/amark/`、`src/`、`tests/`、`cmake/`、`.github/workflows/`）とトップレベルの `CMakeLists.txt`
 - ライブラリターゲット `amark`（別名 `Amark::amark`）、ビルドオプション、コンパイル設定（C99、拡張無効、警告、可視性）
 - export マクロ `AMARK_API` と C リンケージ用マクロ `AMARK_BEGIN_DECLS` / `AMARK_END_DECLS`
-- インストール規則、`AmarkConfig.cmake` / `AmarkConfigVersion.cmake` / `AmarkTargets.cmake`、バージョンの唯一の出所（`project(... VERSION ...)`）
+- インストール規則、`AmarkConfig.cmake` / `AmarkConfigVersion.cmake` / `AmarkTargets.cmake`、バージョンの唯一の出所（手書きの公開ヘッダ `include/amark/version.h` の数値定数）と、それを `project()` へ読み込む規則
 - テスト基盤: Naos の取り込み、テスト用補助ライブラリ（差し替えアロケータ）、ヘッダ単独 include の検査、ソースヘッダ表記の検査
 - CI とリリースのワークフロー、整形設定（`.clang-format`、`.editorconfig`、`.gitattributes`）
 - `LICENSE` とソースヘッダの定型表記
@@ -49,8 +49,9 @@
 - モジュール間の依存方向は「Architecture」に定める順を守る。逆向きの include を禁止する
 
 ### Revalidation Triggers
-- 公開済みエラーコードの数値変更・削除（禁止。末尾追加のみ許可）、またはエラー文字列化の契約変更
-- アロケータ関数の事前条件（0 サイズや空ポインタを渡さない）や差し替え API の形の変更
+- 公開済みエラーコードの並べ替え・削除・再利用（禁止。`AMARK_ERROR_LIST` の末尾追加のみ許可）、一覧の形（`X(名前, 文字列)`）、またはエラー文字列化の契約変更
+- サイズ 0 の要求の扱い（アロケータを呼ばずに `NULL`、`amark_realloc(p, 0)` は解放）、アロケータ関数の事前条件（0 サイズや空ポインタを渡さない）、差し替え API の形の変更
+- `include/amark/version.h` の数値定数の書き方（`#define AMARK_VERSION_<MAJOR|MINOR|PATCH> <10 進数>` の 1 行。CMake とリリースワークフローがこの形を読む）の変更
 - 文字列の所有権規約（スライスの借用、NUL 終端付き所有文字列、`amark_free` による解放）の変更
 - `AMARK_API` / `AMARK_SHARED` / `AMARK_BUILDING`、ターゲット名 `Amark::amark`、パッケージ名 `Amark`、ビルドオプション名の変更
 - バッファの不変条件（NUL 終端、失敗時に内容を保つ）や `detach` の所有権移転の変更
@@ -109,7 +110,7 @@ graph TB
 
 ### Directory Structure
 ```
-CMakeLists.txt                     # トップレベル: project(amark VERSION 0.1.0)、オプション、src/ と tests/ の取り込み、インストール
+CMakeLists.txt                     # トップレベル: version.h からバージョンを読み project(amark VERSION ${AMARK_VERSION})、オプション、src/ と tests/ の取り込み、インストール
 LICENSE                            # MIT 全文、Copyright (c) 2026 The Amark Authors
 .clang-format                      # 整形規則（Allman、インデント 4、列上限 120 など）
 .editorconfig                      # UTF-8、LF、末尾改行、インデント
@@ -117,12 +118,12 @@ LICENSE                            # MIT 全文、Copyright (c) 2026 The Amark A
 cmake/
 ├── AmarkConfig.cmake.in           # パッケージ設定テンプレート（AmarkTargets.cmake を読み込む）
 ├── AmarkCheckSourceHeaders.cmake  # cmake -P で実行するソースヘッダ表記の検査
-├── AmarkCompilerWarnings.cmake    # amark_target_warnings(): コンパイラ別の警告と警告のエラー化
-└── version.h.in                   # amark/version.h の生成テンプレート
+└── AmarkCompilerWarnings.cmake    # amark_target_warnings(): コンパイラ別の警告と警告のエラー化
 include/amark/
 ├── amark.h                        # 包括ヘッダ: 本 spec の公開ヘッダをすべて include
 ├── export.h                       # AMARK_API、AMARK_BEGIN_DECLS / AMARK_END_DECLS
-├── error.h                        # amark_error_t と amark_error_string
+├── version.h                      # 手書き。バージョンの唯一の出所（AMARK_VERSION_MAJOR/MINOR/PATCH と、そこから組み立てる文字列）
+├── error.h                        # AMARK_ERROR_LIST（全コードの一覧）、そこから生成する amark_error_t、amark_error_string
 ├── memory.h                       # amark_malloc ほか、amark_allocator_t と差し替え API
 ├── slice.h                        # amark_slice_t と操作
 ├── utf8.h                         # UTF-8 の復号・符号化・検証
@@ -156,7 +157,7 @@ tests/
 └── release.yml                    # v* タグ: バージョン一致確認 → ci.yml 呼び出し → リリース公開
 ```
 
-生成物: `${PROJECT_BINARY_DIR}/include/amark/version.h`（`cmake/version.h.in` から `configure_file`）。ヘッダ単独 include 検査の翻訳単位は `tests/CMakeLists.txt` がビルドツリーに生成する（公開ヘッダ 1 つにつき 1 つ）。
+生成物: ヘッダ単独 include 検査の翻訳単位だけを `tests/CMakeLists.txt` がビルドツリーに生成する（公開ヘッダ 1 つにつき 1 つ）。公開ヘッダはすべてソースツリーに手書きで置き、ビルドツリーに生成する公開ヘッダはない（IDE や CMake 以外のビルドシステムからも `include/` だけで使える）。
 
 後続 spec が追加する主なファイルの置き場所（本 spec は作らない。配置の規則だけを定める）:
 - `tests/support/test_<area>.{h,c}` — 後続 spec のテスト補助（例: html-renderer の `test_tree`、parser-core の `test_tree_dump`・`test_syntax`、commonmark の `test_spec_examples`）
@@ -179,7 +180,7 @@ graph LR
     Test --> Install[install to prefix]
     Install --> Consumer[build and run package consumer]
     Trigger --> Format[clang format check]
-    Tag[version tag push] --> Verify[verify tag equals project version]
+    Tag[version tag push] --> Verify[verify tag equals version header]
     Verify --> CallCI[run ci workflow]
     CallCI --> Publish[gh release create]
 ```
@@ -216,7 +217,7 @@ sequenceDiagram
 | 1.7 | 警告のエラー化 | BuildSystem | `AMARK_WARNINGS_AS_ERRORS`、`amark_target_warnings` | CI |
 | 2.1, 2.2, 2.3 | インストールと `find_package` | BuildSystem | `AmarkConfig.cmake`、`Amark::amark`、`SameMinorVersion` | CI |
 | 2.4 | サブディレクトリ利用 | BuildSystem | `Amark::amark` 別名、`AMARK_BUILD_TESTS` 既定値 | — |
-| 2.5, 2.6 | バージョン情報と唯一の出所 | VersionInfo, BuildSystem | `AMARK_VERSION_*`、`amark_version_number`、`amark_version_string` | — |
+| 2.5, 2.6 | バージョン情報と唯一の出所 | VersionInfo, BuildSystem | `include/amark/version.h` の `AMARK_VERSION_*`、`file(STRINGS)` による読み込み、`amark_version_number`、`amark_version_string` | — |
 | 3.1, 3.2 | Naos 取得と CTest 連携 | TestHarness | `FetchContent`、`naos_add_executable` | テスト列挙 |
 | 3.3 | 動的構成でのテスト | TestHarness, BuildSystem | `CMAKE_RUNTIME_OUTPUT_DIRECTORY` | テスト列挙 |
 | 3.4 | テスト専用コードを本体に置かない | TestSupport, BuildSystem | `tests/support/` | — |
@@ -228,8 +229,8 @@ sequenceDiagram
 | 5.1, 5.2 | ライセンスとソースヘッダ | LicenseNotice | `LICENSE`、定型ヘッダ | — |
 | 5.3 | ソースヘッダ検査 | SourceHeaderCheck | `amark.source_headers` テスト | — |
 | 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8, 6.9 | グローバルアロケータ | Memory | `amark_malloc` ほか、`amark_allocator_set`、`amark_allocator_get` | — |
-| 7.1, 7.2, 7.3, 7.4, 7.5, 7.7 | エラー列挙、一覧表、文字列化 | Error | `amark_error_t`、`amark_error_string`、エラーコード一覧表 | — |
-| 7.6 | 文字列の定義漏れ検出 | Error, BuildSystem | `default` なし `switch`、`-Wswitch`、CI の警告エラー化 | CI |
+| 7.1, 7.2, 7.3, 7.4, 7.5, 7.7 | エラー列挙、一覧表、文字列化 | Error | `AMARK_ERROR_LIST`、`amark_error_t`、`amark_error_string`、エラーコード一覧表 | — |
+| 7.6 | 名前と文字列の組による単一の一覧 | Error | `AMARK_ERROR_LIST(X)` からの列挙と文字列化の生成 | — |
 | 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7 | スライスと所有権規約 | Slice | `amark_slice_t` ほか | — |
 | 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7, 9.8, 9.9 | 可変長バッファ | Buffer | `amark_buffer_t` ほか | — |
 | 10.1, 10.2, 10.3, 10.4, 10.5, 10.6, 10.7 | UTF-8 | Utf8 | `amark_utf8_decode`、`amark_utf8_encode`、`amark_utf8_validate` | — |
@@ -244,7 +245,7 @@ sequenceDiagram
 
 | Component | Domain/Layer | Intent | Req Coverage | Key Dependencies (P0/P1) | Contracts |
 |-----------|--------------|--------|--------------|--------------------------|-----------|
-| BuildSystem | ビルド | ターゲット、オプション、コンパイル設定、インストール、パッケージ設定 | 1.1–1.7, 2.1–2.4, 2.6, 3.3, 3.4, 7.6 | CMake (P0) | Batch |
+| BuildSystem | ビルド | ターゲット、オプション、コンパイル設定、インストール、パッケージ設定 | 1.1–1.7, 2.1–2.4, 2.6, 3.3, 3.4 | CMake (P0) | Batch |
 | ExportMacros | ランタイム API | export とリンケージのマクロ | 1.4, 1.5, 11.4 | — | Service |
 | VersionInfo | ランタイム API | バージョン定数と実行時問い合わせ | 2.5, 2.6 | ExportMacros (P0) | Service |
 | Error | ランタイム API | 単一のエラー列挙と文字列化 | 7.1–7.7 | ExportMacros (P0) | Service |
@@ -257,7 +258,7 @@ sequenceDiagram
 | TestSupport | テスト | 差し替えアロケータ（失敗注入・計測） | 3.4, 3.6 | Memory (P0) | Service |
 | SourceHeaderCheck | テスト | ソースヘッダ表記の検査 | 5.3 | CMake (P0) | Batch |
 | PackageConsumer | テスト（CI 用） | `find_package` の利用確認 | 2.2, 4.4 | インストール済み Amark (P0) | Batch |
-| CIWorkflow | CI/CD | 行列ビルド・テスト・インストール確認・整形検査 | 1.7, 4.1–4.5, 7.6, 12.3 | GitHub Actions (P0) | Batch |
+| CIWorkflow | CI/CD | 行列ビルド・テスト・インストール確認・整形検査 | 1.7, 4.1–4.5, 12.3 | GitHub Actions (P0) | Batch |
 | ReleaseWorkflow | CI/CD | タグからのリリース | 4.6, 4.7 | CIWorkflow (P0) | Batch |
 | LicenseNotice | 規約 | LICENSE と定型ヘッダ | 5.1, 5.2 | — | — |
 | StyleConfig | 規約 | 整形とエディタ設定 | 12.2 | clang-format (P1) | — |
@@ -280,10 +281,24 @@ sequenceDiagram
 | Field | Detail |
 |-------|--------|
 | Intent | ライブラリターゲット、ビルドオプション、インストールとパッケージ設定を定義する |
-| Requirements | 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 2.1, 2.2, 2.3, 2.4, 2.6, 3.3, 3.4, 7.6 |
+| Requirements | 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 2.1, 2.2, 2.3, 2.4, 2.6, 3.3, 3.4 |
 
 **Responsibilities & Constraints**
-- トップレベル `CMakeLists.txt`: `cmake_minimum_required(VERSION 3.21)`、`project(amark VERSION 0.1.0 LANGUAGES C)`。`VERSION` は同じ行に `VERSION <x.y.z>` の形で書く（リリースワークフローがこの行を読む）
+- トップレベル `CMakeLists.txt`: `cmake_minimum_required(VERSION 3.21)` の後、`project()` の前に `include/amark/version.h` から 3 つの数値を読み、`project(amark VERSION ${AMARK_VERSION} LANGUAGES C)` とする。ビルド定義にバージョンの数値を書かない（2.6）
+
+```cmake
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/include/amark/version.h" amark_version_lines
+     REGEX "^#define AMARK_VERSION_(MAJOR|MINOR|PATCH) +[0-9]+$")
+foreach(amark_part IN ITEMS MAJOR MINOR PATCH)
+    string(REGEX REPLACE ".*#define AMARK_VERSION_${amark_part} +([0-9]+).*" "\\1"
+           AMARK_VERSION_${amark_part} "${amark_version_lines}")
+    if(NOT AMARK_VERSION_${amark_part} MATCHES "^[0-9]+$")
+        message(FATAL_ERROR "include/amark/version.h does not define AMARK_VERSION_${amark_part}")
+    endif()
+endforeach()
+set(AMARK_VERSION "${AMARK_VERSION_MAJOR}.${AMARK_VERSION_MINOR}.${AMARK_VERSION_PATCH}")
+project(amark VERSION ${AMARK_VERSION} LANGUAGES C)
+```
 - オプション:
 
 | Option | Default | Content |
@@ -300,17 +315,17 @@ sequenceDiagram
   - サブディレクトリ: モジュール群ごとに `src/base/`（基盤）、`src/tree/`（node-tree）、`src/parser/`（parser-core）、`src/html/`、`src/markdown/`、`src/commonmark/`。新しい構文群（例: 将来の GFM）は `src/<name>/` を足す。`src/` 全体でファイルのベース名を一意に保つ（静的ライブラリのメンバ名とオブジェクト名の衝突を避け、grep で所属が分かるようにする）
   - 非公開の include ディレクトリ: `${PROJECT_SOURCE_DIR}/src`（PRIVATE）。非公開ヘッダは `src/` からの相対パスで include する（例: `#include "tree/node_internal.h"`）。同じディレクトリ内でも同じ書き方にする
   - プロパティ: `C_STANDARD 99`、`C_STANDARD_REQUIRED ON`、`C_EXTENSIONS OFF`、`C_VISIBILITY_PRESET hidden`、`VISIBILITY_INLINES_HIDDEN ON`、`DEBUG_POSTFIX d`、`OUTPUT_NAME amark`、`VERSION ${PROJECT_VERSION}`、`SOVERSION`（1.0 前は `0.<minor>`、以後 `<major>`）、`EXPORT_NAME amark`
-  - include ディレクトリ: `$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>`、`$<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>`、`$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>`
+  - include ディレクトリ: `$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>`、`$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>`（生成する公開ヘッダがないため、ビルドツリーの include ディレクトリは持たない）
   - コンパイル定義: `AMARK_BUILDING`（PRIVATE）。`BUILD_SHARED_LIBS` が真なら `AMARK_SHARED`（PUBLIC）
   - `add_library(Amark::amark ALIAS amark)`
 - `cmake/AmarkCompilerWarnings.cmake` の `amark_target_warnings(<target>)`: GCC / Clang は `-Wall -Wextra -Wpedantic`、MSVC は `/W4`。`AMARK_WARNINGS_AS_ERRORS` が真なら `-Werror` / `/WX` を加える。ライブラリとテストのターゲットにだけ PRIVATE で付け、利用者へ伝播させない（1.7）
 - インストール（`AMARK_INSTALL` が真のとき）:
   - ターゲット: `install(TARGETS amark EXPORT AmarkTargets ...)`（`GNUInstallDirs` の標準ディレクトリ）
-  - ヘッダ: `include/amark/*.h` と生成された `amark/version.h` を `${CMAKE_INSTALL_INCLUDEDIR}/amark`
+  - ヘッダ: `include/amark/*.h`（`version.h` を含む）を `${CMAKE_INSTALL_INCLUDEDIR}/amark`
   - パッケージ: `AmarkTargets.cmake`（`NAMESPACE Amark::`）、`configure_package_config_file` による `AmarkConfig.cmake`、`write_basic_package_version_file` による `AmarkConfigVersion.cmake` を `${CMAKE_INSTALL_LIBDIR}/cmake/Amark`
   - バージョン互換: メジャー 0 の間は `SameMinorVersion`、1 以上では `SameMajorVersion`（2.3）
   - ライセンス: `LICENSE` を `${CMAKE_INSTALL_DOCDIR}`（2.1）
-- バージョンの唯一の出所は `project()` の `VERSION`。`version.h`、`amark_version_*()`、パッケージのバージョンはすべてここから生成する（2.6）
+- バージョンの唯一の出所は `include/amark/version.h` の `AMARK_VERSION_MAJOR` / `AMARK_VERSION_MINOR` / `AMARK_VERSION_PATCH`。`project()` の `VERSION`（したがって `PROJECT_VERSION`、`SOVERSION`、`AmarkConfigVersion.cmake`）は上の手順でそこから読み、`AMARK_VERSION_STRING`、`AMARK_VERSION_NUMBER`、`amark_version_*()` は同じヘッダの数値から作る（2.6）
 
 **Contracts**: Batch [x]
 - Trigger: `cmake -S . -B build [-DBUILD_SHARED_LIBS=ON] [-DAMARK_WARNINGS_AS_ERRORS=ON]`、`cmake --build build --config Release`、`cmake --install build --config Release --prefix <dir>`
@@ -319,7 +334,8 @@ sequenceDiagram
 **Implementation Notes**
 - Integration: 後続 spec は `include/amark/` に自分の公開ヘッダを置き、`src/CMakeLists.txt` のソース一覧へ自分のブロックを追記するだけでビルドに載る
 - 共有の骨組みファイル（追記専用、本 spec が所有）: `include/amark/amark.h`（包括ヘッダの include 一覧）、`src/CMakeLists.txt`（ライブラリのソース一覧）、`tests/CMakeLists.txt`（テストの登録）、`tests/cxx_header_test.cpp`（C++ からの呼び出し確認）、`amark_test_support` のソース一覧。規則:
-  - 各 spec は spec 名をコメントにした自分のブロック（例: `# node-tree`、`/* node-tree */`）を末尾に追記し、他の spec のブロックや本 spec の行を書き換えない
+  - 各 spec は spec 名をコメントにした自分のブロック（例: CMake では `# node-tree`、C / C++ では同じ spec 名のブロックコメント）を末尾に追記し、他の spec のブロックや本 spec の行を書き換えない
+  - `include/amark/error.h` の `AMARK_ERROR_LIST` はこの規則の対象外で、spec 名のコメントを置かずに末尾へ項目を追記する（「Error」）
   - 並行に実装される spec の変更が衝突したら、両方のブロックを残して追記順に並べることで解消する（内容の取捨選択をしない）
   - ブロック内の並びは依存の下位から上位の順とする
 - Validation: CI の 8 ジョブとインストール確認で検証する
@@ -379,20 +395,30 @@ sequenceDiagram
 
 ##### Service Interface
 ```c
-/* include/amark/version.h（cmake/version.h.in から生成） */
-#define AMARK_VERSION_MAJOR @PROJECT_VERSION_MAJOR@
-#define AMARK_VERSION_MINOR @PROJECT_VERSION_MINOR@
-#define AMARK_VERSION_PATCH @PROJECT_VERSION_PATCH@
+/* include/amark/version.h（手書き。バージョンの唯一の出所で、数値はここに 1 回だけ書く） */
+#include <amark/export.h>
+
+#define AMARK_VERSION_MAJOR 0
+#define AMARK_VERSION_MINOR 1
+#define AMARK_VERSION_PATCH 0
+
 #define AMARK_VERSION_ENCODE(major, minor, patch) \
     ((((unsigned long)(major)) << 16) | (((unsigned long)(minor)) << 8) | ((unsigned long)(patch)))
 #define AMARK_VERSION_NUMBER AMARK_VERSION_ENCODE(AMARK_VERSION_MAJOR, AMARK_VERSION_MINOR, AMARK_VERSION_PATCH)
-#define AMARK_VERSION_STRING "@PROJECT_VERSION_MAJOR@.@PROJECT_VERSION_MINOR@.@PROJECT_VERSION_PATCH@"
+
+/* 内部用（末尾の _ は互換性の対象外を示す）: マクロを展開してから文字列にする */
+#define AMARK_VERSION_STRINGIFY_(x) #x
+#define AMARK_VERSION_XSTRINGIFY_(x) AMARK_VERSION_STRINGIFY_(x)
+#define AMARK_VERSION_STRING                                                                                  \
+    AMARK_VERSION_XSTRINGIFY_(AMARK_VERSION_MAJOR) "." AMARK_VERSION_XSTRINGIFY_(AMARK_VERSION_MINOR) "." \
+        AMARK_VERSION_XSTRINGIFY_(AMARK_VERSION_PATCH)
 
 AMARK_API unsigned long amark_version_number(void);
 AMARK_API const char *amark_version_string(void);
 ```
 - Postconditions: `amark_version_number()` はライブラリをビルドしたときの `AMARK_VERSION_NUMBER`、`amark_version_string()` は同じく `AMARK_VERSION_STRING` を返す。文字列は静的領域で解放不要
-- Invariants: 各番号は 0〜255
+- Invariants: 各番号は 0〜255。`AMARK_VERSION_MAJOR` / `MINOR` / `PATCH` は `#define AMARK_VERSION_<PART> <数値>` の 1 行で、接尾辞・括弧・式を付けない 10 進の整数リテラルで書く（文字列化の結果が `"0.1.0"` の形になり、CMake とリリースワークフローの正規表現で読めるようにするため）
+- リリースでバージョンを上げるときは、この 3 行だけを書き換える
 
 #### Error
 
@@ -402,55 +428,89 @@ AMARK_API const char *amark_version_string(void);
 | Requirements | 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7 |
 
 **Responsibilities & Constraints**
-- 列挙はライブラリ全体で 1 つ。後続 spec は自分のコードを末尾に追加する。既存の値の変更・削除・再利用は禁止（7.5）
-- 下の「エラーコード一覧表」が全 spec のコードの唯一の正本である。各 spec の設計は一覧表の行を参照し、値と文字列を独自に定義し直さない
-- 新しいコードが必要な spec は、自分の設計の Cross-Spec Change Note で本表へ行を追記する（本 spec の改訂として扱う）。「次の空き番号」を各 spec が見込みで決めて使うことはしない。並行する spec が同じ番号を求めた場合は、本表への追記順で番号を確定させる
-- 追加時は本表、`error.h` の列挙、`src/base/error.c` の `switch`、`tests/error_test.c` の確認を同時に更新する
-- 個数を表す番兵定数は公開しない
+- 列挙はライブラリ全体で 1 つ。全コードは `include/amark/error.h` の X マクロ `AMARK_ERROR_LIST(X)` に `X(名前, 文字列)` の項目として 1 回だけ書き、列挙 `amark_error_t` と `amark_error_string` の文字列化はどちらもこの一覧から生成する。名前と文字列が 1 か所で組になるため、文字列を持たないコードは定義できない（7.5、7.6）
+- 列挙定数に明示的な数値を書かない。値は一覧の並び順で決まる（C の規則で先頭が 0、以降 1 ずつ増える）。一覧へは末尾にだけ追加し、並べ替え・削除・再利用をしない。これにより公開済みのコードの値は暗黙に変わらない（7.5）
+- `AMARK_OK` は常に一覧の先頭に置く。これで `AMARK_OK == 0` となり、`if (error)` で失敗を判定できる（7.1）
+- 一覧の中に spec ごとの区切りコメントを置かない。どのコードもどの spec からも使えるためである。誰が追加したかは下の表にだけ記す
+- 下の「エラーコード一覧表」は各コードの追加した spec・文字列・意味の正本で、行の並びは `AMARK_ERROR_LIST` の並びと同じにする。各 spec の設計は表の行を参照し、文字列や意味を独自に定義し直さない
+- 新しいコードが必要な spec は、自分の設計の Cross-Spec Change Note で本表の末尾へ行を追記し（本 spec の改訂として扱う）、自分の実装タスクで `AMARK_ERROR_LIST` の末尾へ `X(...)` を 1 項目追記する。`src/base/error.c` と `tests/error_test.c` は一覧から生成・走査するため変更しない。並行する spec の追記が衝突したら、本表の行の順に並べて解消する
+- 個数を表す番兵定数は公開しない（テストは必要なら一覧から自分で数える）
 
 **エラーコード一覧表**（正本、追記専用）
 
-| 定数 | 値 | 所有 spec | 文字列（`amark_error_string`） | 意味 |
-|---|---|---|---|---|
-| `AMARK_OK` | 0 | foundation | `"success"` | 成功 |
-| `AMARK_ERROR_NO_MEMORY` | 1 | foundation | `"out of memory"` | メモリ確保に失敗した |
-| `AMARK_ERROR_INVALID_ARGUMENT` | 2 | foundation | `"invalid argument"` | 引数が契約に反する（必須ポインタが `NULL`、範囲外など） |
-| `AMARK_ERROR_OVERFLOW` | 3 | foundation | `"size overflow"` | サイズ計算が `size_t` の範囲を超える |
-| `AMARK_ERROR_INVALID_UTF8` | 4 | foundation | `"invalid UTF-8"` | UTF-8 として不正、または符号化できないコードポイント |
-| `AMARK_ERROR_INVALID_CHILD` | 5 | node-tree | `"invalid child node"` | 編集操作が親子関係の規則に反する（親がその種別を受け入れない、循環、document を子にする） |
-| `AMARK_ERROR_ALREADY_EXISTS` | 6 | node-tree | `"already exists"` | 同じ名前・鍵のものが既に登録されている（種別名、拡張名、定義の鍵などに再利用できる汎用の意味） |
-| `AMARK_ERROR_INVALID_STATE` | 7 | parser-core | `"invalid state"` | オブジェクトの現在の状態ではその操作ができない（終了済みのパーサ、凍結された方言など。他 spec も同じ意味で再利用できる） |
+| 定数 | 追加した spec | 文字列（`amark_error_string`） | 意味 |
+|---|---|---|---|
+| `AMARK_OK` | foundation | `"success"` | 成功 |
+| `AMARK_ERROR_NO_MEMORY` | foundation | `"out of memory"` | メモリ確保に失敗した |
+| `AMARK_ERROR_INVALID_ARGUMENT` | foundation | `"invalid argument"` | 引数が契約に反する（必須ポインタが `NULL`、範囲外など） |
+| `AMARK_ERROR_OVERFLOW` | foundation | `"size overflow"` | サイズ計算が `size_t` の範囲を超える |
+| `AMARK_ERROR_INVALID_UTF8` | foundation | `"invalid UTF-8"` | UTF-8 として不正、または符号化できないコードポイント |
+| `AMARK_ERROR_INVALID_CHILD` | node-tree | `"invalid child node"` | 編集操作が親子関係の規則に反する（親がその種別を受け入れない、循環、document を子にする） |
+| `AMARK_ERROR_ALREADY_EXISTS` | node-tree | `"already exists"` | 同じ名前・鍵のものが既に登録されている（種別名、拡張名、定義の鍵などに使える汎用の意味） |
+| `AMARK_ERROR_INVALID_STATE` | parser-core | `"invalid state"` | オブジェクトの現在の状態ではその操作ができない（終了済みのパーサ、凍結された方言など） |
 
-- 意味の詳細と使い分けは所有 spec の設計に記す。所有 spec 以外も、意味が合えば既存のコードを再利用する（例: markdown-renderer は `AMARK_ERROR_INVALID_STATE` を再利用する）
+- どの spec も、意味が合えばどのコードでも使ってよい（例: markdown-renderer は `AMARK_ERROR_INVALID_STATE` を、parser-core は `AMARK_ERROR_ALREADY_EXISTS` を使う）。「追加した spec」はそのコードを誰が一覧へ加えたか、および意味の詳細と使い分けがどの設計に書かれているかを記録するだけで、使える spec を限定しない
 
 **Contracts**: Service [x]
 
 ##### Service Interface
 ```c
 /* include/amark/error.h */
+/*
+ * 全エラーコードの一覧（唯一の正本）。項目は X(名前, 文字列)。
+ * 追加は末尾だけ。並べ替え・削除・再利用は禁止。AMARK_OK は常に先頭（値 0）。
+ * 項目を追加したら foundation の設計のエラーコード一覧表にも同じ順で行を追加する。
+ */
+#define AMARK_ERROR_LIST(X)                             \
+    X(AMARK_OK, "success")                              \
+    X(AMARK_ERROR_NO_MEMORY, "out of memory")           \
+    X(AMARK_ERROR_INVALID_ARGUMENT, "invalid argument") \
+    X(AMARK_ERROR_OVERFLOW, "size overflow")            \
+    X(AMARK_ERROR_INVALID_UTF8, "invalid UTF-8")        \
+    X(AMARK_ERROR_INVALID_CHILD, "invalid child node")  \
+    X(AMARK_ERROR_ALREADY_EXISTS, "already exists")     \
+    X(AMARK_ERROR_INVALID_STATE, "invalid state")
+
+/* 内部用（末尾の _ は互換性の対象外を示す）: 一覧の 1 項目を列挙子 1 つに展開する */
+#define AMARK_ERROR_ENUM_ENTRY_(name, string) name,
+
 typedef enum amark_error
 {
-    AMARK_OK = 0,
-    AMARK_ERROR_NO_MEMORY = 1,        /* メモリ確保に失敗した */
-    AMARK_ERROR_INVALID_ARGUMENT = 2, /* 引数が契約に反する（必須ポインタが NULL、範囲外など） */
-    AMARK_ERROR_OVERFLOW = 3,         /* サイズ計算が size_t の範囲を超える */
-    AMARK_ERROR_INVALID_UTF8 = 4,     /* UTF-8 として不正、または符号化できないコードポイント */
-    /* node-tree */
-    AMARK_ERROR_INVALID_CHILD = 5,    /* 親子関係の規則に反する */
-    AMARK_ERROR_ALREADY_EXISTS = 6,   /* 同じ名前・鍵が既にある */
-    /* parser-core */
-    AMARK_ERROR_INVALID_STATE = 7     /* 現在の状態ではできない操作 */
-    /* 追加はエラーコード一覧表への追記と同時に、表の値で末尾に行う。値の変更・再利用は禁止 */
+    AMARK_ERROR_LIST(AMARK_ERROR_ENUM_ENTRY_)
 } amark_error_t;
+
+#undef AMARK_ERROR_ENUM_ENTRY_
 
 AMARK_API const char *amark_error_string(amark_error_t error);
 ```
-- 本 spec の実装が定義するのは値 0〜4。値 5 以降は所有 spec の実装タスクが一覧表どおりに追加する（上の宣言は一覧表を反映した最終形）
-- Postconditions: 定義済みのコードには一覧表の文字列（固有の英語の短い説明）を返す。未定義の値には `"unknown error"` を返す。戻り値は常に非 `NULL` の静的文字列で、解放不要（7.3、7.4）
+- 列挙子は明示値を持たず、一覧の並び順に 0 から連番になる。展開結果は末尾にカンマの付いた列挙子の並びになる（C99 と C++11 で許される）。ヘルパマクロ `AMARK_ERROR_ENUM_ENTRY_` は列挙の直後で `#undef` し、利用者の名前空間に残さない
+- `AMARK_ERROR_LIST` は公開ヘッダにあるため利用者も展開できるが、互換性の約束は各定数の値と文字列であり、一覧の展開結果は末尾追加によって増える
+- 本 spec の実装が一覧に置くのは先頭の 5 項目（`AMARK_OK`〜`AMARK_ERROR_INVALID_UTF8`）。以降の項目は、表で「追加した spec」とされる spec の実装タスクが表の順で末尾に追記する（上の一覧は表を反映した最終形）
+- Postconditions: 定義済みのコードには一覧の文字列（固有の英語の短い説明）を返す。未定義の値には `"unknown error"` を返す。戻り値は常に非 `NULL` の静的文字列で、解放不要（7.3、7.4）
 - Invariants: `AMARK_OK == 0`。`if (error)` で失敗を判定できる
 
 **Implementation Notes**
-- Validation: `src/base/error.c` は `default` ラベルのない `switch` で各コードの文字列を返し、`switch` の後で `"unknown error"` を返す。GCC / Clang の `-Wswitch` と CI の警告エラー化により、列挙に追加されて文字列のないコードをビルド時に検出する（7.6）。テストは定義済みのすべてのコードについて、一覧表どおりの値と文字列（`"unknown error"` 以外の非空で互いに異なる文字列）を個別に確認する
+- Integration: `src/base/error.c` は同じ一覧から `switch` の `case` を生成し、一覧にない値は `switch` の後で `"unknown error"` を返す。ヘルパマクロは使用後に `#undef` する
+
+```c
+/* src/base/error.c */
+const char *amark_error_string(amark_error_t error)
+{
+    switch (error)
+    {
+#define AMARK_ERROR_STRING_CASE_(name, string) \
+    case name:                                 \
+        return string;
+        AMARK_ERROR_LIST(AMARK_ERROR_STRING_CASE_)
+#undef AMARK_ERROR_STRING_CASE_
+    default:
+        break;
+    }
+
+    return "unknown error";
+}
+```
+- Validation: 名前と文字列は一覧の 1 項目で組になるため、文字列のないコードは書けない（7.6）。`tests/error_test.c` も同じ一覧をテスト内のヘルパマクロで展開して全コードを走査するため、コードの追加時にテストを変更する必要はない（「Testing Strategy」）
 
 #### Memory
 
@@ -462,30 +522,31 @@ AMARK_API const char *amark_error_string(amark_error_t error);
 **Responsibilities & Constraints**
 - ライブラリ内のソースは `malloc` / `realloc` / `calloc` / `free` を直接呼ばない。直接呼ぶのは `src/base/memory.c` の既定アロケータだけ（6.1、6.2）
 - 現在のアロケータは `src/base/memory.c` の `static` 変数 1 つに持つ。これがライブラリ唯一の可変グローバル状態
+- アロケータはプロセス全体で 1 つのため、関数へ渡す利用者データは持たない。利用者のアロケータが状態を必要とするなら、利用者側の静的変数などに持つ
+- 既定アロケータは C 標準ライブラリの `malloc` / `realloc` / `calloc` / `free` をそのまま 4 つの関数ポインタに設定する（型が一致するため中継関数を挟まない）
 
 **Contracts**: Service [x] / State [x]
 
 ##### Service Interface
 ```c
 /* include/amark/memory.h */
-typedef void *(*amark_allocate_fn_t)(size_t size, void *user_data);
-typedef void *(*amark_reallocate_fn_t)(void *pointer, size_t size, void *user_data);
-typedef void *(*amark_allocate_zeroed_fn_t)(size_t count, size_t size, void *user_data);
-typedef void (*amark_deallocate_fn_t)(void *pointer, void *user_data);
+typedef void *(*amark_malloc_fn_t)(size_t size);
+typedef void *(*amark_realloc_fn_t)(void *ptr, size_t size);
+typedef void *(*amark_calloc_fn_t)(size_t count, size_t size);
+typedef void (*amark_free_fn_t)(void *ptr);
 
 typedef struct amark_allocator
 {
-    amark_allocate_fn_t allocate;
-    amark_reallocate_fn_t reallocate;
-    amark_allocate_zeroed_fn_t allocate_zeroed;
-    amark_deallocate_fn_t deallocate;
-    void *user_data;
+    amark_malloc_fn_t malloc_fn;
+    amark_realloc_fn_t realloc_fn;
+    amark_calloc_fn_t calloc_fn;
+    amark_free_fn_t free_fn;
 } amark_allocator_t;
 
 AMARK_API void *amark_malloc(size_t size);
-AMARK_API void *amark_realloc(void *pointer, size_t size);
+AMARK_API void *amark_realloc(void *ptr, size_t size);
 AMARK_API void *amark_calloc(size_t count, size_t size);
-AMARK_API void amark_free(void *pointer);
+AMARK_API void amark_free(void *ptr);
 
 AMARK_API amark_error_t amark_allocator_set(const amark_allocator_t *allocator);
 AMARK_API void amark_allocator_get(amark_allocator_t *allocator);
@@ -495,24 +556,26 @@ AMARK_API void amark_allocator_get(amark_allocator_t *allocator);
 
 | 呼び出し | 振る舞い |
 |---|---|
-| `amark_malloc(0)` | `allocate(1, user_data)` として扱う |
-| `amark_malloc(n)` | `allocate(n, user_data)` の結果を返す |
-| `amark_realloc(NULL, n)` | `amark_malloc(n)` と同じ |
-| `amark_realloc(p, 0)` | `reallocate(p, 1, user_data)` として扱う |
-| `amark_realloc(p, n)` | `reallocate(p, n, user_data)`。失敗時は `NULL` を返し、`p` は有効なまま |
-| `amark_calloc(c, s)` で `c * s` があふれる | アロケータを呼ばずに `NULL` |
-| `amark_calloc(c, s)` で `c == 0` または `s == 0` | `allocate_zeroed(1, 1, user_data)` として扱う |
-| `amark_calloc(c, s)` | `allocate_zeroed(c, s, user_data)` |
-| `amark_free(NULL)` | 何もしない（`deallocate` を呼ばない） |
-| `amark_free(p)` | `deallocate(p, user_data)` |
+| `amark_malloc(0)` | `malloc_fn` を呼ばずに `NULL` を返す |
+| `amark_malloc(n)` | `malloc_fn(n)` の結果を返す |
+| `amark_realloc(NULL, n)` | `amark_malloc(n)` と同じ（`n == 0` なら `NULL`） |
+| `amark_realloc(p, 0)` | `free_fn(p)` で解放し、`NULL` を返す（`realloc_fn` を呼ばない） |
+| `amark_realloc(p, n)` | `realloc_fn(p, n)`。失敗時は `NULL` を返し、`p` は有効なまま |
+| `amark_calloc(c, s)` で `c == 0` または `s == 0` | `calloc_fn` を呼ばずに `NULL` を返す |
+| `amark_calloc(c, s)` で `c * s` があふれる | `calloc_fn` を呼ばずに `NULL` を返す |
+| `amark_calloc(c, s)` | `calloc_fn(c, s)` |
+| `amark_free(NULL)` | 何もしない（`free_fn` を呼ばない） |
+| `amark_free(p)` | `free_fn(p)` |
 
-- 確保系の戻り値 `NULL` は常に確保失敗を意味する
-- 利用者関数への事前条件: `size`、`count` は 1 以上。`reallocate` と `deallocate` の `pointer` は非 `NULL`。戻り値はあらゆるオブジェクト型に適切に整列していること。`allocate_zeroed` は確保領域をゼロで埋めること
+- 確保系の戻り値 `NULL` は、要求サイズ（`amark_calloc` では `count * size`）が 0 でないときに限り確保失敗を意味する。サイズ 0 の要求は常に `NULL` を返す
+- 利用者関数への事前条件: ラッパが上の表で 0 サイズと `NULL` を処理するため、`size`、`count` は常に 1 以上、`realloc_fn` と `free_fn` の `ptr` は常に非 `NULL` で届く。戻り値はあらゆるオブジェクト型に適切に整列していること。`calloc_fn` は確保領域をゼロで埋めること
+- **ライブラリ内の規則**（全 spec に適用）: ライブラリのコードは、戻り値の `NULL` を `AMARK_ERROR_NO_MEMORY` と解釈する箇所で、サイズ 0 の確保（`amark_malloc(0)`、要素数 0 の `amark_calloc`、`amark_realloc(p, 0)`）を要求しない。要素数が 0 になりうる配列・表・スタックは、確保の前に個数を確かめ、空は `NULL` と個数 0 で表す（確保は個数が 1 以上のときだけ行う）。縮めて空にするときは `amark_realloc(p, 0)` ではなく `amark_free` で解放し `NULL` と 0 に戻す
+- 本 spec の確保はこの規則に該当しない: `amark_slice_dup` は `length + 1`（1 以上）、`amark_buffer_reserve` は新容量 + 1（新容量は 16 以上）、`amark_buffer_detach` の空文字列は 1 バイトを要求する
 - `amark_allocator_set(allocator)`:
   - `allocator == NULL`: 既定アロケータ（C 標準ライブラリ）に戻し `AMARK_OK`（6.5）
   - 4 つの関数のいずれかが `NULL`: 現在のアロケータを変えずに `AMARK_ERROR_INVALID_ARGUMENT`（6.4）
-  - それ以外: 内容を複製して現在のアロケータとし `AMARK_OK`。`user_data` はそのまま各関数へ渡す（6.3）
-- `amark_allocator_get(allocator)`: 現在のアロケータ（既定時は既定関数と `user_data == NULL`）を書き込む。`NULL` なら何もしない（6.6）
+  - それ以外: 内容を複製して現在のアロケータとし `AMARK_OK`。以降の確保と解放は指定された 4 関数へ委ねる（6.3）
+- `amark_allocator_get(allocator)`: 現在のアロケータ（既定時は C 標準ライブラリの `malloc` / `realloc` / `calloc` / `free`）を書き込む。`NULL` なら何もしない（6.6）
 
 ##### State Management
 - State model: 現在のアロケータ 1 つ。初期値は既定アロケータ
@@ -664,7 +727,7 @@ AMARK_API amark_slice_t amark_buffer_as_slice(const amark_buffer_t *buffer);
 - Naos: `FetchContent_Declare(Naos GIT_REPOSITORY https://github.com/vabelorg/naos.git GIT_TAG v0.4.0)` と `FetchContent_MakeAvailable(Naos)`（3.1）
 - モジュールごとに 1 実行ファイル: `naos_add_executable(amark_<module>_test SOURCES <module>_test.c LIBRARIES Amark::amark amark_test_support)`。CTest 名は `amark_<module>_test.<suite>.<test>`（3.2）。各テストターゲットに `amark_target_warnings` を適用する
 - テストは `#include <amark/amark.h>` または個別の公開ヘッダだけを使い、`src/` を include しない。動的構成では非公開シンボルが見えないため、公開 API 以外を呼ぶテストはリンクに失敗する（3.5）。唯一の例外は node-tree の `amark_node_walk_test` で、公開 API から到達できない非公開モジュール `src/tree/node_walk.c`（公開 API だけを呼ぶ）をテスト実行ファイルに直接コンパイルして検証する（node-tree の設計の NodeWalk）。ライブラリ本体には何も加えない（3.4）
-- ヘッダ単独 include 検査: 公開ヘッダ（`include/amark/*.h` と生成された `version.h`）ごとに、そのヘッダだけを include する翻訳単位をビルドツリーに生成し、オブジェクトライブラリ `amark_header_check` としてビルドする。どれかが単独でコンパイルできなければビルドが失敗する（11.3）。生成した翻訳単位は `src/` を include パスに含めずにコンパイルし、公開ヘッダが非公開ヘッダに依存していればコンパイルに失敗する（11.6）
+- ヘッダ単独 include 検査: 公開ヘッダ（`include/amark/*.h`）ごとに、そのヘッダだけを include する翻訳単位をビルドツリーに生成し、オブジェクトライブラリ `amark_header_check` としてビルドする。どれかが単独でコンパイルできなければビルドが失敗する（11.3）。生成した翻訳単位は `src/` を include パスに含めずにコンパイルし、公開ヘッダが非公開ヘッダに依存していればコンパイルに失敗する（11.6）
 - C++ 検査: `enable_language(CXX)` を `tests/` 内で行い、`cxx_header_test.cpp`（C++11）を `naos_add_executable(amark_cxx_header_test ...)` で登録する。`amark.h` を include し、`amark_error_string`、`amark_slice_from_cstr`、バッファの追記と後片付けを呼んでリンクできることを確認する（11.4）。後続 spec は自分の主要 API の呼び出しを、spec 名のコメント付きのテストまたはブロックとして追記する
 - 後続 spec のテスト登録: `tests/CMakeLists.txt` の末尾に spec 名のコメント付きブロックを追記し、上と同じ `naos_add_executable` の形で自分のモジュールのテストを登録する。テスト補助を追加する場合は同じブロックで `amark_test_support` のソース一覧に `support/test_<area>.c` を追記する（`target_sources(amark_test_support PRIVATE ...)`）。いずれも追記専用（「BuildSystem」の共有の骨組みファイルの規則）
 
@@ -682,6 +745,7 @@ AMARK_API amark_slice_t amark_buffer_as_slice(const amark_buffer_t *buffer);
 **Responsibilities & Constraints**
 - `tests/support/` に置く静的ライブラリ `amark_test_support`。ライブラリ本体には含めない（3.4）
 - 公開 API（`amark_allocator_set`）だけを使って差し替える
+- グローバルアロケータは利用者データを持たないため、計測アロケータの状態（統計、失敗注入の設定、差し替え前のアロケータ）は `tests/support/test_allocator.c` の `static` 変数に持つ
 - 命名規則（後続 spec の補助にも適用）: ファイルは `tests/support/test_<area>.{h,c}`、外部に見える関数・型は `test_<area>_*`（型は `test_<area>_*_t`）。`<area>` は補助の対象（例: `allocator`、`tree`、`tree_dump`、`spec_examples`）。ライブラリ本体の公開名前空間 `amark_` は使わない
 - バイト数の計測のため、計測アロケータは各ブロックの先頭に要求サイズを記録するヘッダ（`max_align_t` 相当の整列を保つ大きさ）を付けて確保し、利用者へはその直後のアドレスを返す。再確保・解放ではヘッダから旧サイズを読んで統計を更新する。ヘッダ分の加算があふれる要求は確保失敗として扱う
 
@@ -707,7 +771,7 @@ void test_allocator_fail_after(size_t successes);     /* successes 回成功し�
 void test_allocator_never_fail(void);                 /* 失敗注入を解除する */
 test_allocator_stats_t test_allocator_stats(void);
 ```
-- 統計の更新: 確保（0 サイズは 1 バイトとしてラッパから届く）は `bytes_live` と `bytes_total` に要求サイズを加える。再確保の成功は `bytes_live` を旧サイズから新サイズへ置き換え、`bytes_total` に新サイズを加える。解放は `bytes_live` から旧サイズを引く。失敗した確保・再確保は統計を変えない（`failures` を除く）。いずれの更新後も `bytes_peak = max(bytes_peak, bytes_live)`
+- 統計の更新: サイズ 0 の要求はラッパが `NULL` を返すため計測アロケータには届かず、統計を変えない。`amark_realloc(p, 0)` はラッパが `free_fn` を呼ぶため解放として数える。確保は `bytes_live` と `bytes_total` に要求サイズを加える。再確保の成功は `bytes_live` を旧サイズから新サイズへ置き換え、`bytes_total` に新サイズを加える。解放は `bytes_live` から旧サイズを引く。失敗した確保・再確保は統計を変えない（`failures` を除く）。いずれの更新後も `bytes_peak = max(bytes_peak, bytes_live)`
 - 失敗注入付きの網羅パターン: `n = 0, 1, 2, ...` について `fail_after(n)` で操作を行い、成功するまで繰り返す。各回で「戻り値が `AMARK_ERROR_NO_MEMORY` かつ状態が呼び出し前のまま」または「成功」であり、後片付け後に `live == 0` かつ `bytes_live == 0` であることを確認する
 
 #### SourceHeaderCheck
@@ -719,7 +783,7 @@ test_allocator_stats_t test_allocator_stats(void);
 
 **Contracts**: Batch [x]
 - `cmake/AmarkCheckSourceHeaders.cmake` を `cmake -DAMARK_SOURCE_DIR=<dir> -P` で実行する。CTest テスト `amark.source_headers` として `tests/CMakeLists.txt` で登録する
-- 対象: `include/`、`src/`、`tests/`、`cmake/version.h.in` の `*.c`、`*.h`、`*.cpp`、`*.h.in`
+- 対象: `include/`、`src/`、`tests/` の `*.c`、`*.h`、`*.cpp`
 - 各ファイルの先頭 5 行以内に `Copyright (c) <年> The Amark Authors` と `SPDX-License-Identifier: MIT` があることを確認する。欠けたファイルがあれば、そのパスをすべて列挙して `message(FATAL_ERROR)` で失敗する
 
 #### PackageConsumer
@@ -740,7 +804,7 @@ test_allocator_stats_t test_allocator_stats(void);
 | Field | Detail |
 |-------|--------|
 | Intent | 変更ごとに全プラットフォーム・全形態のビルド、テスト、インストール確認、整形検査を行う |
-| Requirements | 1.7, 4.1, 4.2, 4.3, 4.4, 4.5, 7.6, 12.3 |
+| Requirements | 1.7, 4.1, 4.2, 4.3, 4.4, 4.5, 12.3 |
 
 **Contracts**: Batch [x]
 - Trigger: `push`（既定ブランチ）、`pull_request`、`workflow_call`（リリースから呼ばれる）
@@ -767,16 +831,16 @@ test_allocator_stats_t test_allocator_stats(void);
 
 **Contracts**: Batch [x]
 - Trigger: `push` の `tags: ['v*']`
-- `verify` ジョブ: タグ名から先頭の `v` を除いた値と、`CMakeLists.txt` の `project(` 内の `VERSION x.y.z` が一致しなければ失敗する（4.7）
+- `verify` ジョブ: `include/amark/version.h` の `#define AMARK_VERSION_MAJOR` / `MINOR` / `PATCH` の行から数値を読んで `x.y.z` を組み立て、タグ名から先頭の `v` を除いた値と一致しなければ失敗する。3 つのいずれかが読めない場合も失敗する（4.7）
 - `ci` ジョブ: `uses: ./.github/workflows/ci.yml`
 - `publish` ジョブ: `needs: [verify, ci]`、`permissions: contents: write`、`gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes`（4.6）
-- 手順（tech.md に記す）: `project()` の `VERSION` を上げてマージ → `vX.Y.Z` タグを push → ワークフローの成功を確認
+- 手順（tech.md に記す）: `include/amark/version.h` の 3 つの数値を上げてマージ → `vX.Y.Z` タグを push → ワークフローの成功を確認
 
 ### 規約とツール設定
 
 #### LicenseNotice
 - `LICENSE`: MIT ライセンス全文、`Copyright (c) 2026 The Amark Authors`（5.1）
-- 定型ヘッダ（すべての `*.c`、`*.h`、`*.cpp`、`*.h.in` の先頭、5.2）:
+- 定型ヘッダ（すべての `*.c`、`*.h`、`*.cpp` の先頭、5.2）:
 ```c
 /*
  * Copyright (c) 2026 The Amark Authors
@@ -791,15 +855,15 @@ test_allocator_stats_t test_allocator_stats(void);
 
 #### SteeringUpdate
 - 以下は設計段階で steering に反映済み。実装時は実際のファイル構成・オプション名・コマンドとの差分だけを同期する（12.5）
-- `structure.md`: 確定したディレクトリ構成（公開ヘッダはモジュール単位の `include/amark/<module>.h`）、モジュールの依存方向、テスト配置（モジュールごとの実行ファイル、`tests/support/` と `test_<area>` の命名、`tests/data/`、`tests/package/`）、`tools/` の生成スクリプト、レンダラが共有する非公開の振り分け走査 `src/tree/node_walk.h`（node-tree 所有）、公開ヘッダの規約（include ガード、`AMARK_BEGIN_DECLS`、`AMARK_API`）、共有の骨組みファイルの追記規則
-- `tech.md`: ビルドオプション表、Common Commands（警告エラー化、インストール、利用者確認）、命名例の修正（`void amark_buffer_init`、出力引数で返す `amark_node_create`）、文字列の所有権規約、エラーコード一覧表の規則（本書が唯一の正本、末尾追加、4 か所同時更新）、機械的に検査する規約（整形、ソースヘッダ、`-Wswitch`、ヘッダ単独 include）と検査しない規約（演算順序の括弧付け、ステップ間の空行、命名の一部）、clang-format 18、リリース手順（12.1、12.4、12.5）
+- `structure.md`: 確定したディレクトリ構成（公開ヘッダはモジュール単位の `include/amark/<module>.h`。`version.h` も手書き）、モジュールの依存方向、テスト配置（モジュールごとの実行ファイル、`tests/support/` と `test_<area>` の命名、`tests/data/`、`tests/package/`）、`tools/` の生成スクリプト、レンダラが共有する非公開の振り分け走査 `src/tree/node_walk.h`（node-tree 所有）、公開ヘッダの規約（include ガード、`AMARK_BEGIN_DECLS`、`AMARK_API`）、共有の骨組みファイルの追記規則
+- `tech.md`: ビルドオプション表、Common Commands（警告エラー化、インストール、利用者確認）、命名例の修正（`void amark_buffer_init`、出力引数で返す `amark_node_create`）、文字列の所有権規約、メモリの規則（サイズ 0 の要求は `NULL`、ライブラリ内でサイズ 0 を要求しない）、エラーコードの規則（`AMARK_ERROR_LIST` と本書の一覧表が正本、明示値なし、末尾追加のみ）、機械的に検査する規約（整形、ソースヘッダ、ヘッダ単独 include）と検査しない規約（演算順序の括弧付け、ステップ間の空行、命名の一部）、clang-format 18、リリース手順（`version.h` の数値を上げる）（12.1、12.4、12.5）
 - 命名規約（11.1、11.2）は本書の全インターフェースで守り、steering にも明記する
 
 ## Error Handling
 
 ### Error Strategy
 - 失敗は `amark_error_t` で返し、呼び出し側の状態を変えない（強い保証）。確保失敗は `AMARK_ERROR_NO_MEMORY`、サイズのあふれは確保を試みる前に `AMARK_ERROR_OVERFLOW`、契約違反の引数は `AMARK_ERROR_INVALID_ARGUMENT`、UTF-8 の不正は `AMARK_ERROR_INVALID_UTF8`
-- 戻り値でポインタを返す関数（`amark_malloc` 系、`amark_slice_dup`）は `NULL` で確保失敗を表す
+- 戻り値でポインタを返す関数（`amark_malloc` 系、`amark_slice_dup`）は `NULL` で確保失敗を表す。ただし `amark_malloc` 系はサイズ 0 の要求にも `NULL` を返すため、ライブラリ内ではサイズ 0 を要求しない（「Memory」のライブラリ内の規則）
 - ライブラリは `abort`、`assert`、標準出力・標準エラーへの出力を行わない
 
 ### Monitoring
@@ -808,24 +872,24 @@ test_allocator_stats_t test_allocator_stats(void);
 ## Testing Strategy
 
 ### Unit Tests
-- `memory_test.c`: 既定アロケータでの確保・再確保・解放（6.2）。計測アロケータの `bytes_live`・`bytes_total`・`bytes_peak` が確保・再確保（拡大と縮小）・解放の列に対して期待どおりに変化すること（3.6）。計測アロケータへの差し替え後に `amark_malloc` などが利用者関数へ `user_data` 付きで委ねられること（6.3）。関数欠落時に `AMARK_ERROR_INVALID_ARGUMENT` で現在のアロケータが変わらないこと（6.4）。`NULL` 指定で既定へ戻ること（6.5）。`amark_allocator_get` の値（6.6）。`amark_calloc(SIZE_MAX, 2)` がアロケータを呼ばず `NULL`（6.7）。0 サイズ要求と `amark_free(NULL)` の表どおりの振る舞い（6.8）
-- `error_test.c`: `AMARK_OK == 0`（7.1）、定義済みのすべてのコード（その時点でエラーコード一覧表にあるもの。本 spec の実装時点では 0〜4）がそれぞれ異なる値で存在すること（7.2）、各コードの文字列が一覧表どおりで、非 `NULL`・非空・`"unknown error"` と異なり互いに異なること（7.3）、未定義値（例: `(amark_error_t)9999`）で `"unknown error"`（7.4）、各コードの数値が一覧表どおりであること（7.5）。コードを追加する spec は同じ形の確認を追記する
+- `memory_test.c`: 既定アロケータでの確保・再確保・解放（6.2）。計測アロケータの `bytes_live`・`bytes_total`・`bytes_peak` が確保・再確保（拡大と縮小）・解放の列に対して期待どおりに変化すること（3.6）。計測アロケータへの差し替え後に `amark_malloc` などが指定した関数へ委ねられること（6.3）。関数欠落時に `AMARK_ERROR_INVALID_ARGUMENT` で現在のアロケータが変わらないこと（6.4）。`NULL` 指定で既定へ戻ること（6.5）。`amark_allocator_get` が差し替えた 4 関数、既定時は C 標準ライブラリの 4 関数を返すこと（6.6）。`amark_calloc(SIZE_MAX, 2)` がアロケータを呼ばず `NULL`（6.7）。`amark_malloc(0)`、`amark_calloc(0, n)`、`amark_calloc(n, 0)`、`amark_realloc(NULL, 0)` がアロケータを呼ばずに `NULL` を返すこと（計測アロケータの `allocations` と `failures` が増えない）、`amark_realloc(p, 0)` が `free_fn` で解放して `NULL` を返すこと（`deallocations` が増え `live` が減る）、`amark_free(NULL)` が何もしないこと（6.8）
+- `error_test.c`: テスト内のヘルパマクロで `AMARK_ERROR_LIST` を展開し、コードの配列とテスト内の個数（例: `enum { test_error_count = 0 AMARK_ERROR_LIST(TEST_ERROR_COUNT_ENTRY) };`、各項目を `+ 1` に展開）を作る。`AMARK_OK == 0`（7.1）、本 spec の 4 つのコードが存在すること（7.2）、一覧の i 番目のコードの値が i であること（並び順で連番、7.5）、各コードの文字列が一覧の文字列と一致し、非 `NULL`・非空・`"unknown error"` と異なり互いに異なること（7.3、7.6）、一覧の最後の次の値（`(amark_error_t)test_error_count`）で `"unknown error"`（7.4）。一覧を走査するため、コードを追加する spec はこのテストを変更しない
 - `slice_test.c`: 生成（`NULL` を含む）（8.2）、NUL を含む比較・長さ違いの比較（8.3）、部分範囲の切り詰め（offset 超過、length 超過）（8.4）、複製の内容と NUL 終端（8.5）、失敗注入で `NULL` かつ `live == 0`（8.6）
 - `utf8_test.c`: 1〜4 バイトの境界値（U+0000、U+007F、U+0080、U+07FF、U+0800、U+FFFF、U+10000、U+10FFFF）の復号と符号化の往復（10.1、10.4、10.7）、過長（`C0 80`、`E0 80 80`）、サロゲート（`ED A0 80`）、範囲外（`F4 90 80 80`、`F5`）、途切れ（`E3 81`）、孤立継続バイト（`80`）について `consumed` が Unicode 標準の例（Table 3-8）と一致すること（10.2）、空入力（10.3）、サロゲートと `0x110000` の符号化拒否（10.5）、検証の `error_offset`（10.6）。`amark_utf8_decode_previous` について、1〜4 バイトの各文字の直後からの逆方向復号、不正な並び（途切れ `E3 81`、孤立継続バイトの連続 `80 80`、継続バイトが 4 つ以上続く並び、過長 `C0 80`）を含む入力の各単位境界で、前方復号の最後の単位と戻り値・`codepoint`・`consumed` が一致すること、`offset == 0` と `offset > length` の拒否（10.8）
 - `buffer_test.c`: 初期化直後に確保がないこと（計測アロケータで `allocations == 0`、`bytes_live == 0`）（9.1）、各種追記と NUL 終端（9.2、9.3）、失敗注入の網羅パターンで内容不変（9.4）、`reserve(SIZE_MAX)` が `AMARK_ERROR_OVERFLOW`（9.4）、clear / truncate（9.5、9.6）、detach（空と非空）と `amark_free` による解放（9.7）、deinit 後の再利用（9.8）、10 万回の 1 バイト追記で再確保回数が対数オーダー（例: 64 回以下）に収まること（9.9）、不正コードポイントの追記拒否
 
 ### Integration Tests
-- `version_test.c`: `amark_version_number() == AMARK_VERSION_NUMBER`、`amark_version_string()` と `AMARK_VERSION_STRING` の一致、テストターゲットに渡した `PROJECT_VERSION` との一致（2.5、2.6）
+- `version_test.c`: `amark_version_number() == AMARK_VERSION_NUMBER`、`amark_version_string()` と `AMARK_VERSION_STRING` の一致、`AMARK_VERSION_STRING` が `AMARK_VERSION_MAJOR` / `MINOR` / `PATCH` を `.` でつないだ文字列であること、CMake が `version.h` から読んでテストターゲットに渡した `PROJECT_VERSION` との一致（2.5、2.6）
 - `cxx_header_test.cpp`: C++ から包括ヘッダを include し主要 API を呼べること（11.4、11.5）
 - ヘッダ単独 include 検査（`amark_header_check`）: 各公開ヘッダ単独でのコンパイル（11.3、11.6）
 - `amark.source_headers`: 全ソースのヘッダ表記（5.2、5.3）
 
 ### CI / E2E
 - 8 ジョブの行列でビルド・テストが通ること（1.1、1.2、3.3、4.1、4.2）
-- 警告エラー化で通ること、および `-Wswitch` による文字列漏れ検出（1.7、4.3、7.6）
+- 警告エラー化で通ること（1.7、4.3）
 - インストール後に `PackageConsumer` が構成・ビルド・実行に成功すること（2.1、2.2、4.4）
 - 整形検査（12.3）
-- リリース: タグとバージョンの不一致で `verify` が失敗すること（4.7）
+- リリース: タグと `version.h` のバージョンの不一致で `verify` が失敗すること（4.7）
 
 ### Performance
 - バッファの追記は償却定数時間（9.9）。上記の再確保回数テストで退行を検出する

@@ -29,6 +29,11 @@
 
 ライブラリ内の動的確保はすべて、差し替え可能なグローバルアロケータを経由する: `amark_malloc`, `amark_realloc`, `amark_calloc`, `amark_free`。`malloc` などを直接呼ばない（直接呼ぶのは `src/base/memory.c` の既定アロケータだけ）。
 
+- アロケータは `malloc_fn` / `realloc_fn` / `calloc_fn` / `free_fn` の 4 関数で、利用者データを持たない（プロセス全体で 1 つのため）
+- サイズ 0 の要求（`amark_malloc(0)`、要素数 0 の `amark_calloc`）はアロケータを呼ばずに `NULL` を返し、`amark_realloc(p, 0)` は `p` を解放して `NULL` を返す。`amark_free(NULL)` は何もしない。利用者のアロケータ関数にはサイズ 0 と `NULL` のポインタが渡らない
+- したがって `NULL` が確保失敗を意味するのは要求サイズが 0 でないときだけである。**ライブラリのコードは、`NULL` を `AMARK_ERROR_NO_MEMORY` と解釈する箇所でサイズ 0 を要求しない**。個数が 0 になりうる配列・表・スタックは確保の前に個数を確かめ、空は `NULL` と個数 0 で表す（確保は個数が 1 以上のときだけ）
+- 正本は `foundation` spec の設計（Memory）
+
 ### 文字列の所有権
 
 - 借用は `amark_slice_t`（先頭とバイト長。NUL 終端を仮定せず、NUL を含みうる）。参照先の寿命は貸し手が保証する
@@ -39,10 +44,11 @@
 
 エラーコードはライブラリ全体で単一の列挙 `amark_error_t` とする。モジュールや spec ごとの独自体系を作らず、必要なコードは共通の列挙に追加する。
 
-- 失敗しうる公開関数は `amark_error_t` を返し、結果は出力引数で返す。成功は `AMARK_OK`（0）
-- **全コードの唯一の正本は `foundation` spec の設計にあるエラーコード一覧表**（値・所有 spec・文字列・意味）。他の spec の設計は表を参照し、値や文字列を定義し直さない
-- 追加は末尾のみ。公開済みの値の変更・削除・再利用は禁止。新しいコードが必要な spec は一覧表へ行を追記し（「次の空き番号」を見込みで使わない）、`error.h` の列挙、`src/base/error.c` の `switch`、`tests/error_test.c` の確認を同時に更新する
-- 意味が合えば既存のコードを再利用する
+- 失敗しうる公開関数は `amark_error_t` を返し、結果は出力引数で返す。成功は `AMARK_OK`（一覧の先頭なので 0。`if (error)` で判定できる）
+- 全コードは `include/amark/error.h` の X マクロ `AMARK_ERROR_LIST(X)` に `X(名前, 文字列)` として 1 回だけ書き、列挙と `amark_error_string` はそこから生成する。列挙子に明示的な数値を書かない（値は並び順で決まる）。一覧の中に spec ごとの区切りコメントを置かない
+- **各コードの追加した spec・文字列・意味の正本は `foundation` spec の設計にあるエラーコード一覧表**（`AMARK_ERROR_LIST` と同じ並び）。他の spec の設計は表を参照し、文字列や意味を定義し直さない
+- 追加は末尾のみ。並べ替え・削除・再利用は禁止（これで公開済みの値が変わらない）。新しいコードが必要な spec は一覧表の末尾へ行を追記し、`AMARK_ERROR_LIST` の末尾へ `X(...)` を 1 項目追記する。`src/base/error.c` と `tests/error_test.c` は一覧から生成・走査するため変更しない
+- どの spec も、意味が合えばどのコードでも使う。「追加した spec」は使える spec を限定しない
 
 ### 命名
 
@@ -103,8 +109,9 @@ amark_error_t amark_buffer_append(amark_buffer_t *buffer, const char *data, size
 
 ### 機械的に検査する規約と検査しない規約
 
-- 検査する: 整形（`clang-format` 18 の `--dry-run --Werror`、CI の format ジョブ）、ソースヘッダ表記（CTest の `amark.source_headers`）、エラー文字列の定義漏れ（`default` なしの `switch` と `-Wswitch` + 警告のエラー化）、公開ヘッダの単独 include と C++ からの利用（ヘッダ検査とテスト）
+- 検査する: 整形（`clang-format` 18 の `--dry-run --Werror`、CI の format ジョブ）、ソースヘッダ表記（CTest の `amark.source_headers`）、公開ヘッダの単独 include と C++ からの利用（ヘッダ検査とテスト）
 - 検査しない（レビューで確認する）: 演算順序の括弧付け、ステップ間の空行、命名規約の一部（`_init` / `_create` の使い分けなど）、モジュール間の include の向き
+- 検査が不要になるよう構造で防ぐ: エラー文字列の定義漏れ（名前と文字列を `AMARK_ERROR_LIST` の 1 項目で組にするため、文字列のないコードは書けない）
 
 ```c
 /* 全ソースの先頭に置く定型ヘッダ */
@@ -129,7 +136,8 @@ GitHub Actions で 3 OS すべてについて、静的・動的の両方をビ�
 
 - 行列: `{linux-gcc, linux-clang, macos-clang, windows-msvc} × {static, shared}`。警告をエラーとし、テスト後にインストールして `tests/package/` の利用者プロジェクトを `find_package(Amark)` でビルド・実行する
 - 整形検査は `ubuntu-24.04` の `clang-format-18` に版を固定して行う
-- リリース: `project()` の `VERSION` を上げてマージ → `vX.Y.Z` タグを push → タグと `VERSION` の一致確認と全ジョブの成功の後に `gh release create` で公開
+- バージョンの唯一の出所は手書きの `include/amark/version.h`（`AMARK_VERSION_MAJOR` / `MINOR` / `PATCH`）。トップレベルの `CMakeLists.txt` が `project()` の前にそこから読む
+- リリース: `include/amark/version.h` の 3 つの数値を上げてマージ → `vX.Y.Z` タグを push → タグと `version.h` のバージョンの一致確認と全ジョブの成功の後に `gh release create` で公開
 
 ## Development Environment
 
@@ -172,4 +180,4 @@ GitHub Actions で 3 OS すべてについて、静的・動的の両方をビ�
 ---
 _Document standards and patterns, not every dependency_
 
-_updated_at: 2026-11-27 — foundation の設計に合わせて命名例（`void amark_buffer_init`、出力引数の `amark_node_create`）とコード例を修正し、エラーコード一覧表の規則、所有権規約、ビルドオプション、検査する規約としない規約、CI とリリースを追記_
+_updated_at: 2026-11-27 — foundation の設計に合わせて命名例（`void amark_buffer_init`、出力引数の `amark_node_create`）とコード例を修正し、エラーコード一覧表の規則、所有権規約、ビルドオプション、検査する規約としない規約、CI とリリースを追記。foundation の設計レビューに合わせ、アロケータの形とサイズ 0 の規則、`AMARK_ERROR_LIST` によるエラーコードの規則、手書きの `version.h` を出所とするリリース手順に更新_

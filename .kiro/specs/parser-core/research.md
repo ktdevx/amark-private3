@@ -81,7 +81,7 @@
 - **Trade-offs**: 段落の規則を差し替えたい方言はない前提。必要になれば段落の振る舞いを構文として差し替える API を追加する（Revalidation Trigger）
 
 ### Decision: エラーコードは 1 つだけ追加する
-- **Selected Approach**: `AMARK_ERROR_INVALID_STATE`（7。値・文字列は foundation design.md のエラー表が唯一の定義元）。終了後の供給、失敗後の供給、凍結後の方言の変更に使う。上限の超過はエラーにせず、テキストとして扱う（CommonMark の結果を壊さず、悪意ある入力でも文書を返すため）
+- **Selected Approach**: `AMARK_ERROR_INVALID_STATE`（文字列と意味は foundation design.md のエラーコード一覧表が正本。値は `AMARK_ERROR_LIST` の並び順で決まる）。終了後の供給、失敗後の供給、凍結後の方言の変更に使う。上限の超過はエラーにせず、テキストとして扱う（CommonMark の結果を壊さず、悪意ある入力でも文書を返すため）
 - **Alternatives**: `AMARK_ERROR_LIMIT_EXCEEDED` を追加して上限超過で失敗させる — 信頼できない入力で文書が得られなくなるため却下
 
 ### Decision: 開始判定の結果の 4 分類と継続判定の 3 分類

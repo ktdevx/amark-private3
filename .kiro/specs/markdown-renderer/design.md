@@ -230,7 +230,7 @@ stateDiagram-v2
 - foundation と html-renderer の共通 API 規約に従う。必須のポインタ引数が `NULL`、スライスの不変条件違反（`length > 0 && data == NULL`）は `AMARK_ERROR_INVALID_ARGUMENT` で何も変更しない
 - 出力先に書く関数は、失敗時に出力先の内容を呼び出し前に戻す（容量の増加は残ってよい）（12.3）
 - 木は `const amark_node_t *` で受け取り変更しない（1.4）
-- 確保は `amark_malloc` / `amark_realloc` / `amark_free` だけ（12.2）。描画中の作業領域（フレーム、プレフィックス、折り返し用の一時領域）は描画の終わりに成功・失敗とも解放する（12.6）。表はすべて `static const`（13.4）
+- 確保は `amark_malloc` / `amark_realloc` / `amark_free` だけ（12.2）。サイズ 0 は要求しない（foundation の Memory のライブラリ内の規則）: `frames` は番兵のフレームを置く時点で 1 以上の容量を確保し、`prefix_ends` は最初の `push_prefix` で確保する（段が 0 の間は `NULL` と容量 0）。伸長は 2 倍で、容量 0 からは 1 以上の初期容量にする。`prefix` と `scratch` は foundation のバッファ（予約は常に 1 以上）。描画中の作業領域（フレーム、プレフィックス、折り返し用の一時領域）は描画の終わりに成功・失敗とも解放する（12.6）。表はすべて `static const`（13.4）
 
 ### 公開 API
 
@@ -669,7 +669,7 @@ struct amark_markdown_context
 | エラー | 返す操作と条件 |
 |---|---|
 | `AMARK_ERROR_INVALID_ARGUMENT` | 必須引数の `NULL`、種別の `NULL`、設定の未定義値、スライスの不変条件違反、`\n` を含むプレフィックス |
-| `AMARK_ERROR_INVALID_STATE`（値 7。foundation 設計のエラー列挙の表が唯一の定義元で、本仕様はそれを再利用する） | そのノードで積んでいないプレフィックスの pop |
+| `AMARK_ERROR_INVALID_STATE`（foundation 設計のエラーコード一覧表が正本で、本仕様はそれを使う） | そのノードで積んでいないプレフィックスの pop |
 | `AMARK_ERROR_NO_MEMORY` | レンダラ、フック表、フレーム、プレフィックス、一時領域、出力先の伸長 |
 | `AMARK_ERROR_OVERFLOW` | 容量計算のあふれ（`amark_buffer_reserve`、フレームの配列） |
 | フックが返した任意のコード | そのまま呼び出し側へ返す（11.9） |
@@ -717,7 +717,7 @@ struct amark_markdown_context
 - node-tree: `src/tree/node_walk.h`（NodeWalk、レンダラ間の内部契約）。子の省略を要求した非葉ノードについても、同じノードの EXIT で訪問関数が 1 回呼ばれる（node-tree 要件 14.7）。この契約の変更は本仕様の再検証を要する（node-tree の Revalidation Trigger）
 - html-renderer: フックの形（Cross-Spec Contract）、テストで使う `amark_html_render` と `tests/support/test_tree.h`。本仕様は html-renderer の非公開ファイルに依存しない
 - commonmark: `src/base/unicode_class.{h,c}` と生成物 `src/base/unicode_class_data.c`（`amark_unicode_is_punctuation` / `amark_unicode_is_whitespace`）。commonmark が最初から作る
-- foundation: `amark_utf8_decode_previous`（後方復号）と、エラー列挙の表（`AMARK_ERROR_INVALID_STATE` = 7 を含む 0〜7）
+- foundation: `amark_utf8_decode_previous`（後方復号）と、エラーコード一覧表（`AMARK_ERROR_INVALID_STATE` を含む）
 - node-tree: `amark_node_kind_is_leaf`、`amark_node_iter_reset` の意味
 - 新しいエラーコード: なし
 

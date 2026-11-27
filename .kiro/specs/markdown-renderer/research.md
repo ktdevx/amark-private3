@@ -46,7 +46,7 @@
   - parser-core は解析後に `amark_node_normalize` を呼ぶため、隣接する text は結合されている。文字参照で書いた文字も復号後に結合される
   - Unicode の句読点・空白の分類は、commonmark が最初から非公開モジュール `src/base/unicode_class.{h,c}`（生成物 `src/base/unicode_class_data.c`、`amark_unicode_is_punctuation` / `amark_unicode_is_whitespace`）として作る。レンダラはパーサの非公開ヘッダに依存せずに同じ分類を使える
   - foundation は後方復号 `amark_utf8_decode_previous` を公開する。出力の最後の文字の復号にはこれを使う
-  - エラー列挙は 0〜7 が割り当て済み（唯一の定義元は foundation の設計のエラー列挙の表。`INVALID_STATE = 7` を含む）
+  - エラーコードは foundation の `AMARK_ERROR_LIST` と設計のエラーコード一覧表が正本で、`AMARK_ERROR_INVALID_STATE` を含む。本仕様は新しいコードを追加せず、意味の合う既存のコードを使う
 - **Implications**: 型・関数の形は html-renderer に合わせる。NodeWalk は変更せず（省略後の EXIT の訪問は node-tree の規則）、フレームと行の管理は Markdown 側に置く。Unicode 分類は commonmark の `unicode_class` をそのまま使う。新しいエラーコードは作らず、プレフィックスの不正な操作は `AMARK_ERROR_INVALID_STATE` を再利用する
 
 ## Architecture Pattern Evaluation

@@ -6,7 +6,7 @@
 
 **Users**: ライブラリ利用者は簡易 API またはプリセットの方言で CommonMark を解析する。方言を組み立てる利用者は構文の単位を選んで方言を作る（例: 生 HTML なし）。将来の gfm はプリセットに拡張を足して GFM 方言を作り、markdown-renderer は本方言の解析結果で往復テストを行う。
 
-**Impact**: 公開ヘッダ `amark/commonmark.h` と `amark/commonmark_html.h`、`src/commonmark/commonmark_*.c` 群、共有の非公開モジュール `src/base/unicode_class.{h,c}`、生成した表 3 つ、生成器 2 つ、テストとテストデータを追加する。parser-core の契約の緩和 1 件と意味の明確化 2 件（C1〜C3）は parser-core の文書に適用済みで、本仕様はそれに依存する振る舞いを確かめるだけである（API の追加・変更なし）。エラーコード（foundation の表の 0〜7 が唯一の正本）とノード種別は追加しない。
+**Impact**: 公開ヘッダ `amark/commonmark.h` と `amark/commonmark_html.h`、`src/commonmark/commonmark_*.c` 群、共有の非公開モジュール `src/base/unicode_class.{h,c}`、生成した表 3 つ、生成器 2 つ、テストとテストデータを追加する。parser-core の契約の緩和 1 件と意味の明確化 2 件（C1〜C3）は parser-core の文書に適用済みで、本仕様はそれに依存する振る舞いを確かめるだけである（API の追加・変更なし）。エラーコード（foundation の `AMARK_ERROR_LIST` とエラーコード一覧表が正本）とノード種別は追加しない。
 
 ### Goals
 - 0.31.2 の spec.txt の全 652 例で、生 HTML と危険な URL を許可した html-renderer の出力が期待 HTML とバイト単位で一致する
@@ -37,7 +37,7 @@
 - 段落・テキスト・空行・遅延継続の振る舞い、デリミタ処理とブラケット処理の手順、ブロックの入れ子とブラケットの上限（parser-core。本仕様は使うだけ）
 - ノード種別の定義と値の制約（node-tree）。本仕様はノード種別を追加しない
 - HTML の出力規則、エスケープ、URL の符号化、安全性の既定値（html-renderer）。適合テストの不一致がレンダラ起因の場合の修正も html-renderer の作業として扱う
-- エラー列挙（foundation の表のコード 0〜7 が唯一の正本）、アロケータ、バッファ、UTF-8 の前方・後方の復号（foundation）
+- エラー列挙（foundation の `AMARK_ERROR_LIST` とエラーコード一覧表が正本）、アロケータ、バッファ、UTF-8 の前方・後方の復号（foundation）
 - 包括ヘッダ・ビルド・テスト登録のシェルのファイル（`amark.h`、`src/CMakeLists.txt`、`tests/CMakeLists.txt`、`tests/cxx_header_test.cpp`、`amark_test_support` のソース一覧）は foundation が所有し、本仕様は追記だけを行う
 - GFM の構文と方言、Markdown の出力
 
@@ -847,7 +847,7 @@ void test_spec_examples_free(test_spec_examples_item_t *examples, size_t count);
 ### Domain Model
 - **値オブジェクト**: 構文の単位（ビット）、静的な記述子と構文、リンク参照定義（定義テーブルが所有）、生成した表
 - **集約**: 方言（拡張を所有、parser-core）。CommonMark はその中身を供給するだけ
-- **解析ごとの状態**: リストの記録のスタック、コードスパンの位置の記憶、HTML の記憶、展開量。いずれも拡張の解析状態に置き、ノードに持たせない
+- **解析ごとの状態**: リストの記録のスタック、コードスパンの位置の記憶、HTML の記憶、展開量。いずれも拡張の解析状態に置き、ノードに持たせない。サイズ 0 は要求しない（foundation の Memory のライブラリ内の規則）: 解析状態の構造体は固定長、リストの記録のスタックとコードスパンの長さごとの記憶は最初に積む・記録する時点で 1 以上の容量を確保し（空の間は `NULL` と個数 0）、リンク参照定義の値は構造体と 2 つの文字列の NUL を含むため常に 1 バイト以上、ラベルの正規化は foundation のバッファに書く
 - **不変条件**: 木は標準種別だけ。木の文字列は妥当な UTF-8。同じ正規化ラベルの定義は最初のものだけ
 
 ## Error Handling
@@ -899,6 +899,6 @@ parser-core の公開 API の追加・変更は不要である。本仕様が依
 | C3 | 意味の明確化 | インライン対象は 1 つずつ最後まで解析され、対象ごとに `get_block` のノードが異なる | 内容ごとの記憶の初期化（9.1、9.4） |
 
 - parser-core の簡易解析 API は `amark_parser_parse(dialect, data, length, options, &doc)`を使う
-- foundation への依存: `amark_utf8_decode_previous`（foundation の要件 10.8）を CharClass が使う。新しいエラーコード: なし（foundation の表のコード 0〜7 が唯一の正本）
+- foundation への依存: `amark_utf8_decode_previous`（foundation の要件 10.8）を CharClass が使う。新しいエラーコード: なし（foundation の `AMARK_ERROR_LIST` とエラーコード一覧表が正本）
 - markdown-renderer: UnicodeClass（`src/base/unicode_class.h`）と抽出器 `tests/support/test_spec_examples.h` の消費側。これらの変更は markdown-renderer の再検証を伴う
 - 適合テストで不一致がレンダラ側の規則に起因すると判明した場合は、html-renderer の組み込み出力の表の修正として html-renderer の spec に戻す（brief の約束）
