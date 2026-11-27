@@ -16,5 +16,6 @@
 #include <amark/version.h>
 #include <amark/error.h>
 #include <amark/memory.h>
+#include <amark/slice.h>
 
 #endif /* AMARK_AMARK_H */

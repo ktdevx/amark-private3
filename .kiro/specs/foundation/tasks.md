@@ -50,7 +50,7 @@
   - _Requirements: 3.4, 3.6, 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8, 6.9, 11.1, 11.2_
 
 - [ ] 3. 共通ユーティリティ
-- [ ] 3.1 文字列スライスと文字列の所有権規約を実装する
+- [x] 3.1 文字列スライスと文字列の所有権規約を実装する
   - ポインタと長さ、NUL 終端文字列からの生成、全バイト比較、範囲を切り詰める部分範囲、アロケータ経由の NUL 終端付き複製を実装する
   - 借用はスライス、所有はアロケータで確保した NUL 終端付きの長さ付き文字列で `amark_free` により解放する、という所有権規約を公開ヘッダに明記する
   - 包括ヘッダに追加し、スライスのテストを登録する。複製はテスト用アロケータの失敗注入で確保失敗時に何も残らないことを確認する
@@ -113,3 +113,4 @@
 - 1.3: テストの `NAOS_SUITE` / `NAOS_MAIN` の登録は 1 行 1 項目を保つため `/* clang-format off */` / `/* clang-format on */` で囲む。C++ テストでは `NAOS_CHECK*` だけを使う。`naos_add_executable` の `LIBRARIES` は現状 `Amark::amark` だけで、2.2 で `amark_test_support` を作ったら tests/CMakeLists.txt 冒頭の規約コメントと各登録に追加する。ヘッダ単独検査は `include/amark/*.h` の CONFIGURE_DEPENDS glob なので新しい公開ヘッダは自動で検査される
 - 1.4: `amark.source_headers` は include/、src/、tests/ 配下（tests/package/ を含む）の *.c / *.h / *.cpp の先頭 5 行に定型ヘッダを要求する。新しいソースには必ず定型ヘッダを付ける
 - 2.2: 演算順序の括弧付け（`&&` / `||` のオペランドになる比較、比較の左右の算術式）はレビューで差し戻しになる。テストやテスト補助のコードにも適用する。テスト補助は `#include "support/test_<area>.h"` で include し、`naos_add_executable` の `LIBRARIES` は `Amark::amark amark_test_support`。既定アロケータは静的初期化子ではなく実行時に `{malloc, realloc, calloc, free}` を返す（MSVC の dllimport で関数アドレスが一致しないため）
+- 3.1: clang の `-Wstring-plus-int` により、テストで `"xabcx" + 1` のような文字列リテラルへのポインタ演算はエラーになる。配列に置いて `&padded[1]` のように書く。clang の ASan ランタイムはこの環境にないため、サニタイザ検査は gcc で行う
