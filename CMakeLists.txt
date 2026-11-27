@@ -40,3 +40,52 @@ add_subdirectory(src)
 if(PROJECT_IS_TOP_LEVEL AND AMARK_BUILD_TESTS AND BUILD_TESTING)
     add_subdirectory(tests)
 endif()
+
+# インストール規則。AMARK_INSTALL が真のとき（トップレベル構成の既定）だけ生成する。
+# ライブラリ、公開ヘッダ（ソースツリーの include/amark/*.h。version.h を含む）、パッケージ設定、
+# ライセンスを GNUInstallDirs の標準ディレクトリへ置く。
+if(AMARK_INSTALL)
+    include(CMakePackageConfigHelpers)
+
+    set(AMARK_INSTALL_CMAKEDIR "${CMAKE_INSTALL_LIBDIR}/cmake/Amark")
+
+    install(TARGETS amark
+        EXPORT AmarkTargets
+        ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+        LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+        RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+    )
+    install(DIRECTORY "${PROJECT_SOURCE_DIR}/include/amark"
+        DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
+        FILES_MATCHING PATTERN "*.h"
+    )
+    install(EXPORT AmarkTargets
+        FILE AmarkTargets.cmake
+        NAMESPACE Amark::
+        DESTINATION "${AMARK_INSTALL_CMAKEDIR}"
+    )
+
+    configure_package_config_file(
+        "${PROJECT_SOURCE_DIR}/cmake/AmarkConfig.cmake.in"
+        "${PROJECT_BINARY_DIR}/AmarkConfig.cmake"
+        INSTALL_DESTINATION "${AMARK_INSTALL_CMAKEDIR}"
+    )
+    # 1.0 前はマイナーまで一致したときだけ互換、以後はメジャーが一致すれば互換とする
+    if(PROJECT_VERSION_MAJOR EQUAL 0)
+        set(amark_version_compatibility SameMinorVersion)
+    else()
+        set(amark_version_compatibility SameMajorVersion)
+    endif()
+    write_basic_package_version_file(
+        "${PROJECT_BINARY_DIR}/AmarkConfigVersion.cmake"
+        VERSION "${PROJECT_VERSION}"
+        COMPATIBILITY ${amark_version_compatibility}
+    )
+    install(FILES
+        "${PROJECT_BINARY_DIR}/AmarkConfig.cmake"
+        "${PROJECT_BINARY_DIR}/AmarkConfigVersion.cmake"
+        DESTINATION "${AMARK_INSTALL_CMAKEDIR}"
+    )
+
+    install(FILES "${PROJECT_SOURCE_DIR}/LICENSE" DESTINATION "${CMAKE_INSTALL_DOCDIR}")
+endif()
