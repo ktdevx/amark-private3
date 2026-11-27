@@ -46,7 +46,7 @@
 - node-tree の公開ヘッダ: `amark/node_kind.h`、`amark/node.h`、`amark/node_iter.h`（`src/node_internal.h` は include しない）
 - 非公開: `src/render_core.h`（html-renderer 所有のレンダラ間の内部契約）、`src/unicode_class.h`（commonmark 所有。`amark_unicode_is_punctuation` / `amark_unicode_is_whitespace`）
 - C 標準ライブラリ: `<stddef.h>`、`<stdint.h>`、`<stdbool.h>`、`<string.h>`
-- テストだけ: `amark/commonmark.h`、`amark/html.h`、`tests/support/spec_examples.h`、`tests/support/test_tree.h`、`tests/support/test_allocator.h`、Naos
+- テストだけ: `amark/commonmark.h`、`amark/commonmark_html.h`、`amark/html.h`、`tests/support/test_spec_examples.h`、`tests/support/test_tree.h`、`tests/support/test_allocator.h`、Naos
 - 依存方向（左ほど下位。右から左への include のみ）: `foundation, node-tree, render_core, unicode_class → markdown_internal.h → markdown_writer → markdown_escape → markdown_emphasis → markdown_block, markdown_inline → markdown_context → markdown_renderer`。`amark/markdown.h` は foundation と node-tree の公開ヘッダだけを include する。ライブラリ本体の Markdown のソースは html-renderer・parser-core・commonmark のヘッダを include しない
 
 ### Revalidation Triggers
@@ -206,7 +206,7 @@ stateDiagram-v2
 | 11.10 | 利用者の義務 | MarkdownPublicHeader | ヘッダのコメント | — |
 | 12.1–12.6 | エラーと資源 | 全コンポーネント | 共通 API 規約、巻き戻し、作業領域の解放 | 1 イベント |
 | 13.1–13.4 | 深い木、線形、スレッド、グローバル状態なし | RenderCore, MarkdownRenderer, MarkdownWriter, MarkdownEmphasis | 反復走査、フレーム、償却定数の判定、決定的な計数による線形性の検査 | — |
-| 14.1–14.7 | 往復・冪等性テスト | RoundTripTest, 単体テスト群 | `spec_examples_load`、除外一覧 | — |
+| 14.1–14.7 | 往復・冪等性テスト | RoundTripTest, 単体テスト群 | `test_spec_examples_load`、除外一覧 | — |
 
 ## Components and Interfaces
 
@@ -689,7 +689,7 @@ struct amark_markdown_context
 ### Integration Tests
 - `markdown_roundtrip_test.c`（RoundTripTest、Batch）:
   - Trigger: `ctest` の `amark_markdown_roundtrip_test.*`
-  - Input: `spec_examples_load(AMARK_COMMONMARK_SPEC_PATH)` の全 652 例
+  - Input: `test_spec_examples_load(AMARK_COMMONMARK_SPEC_PATH)` の全 652 例
   - 設定 4 組: 既定 / 別記法 A（`*`、`)`、`_`、`_`、`~`、`*`、Setext、SPACES、オートリンクなし）/ 別記法 B（`+`、`_` の区切り線）/ 折り返し（既定 + `wrap_width = 20`）
   - 各例: `amark_commonmark_parse` → `amark_markdown_render` → `amark_commonmark_parse` → 両方の木を `allow_raw_html = allow_dangerous_urls = true`（折り返しの組では `softbreak = AMARK_HTML_SOFTBREAK_SPACE`）で `amark_html_render` してバイト比較（9.1、9.2、14.1、14.2）。再パースした木を同じ設定で再びレンダリングし 1 回目とバイト比較（9.3、14.3）
   - 失敗は例の番号・節・入力・出力した Markdown・比較した 2 つの出力を表示し、件数が 1 以上ならテストを失敗させる（14.4）
