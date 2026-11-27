@@ -2,11 +2,11 @@
 
 ## Overview
 
-**Purpose**: Amark の文書木を提供する。opaque なノード `amark_node_t` が親・兄弟・子へのリンクと自分の値を持ち（cmark 方式）、CommonMark に必要な 18 の標準ノード種別、拡張ノード種別の登録場所（レジストリ）、親子関係を検証する編集 API、enter / exit 型のイテレータ、テキストノードの正規化を定める。
+**Purpose**: Amark の文書木を提供する。opaque なノード `amark_node_t` が親・兄弟・子へのリンクと自分の値を持ち（cmark 方式）、CommonMark に必要な 18 の標準ノード種別、拡張ノード種別の登録場所（レジストリ）、親子関係を検証する編集 API、enter / exit 型のイテレータ、テキストノードの正規化を定める。加えて、両レンダラが共有する非公開の振り分け走査（種別ハンドルをキーとする処理の表と走査の駆動部）を所有する。
 
-**Users**: ライブラリ利用者は API だけで木を組み立て・編集する。parser-core / commonmark は木を出力先として使い、拡張のノード種別をレジストリへ登録する。html-renderer / markdown-renderer はイテレータで木を走査し、種別ごとに出力を選ぶ。
+**Users**: ライブラリ利用者は API だけで木を組み立て・編集する。parser-core / commonmark は木を出力先として使い、拡張のノード種別をレジストリへ登録する。html-renderer / markdown-renderer は非公開の振り分け走査 `src/tree/node_walk.h`（内部でイテレータを使う）で木を走査し、種別ごとに出力を選ぶ。
 
-**Impact**: foundation の上に `node_kind`、`node`、`node_iter` の 3 つの公開ヘッダと対応するソース・テストを追加する。foundation のエラー列挙へ 2 つのコードを末尾追加し、包括ヘッダ、ビルド・テストの登録、steering の例を更新する。
+**Impact**: foundation の上に `node_kind`、`node`、`node_iter` の 3 つの公開ヘッダと対応するソース・テスト、および非公開モジュール `src/tree/node_walk.{h,c}` とそのテストを追加する。foundation のエラー列挙へ 2 つのコードを末尾追加し、包括ヘッダ、ビルド・テストの登録、steering の例を更新する。
 
 ### Goals
 - パーサなしに、標準種別と拡張種別を混ぜた任意の妥当な木を API だけで組み立て・編集・破棄できる
@@ -32,11 +32,13 @@
 - 親子関係の判定（`amark_node_kind_can_contain`）と、編集操作（追加・挿入・取り外し・置換・破棄）の検証
 - 参照（親・子・兄弟）、イテレータ `amark_node_iter_t` と走査中の編集の安全性規則
 - 正規化（隣接 text の結合と空 text の除去）
+- 非公開の振り分け走査 `src/tree/node_walk.{h,c}`（NodeWalk）: 種別ハンドルをキーとする処理の表と、表を引きながらイテレータを回す反復の駆動部（子の省略と、省略したノードの EXIT の訪問を含む）。html-renderer と markdown-renderer が共有する内部契約であり、公開しない（要件 14）
 - foundation のエラー列挙へ追加する `AMARK_ERROR_INVALID_CHILD`、`AMARK_ERROR_ALREADY_EXISTS` を node-tree で返す条件と、実装時の追記（値・文字列・意味の定義元は foundation design.md のエラー表）
 
 ### Out of Boundary
 - 構文の解析、解析中の一時状態、拡張（構文＋ノード種別）の単位・方言の定義（parser-core）。本仕様はレジストリを提供するだけで、どの拡張がいつ登録するかは決めない
-- レンダラのフック機構と出力（html-renderer / markdown-renderer）
+- レンダラの公開のフック機構（フックの型、コンテキストとその操作、登録の API）と出力、Markdown の行の書き出し（プレフィックスのスタック、折り返し、改行の保証）（html-renderer / markdown-renderer）。NodeWalk はレンダラ固有の処理を持たない
+- NodeWalk の公開、部分木の絞り込みなどの機能追加、共有の文字列ライター（実際の第 2 の利用者が現れるまで行わない。`research.md`）
 - CommonMark の構文上の制約のうち木の構造の妥当性に関わらないもの（リンクの入れ子禁止、見出しの中の改行など）。パーサとレンダラが扱う
 - foundation の既存 API（アロケータ、エラー文字列化の仕組み、スライス、UTF-8、バッファ）の変更。本仕様は使うだけで、変更するのはエラー列挙への末尾追加のみ
 - GFM 用の種別、標準種別への付随データ
@@ -44,8 +46,8 @@
 ### Allowed Dependencies
 - foundation の公開ヘッダ: `amark/export.h`、`amark/error.h`、`amark/memory.h`、`amark/slice.h`、`amark/utf8.h`（`amark/buffer.h` は使わない）
 - C 標準ライブラリ: `<stddef.h>`、`<stdint.h>`、`<stdbool.h>`、`<string.h>`
-- テスト: Naos、`tests/support/` の差し替えアロケータ（foundation 提供）
-- 依存方向（左ほど下位。右から左への include のみ許可）: `foundation → node_kind → node → node_iter`。`src/tree/node_internal.h` は node-tree の `.c` だけが include し、公開ヘッダからは include しない。node-tree は parser-core やレンダラのヘッダを include しない
+- テスト: Naos、`tests/support/` の差し替えアロケータ（foundation 提供）。`node_walk_test` だけは非公開の `src/tree/node_walk.c` をテスト実行ファイルに直接コンパイルする（NodeWalk の Validation）
+- 依存方向（左ほど下位。右から左への include のみ許可）: `foundation → node_kind → node → node_iter → node_walk`。`src/tree/node_internal.h` は node-tree の `.c` だけが include し、公開ヘッダからは include しない。`node_walk.{h,c}` は公開ヘッダ（`amark/error.h`、`amark/memory.h`、`amark/node_kind.h`、`amark/node_iter.h`）だけを include し、`node_internal.h` を include しない。公開ヘッダは `node_walk.h` を include しない。node-tree は parser-core やレンダラのヘッダを include しない
 
 ### Revalidation Triggers
 - `amark_node_type_t` の既存値の変更・削除（禁止。標準種別の追加は 19〜254 に末尾追加）、`AMARK_NODE_EXTENSION` の値の変更
@@ -55,6 +57,7 @@
 - 文字列 getter の契約（値を持つ種別で `data` 非 `NULL`・NUL 終端、持たない種別で `{NULL, 0}`）の変更
 - イテレータのイベント列（葉は ENTER のみ）、公開の葉の判定 `amark_node_kind_is_leaf` の定義（html-renderer が使う）、走査中の編集の安全性規則の変更
 - 追加エラーコードの値・意味の変更
+- `src/tree/node_walk.h` の内部契約（型、関数、走査の手順、子の省略後の EXIT の訪問、表の設定の規則）の変更。どのような変更でも html-renderer と markdown-renderer の再検証を要する
 
 ## Architecture
 
@@ -70,6 +73,7 @@ graph TB
     KindSrc[node_kind and node_registry sources]
     NodeSrc[node node_value node_edit node_normalize sources]
     IterSrc[node_iter source]
+    NodeWalk[node_walk private dispatch walk]
     NodeKind --> Foundation
     Node --> NodeKind
     NodeIter --> Node
@@ -77,13 +81,15 @@ graph TB
     KindSrc --> Internal
     NodeSrc --> Internal
     IterSrc --> Internal
+    NodeWalk --> NodeIter
     ParserCore[parser-core] --> NodeIter
-    Renderers[html and markdown renderers] --> NodeIter
+    Renderers[html and markdown renderers] --> NodeWalk
+    Renderers --> NodeIter
 ```
 
 **Architecture Integration**:
 - Selected pattern: foundation と同じ層状モジュール構成。公開ヘッダは `node_kind.h → node.h → node_iter.h` の順に積み、各 `.c` は非公開ヘッダ `node_internal.h` で構造体の定義を共有する
-- Domain/feature boundaries: 種別とレジストリ（`node_kind.c`、`node_registry.c`）、ノードの寿命と参照（`node.c`）、値（`node_value.c`）、編集（`node_edit.c`）、正規化（`node_normalize.c`）、走査（`node_iter.c`）を別ファイルにし、構造体定義の確定後は並行に実装できるようにする
+- Domain/feature boundaries: 種別とレジストリ（`node_kind.c`、`node_registry.c`）、ノードの寿命と参照（`node.c`）、値（`node_value.c`）、編集（`node_edit.c`）、正規化（`node_normalize.c`）、走査（`node_iter.c`）、レンダラ向けの振り分け走査（`node_walk.c`。公開 API だけの上に置く）を別ファイルにし、構造体定義の確定後は並行に実装できるようにする
 - Existing patterns preserved: foundation の共通 API 規約（エラー戻り値＋出力引数、`NULL` 引数で `AMARK_ERROR_INVALID_ARGUMENT`、失敗時の強い保証、`void` の後片付けは `NULL` で何もしない）、命名（`amark_<module>_<verb>`、`_t`、`_create` / `_destroy`、`_init`）、ヘッダ規約（include ガード、`AMARK_BEGIN_DECLS`、`AMARK_API`）
 - New components rationale: 各コンポーネントは要件群に 1 対 1 で対応する（Components 表を参照）
 - Steering compliance: 可変のグローバル状態を追加しない（標準種別の表は `static const`）。確保はすべて `amark_malloc` 系。テスト専用コードを本体に置かない。木の深さに比例する再帰を使わない
@@ -113,7 +119,9 @@ src/
     ├── node_value.c         # 見出し・リスト・文字列値のアクセサ、付随データの設定と取得、所有文字列の置き換え
     ├── node_edit.c          # 追加・挿入・置換、循環と親子規則の検証、移動（取り外しは node.c を使う）
     ├── node_normalize.c     # 反復走査による隣接 text の結合と空 text の除去
-    └── node_iter.c          # イテレータの初期化、次イベントの遅延計算、位置の再設定
+    ├── node_iter.c          # イテレータの初期化、次イベントの遅延計算、位置の再設定
+    ├── node_walk.h          # 非公開（レンダラ間の内部契約）: 処理の表と走査駆動部の型・関数。AMARK_API を付けず export しない
+    └── node_walk.c          # 表の init/deinit/set/find、走査駆動部（イテレータ、子の省略と省略後の EXIT の訪問。葉の判定は amark_node_kind_is_leaf）。公開ヘッダだけを include する
 tests/
 ├── node_kind_test.c       # 標準種別の識別値・名前・分類・内容モデル、受け入れ判定の全組み合わせ
 ├── node_registry_test.c   # 登録・検索・名前規則・重複・記述子の矛盾、失敗注入、ハンドルの安定性
@@ -121,7 +129,8 @@ tests/
 ├── node_value_test.c      # 各種別の値の既定値・読み書き・範囲・UTF-8・種別不一致、付随データと後片付け
 ├── node_edit_test.c       # 各編集操作、移動、検証エラーと状態不変、循環、深い木の構築
 ├── node_normalize_test.c  # 結合・空除去・冪等性・他ノード不変・失敗注入での基本保証・深い木
-└── node_iter_test.c       # イベント列、部分木限定、終了の継続、位置の再設定、走査中の編集
+├── node_iter_test.c       # イベント列、部分木限定、終了の継続、位置の再設定、走査中の編集
+└── node_walk_test.c       # 表の設定・置き換え・解除・検索、走査のイベント列、子の省略後の EXIT、エラーの中止、確保の回数（src/tree/node_walk.c を直接コンパイル）
 ```
 
 ### Modified Files
@@ -130,8 +139,8 @@ tests/
 - `src/base/error.c` — 追加コードの文字列を `switch` に追加
 - `tests/error_test.c` — 追加コードの値と文字列の確認を追加
 - `include/amark/amark.h` — `node_kind.h`、`node.h`、`node_iter.h` の include を node-tree のブロックとして追記
-- `src/CMakeLists.txt` — `tree/node_kind.c`、`tree/node_registry.c`、`tree/node.c`、`tree/node_value.c`、`tree/node_edit.c`、`tree/node_normalize.c`、`tree/node_iter.c` をソース一覧に追記
-- `tests/CMakeLists.txt` — 7 つのテスト実行ファイル `amark_node_kind_test` ほかを `naos_add_executable` で追記登録
+- `src/CMakeLists.txt` — `tree/node_kind.c`、`tree/node_registry.c`、`tree/node.c`、`tree/node_value.c`、`tree/node_edit.c`、`tree/node_normalize.c`、`tree/node_iter.c`、`tree/node_walk.c` をソース一覧に追記
+- `tests/CMakeLists.txt` — 8 つのテスト実行ファイル `amark_node_kind_test` ほかを `naos_add_executable` で追記登録。`amark_node_walk_test` だけは `SOURCES node_walk_test.c ${PROJECT_SOURCE_DIR}/src/tree/node_walk.c` とし、`target_include_directories(amark_node_walk_test PRIVATE ${PROJECT_SOURCE_DIR}/src)` を加える（NodeWalk の Validation）
 - `tests/cxx_header_test.cpp` — C++ から木の生成・追加・走査・破棄を呼ぶ確認を追記
 - 上の 4 つ（と `error.h`・`src/base/error.c`・`tests/error_test.c`）は foundation が所有する追記専用の共有ファイルである。node-tree は自分のブロックを末尾に追記するだけで、既存の行を変更・並べ替えしない
 - `.kiro/steering/tech.md` — 命名の例 `amark_node_t *amark_node_create(amark_node_type_t type);` を確定した `amark_error_t amark_node_create(amark_node_type_t type, amark_node_t **node);` に直す
@@ -187,6 +196,28 @@ stateDiagram-v2
 - 次の位置は `amark_node_iter_next` の呼び出し時に、現在ノードの `first_child`・`next`・`parent` から計算する。過去に報告した位置や先の位置を保持しないため、現在ノードとその祖先以外の編集は走査に影響しない（10.2）
 - 現在ノードが起点でないのに親を失っていれば（取り外された）、終了を報告する（10.5 の安全でない操作の定義済みの結果）
 
+### 振り分け走査の 1 イベント（NodeWalk）
+
+```mermaid
+graph TB
+    Next[iterator next event] --> Done{done}
+    Done -->|yes| Ok[AMARK_OK]
+    Done -->|no| Find[set node and event, clear skip, find entry by kind handle]
+    Find --> Visit[call visit with context walk entry]
+    Visit --> Err{error}
+    Err -->|yes| Return[return error]
+    Err -->|no| Skip{enter and skip requested and not leaf}
+    Skip -->|yes| Reset[reset iterator to node exit]
+    Skip -->|no| Next
+    Reset --> VisitExit[set event EXIT and visit same node exit]
+    VisitExit --> ExitErr{error}
+    ExitErr -->|yes| Return
+    ExitErr -->|no| Next
+```
+
+- `amark_node_iter_reset(iter, node, EXIT)` は「次の `next` はその位置の続きを報告する」（9.5）ため、リセットだけでは同じノードの EXIT が報告されない。駆動部はリセットの直後に同じノードの EXIT で訪問関数を自ら呼ぶ。続く `next` は EXIT の続きを報告するため、EXIT は二重に訪問されない（14.7）
+- 出力の巻き戻しなど、エラー時の後始末は呼び出し側（各レンダラ）が行う
+
 ## Requirements Traceability
 
 | Requirement | Summary | Components | Interfaces | Flows |
@@ -216,6 +247,9 @@ stateDiagram-v2
 | 13.1 | 深い木で再帰なし | NodeCore, NodeIter, NodeNormalize | 反復アルゴリズム | 次イベント |
 | 13.2 | 挿入の計算量 | NodeEdit | 循環検査の省略規則 | 編集の検証 |
 | 13.3, 13.4 | スレッドの規則 | NodeRegistry, NodeCore | `node_kind.h` と `node.h` のコメント | — |
+| 14.1, 14.2, 14.3, 14.4 | 処理の表の設定・置き換え・解除・検索とエラー | NodeWalk | `amark_node_walk_table_*` | — |
+| 14.5, 14.6, 14.7, 14.8 | 反復の振り分け走査、ENTER / EXIT、子の省略後の EXIT、エラーの中止 | NodeWalk | `amark_node_walk_run`、`amark_node_walk_skip_children` | 振り分け走査の 1 イベント |
+| 14.9, 14.10 | 確保は表の伸長だけ、非公開 | NodeWalk, NodeIntegration | `src/tree/node_walk.h`（`AMARK_API` なし） | — |
 
 ## Components and Interfaces
 
@@ -229,8 +263,9 @@ stateDiagram-v2
 | NodeEdit | ノード | 追加・挿入・置換と検証 | 6.7, 6.8, 7.1–7.3, 7.6–7.8, 8.3, 13.2 | NodeKind (P0), NodeCore (P0) | Service |
 | NodeNormalize | ノード | 隣接 text の結合と空 text の除去 | 11.1–11.5, 13.1 | NodeCore (P0), NodeValue (P1) | Service |
 | NodeIter | 走査 | enter / exit イテレータと走査中の編集規則 | 9.1–9.6, 10.1–10.5, 13.1 | NodeCore (P0) | Service, State |
+| NodeWalk | 走査（非公開） | 種別ハンドルをキーとする処理の表と振り分け走査の駆動部（レンダラ間の内部契約） | 14.1–14.10 | NodeIter (P0), NodeKind (P0), Memory (P0) | Service, State |
 | ErrorCodeAddition | foundation への追加 | 2 つのエラーコード | 12.1 | foundation Error (P0) | Service |
-| NodeIntegration | ビルド・テスト登録 | 包括ヘッダ、ビルド、テスト登録、C++ 検査、steering の例 | 12.1, 12.2 | foundation BuildSystem, TestHarness (P0) | Batch |
+| NodeIntegration | ビルド・テスト登録 | 包括ヘッダ、ビルド、テスト登録、C++ 検査、steering の例 | 12.1, 12.2, 14.10 | foundation BuildSystem, TestHarness (P0) | Batch |
 
 ### 共通の API 規約（本仕様の全公開関数）
 - foundation の共通 API 規約に従う。`amark_error_t` を返す関数は、必須のポインタ引数が `NULL` なら `AMARK_ERROR_INVALID_ARGUMENT` を返し何も変更しない（12.4）。失敗時は呼び出し前の状態を保つ（12.3。正規化を除く）
@@ -299,7 +334,7 @@ void amark_node_release_values(amark_node_t *node);                   /* node.c:
 amark_error_t amark_node_string_set(amark_node_string_t *string, amark_slice_t value); /* node_value.c: 検査・複製・置換 */
 amark_slice_t amark_node_string_get(const amark_node_string_t *string);                /* node_value.c: 未設定なら "" */
 ```
-- 依存の向き: `node.c` は `node_kind.c` だけに、`node_value.c` と `node_edit.c` は `node.c` と `node_kind.c` に、`node_normalize.c` は `node.c`・`node_value.c` に、`node_iter.c` は `node.c` と `node_kind.c` に依存する。`node.c` は `node_value.c` と `node_edit.c` に依存しない（実装順: node_kind → node_registry → node → node_value / node_edit → node_iter / node_normalize）
+- 依存の向き: `node.c` は `node_kind.c` だけに、`node_value.c` と `node_edit.c` は `node.c` と `node_kind.c` に、`node_normalize.c` は `node.c`・`node_value.c` に、`node_iter.c` は `node.c` と `node_kind.c` に依存する。`node.c` は `node_value.c` と `node_edit.c` に依存しない（実装順: node_kind → node_registry → node → node_value / node_edit → node_iter / node_normalize → node_walk。`node_walk.c` は公開 API だけを使い、この非公開ヘッダを include しない）
 - Invariants: `first_child == NULL` と `last_child == NULL` は同値。兄弟リストは双方向で、`first_child->previous == NULL`、`last_child->next == NULL`、各子の `parent` は親を指す。根は `parent`、`previous`、`next` がすべて `NULL`
 - `amark_node_string_set`: `value.length > 0 && value.data == NULL` は `AMARK_ERROR_INVALID_ARGUMENT`、`value.length == SIZE_MAX` は `AMARK_ERROR_OVERFLOW`、`amark_utf8_validate` が失敗なら `AMARK_ERROR_INVALID_UTF8`、空なら旧値を解放して未設定に戻す、それ以外は `amark_slice_dup` で複製（失敗で `AMARK_ERROR_NO_MEMORY`）してから旧値を解放する。いずれの失敗でも旧値は残る
 
@@ -402,7 +437,7 @@ AMARK_API bool amark_node_kind_can_contain(const amark_node_kind_t *parent, cons
 - `amark_node_kind_get_standard(type)`: 1〜18 なら標準種別のハンドル、それ以外（`NONE`、`EXTENSION`、未定義値）は `NULL`（2.6）
 - `amark_node_kind_get_type`: 標準種別はその値、拡張種別は `AMARK_NODE_EXTENSION`、`NULL` は `AMARK_NODE_NONE`（2.4）
 - `amark_node_kind_get_name`: 名前を借用スライスで返す（`data[length] == '\0'`）。寿命は種別と同じ。`NULL` は `{NULL, 0}`（2.5）
-- `amark_node_kind_is_leaf(kind)`: `content == AMARK_NODE_CONTENT_NONE`（子を取らない種別）なら真、それ以外は偽。`NULL` は偽（2.7）。標準・拡張で同じ方法で答える。イテレータが ENTER だけを報告する種別（9.1）はちょうどこの判定が真の種別であり、NodeIter とレンダラ（html-renderer の render_core など）は同じ関数を使って「葉か」を判定する
+- `amark_node_kind_is_leaf(kind)`: `content == AMARK_NODE_CONTENT_NONE`（子を取らない種別）なら真、それ以外は偽。`NULL` は偽（2.7）。標準・拡張で同じ方法で答える。イテレータが ENTER だけを報告する種別（9.1）はちょうどこの判定が真の種別であり、NodeIter と NodeWalk（レンダラの走査）は同じ関数を使って「葉か」を判定する
 - `amark_node_kind_can_contain(parent, child)` の判定（6.1〜6.6）:
   1. どちらかが `NULL`、または `child` が `root_only` なら偽
   2. `parent->content` が `NONE` なら偽
@@ -742,6 +777,89 @@ AMARK_API amark_error_t amark_node_iter_reset(amark_node_iter_t *iter, amark_nod
 - Integration: html-renderer の画像の alt テキストは、画像ノードを起点にした別のイテレータで子を平坦化し、外側のイテレータは `reset(iter, image, EXIT)` で子を飛ばせる
 - Validation: `node_iter_test.c` で代表的な文書木のイベント列の完全一致、葉は ENTER のみ、空の段落の ENTER・EXIT、起点が葉、部分木外の兄弟を報告しないこと、`DONE` の継続、`reset` の正常系とエラー（部分木外、葉に EXIT）、走査中の各安全操作の結果、現在ノード取り外し後の `DONE` と `reset` による再開、深さ 10 万段の走査、計測アロケータで走査中の確保回数が 0 であることを確認する
 
+### 振り分け走査（非公開）
+
+#### NodeWalk
+
+| Field | Detail |
+|-------|--------|
+| Intent | 種別ハンドルをキーとする処理の表と、表を引きながらイテレータを回す反復の駆動部。html-renderer と markdown-renderer が共有する |
+| Requirements | 14.1, 14.2, 14.3, 14.4, 14.5, 14.6, 14.7, 14.8, 14.9, 14.10 |
+
+**Responsibilities & Constraints**
+- レンダラ固有の知識（HTML の表、Markdown のプレフィックス・折り返し、出力の巻き戻し）を持たない。処理（フック）の関数はレンダラごとに型が異なるため、汎用の関数ポインタ型で保持し、取り出した側が元の型へ戻す（C99 で往復が保証される関数ポインタ間の変換）
+- 宣言に `AMARK_API` を付けず、動的ライブラリから export しない。公開ヘッダから include しない（14.10）
+- 公開 API（`amark_node_iter_*`、`amark_node_get_kind`、`amark_node_kind_is_leaf`、`amark_malloc` 系）だけの上に作り、`node_internal.h` を include しない。葉の判定は `amark_node_kind_is_leaf` を使い、独自の判定関数を持たない
+- 機能は現在の 2 つのレンダラが必要とするものに限る（部分木の絞り込み、公開 API、文字列の書き出しは持たない。`research.md`）
+
+**Contracts**: Service [x] / State [x]
+
+##### Service Interface
+```c
+/* src/tree/node_walk.h（非公開） */
+#include <amark/error.h>
+#include <amark/node_iter.h>
+
+typedef void (*amark_node_walk_hook_fn_t)(void);  /* 保持用の汎用型。呼び出し側がレンダラの型へ戻す */
+
+typedef struct amark_node_walk_hook
+{
+    const amark_node_kind_t *kind;
+    amark_node_walk_hook_fn_t fn;
+    void *user_data;
+} amark_node_walk_hook_t;
+
+typedef struct amark_node_walk_table
+{
+    amark_node_walk_hook_t *items;
+    size_t count;
+    size_t capacity;
+} amark_node_walk_table_t;
+
+void amark_node_walk_table_init(amark_node_walk_table_t *table);
+void amark_node_walk_table_deinit(amark_node_walk_table_t *table);
+amark_error_t amark_node_walk_table_set(amark_node_walk_table_t *table, const amark_node_kind_t *kind,
+                                        amark_node_walk_hook_fn_t fn, void *user_data);
+const amark_node_walk_hook_t *amark_node_walk_table_find(const amark_node_walk_table_t *table,
+                                                         const amark_node_kind_t *kind);
+
+typedef struct amark_node_walk
+{
+    amark_node_iter_t iter;
+    const amark_node_t *node;        /* 現在のノード */
+    amark_node_iter_event_t event;   /* 現在のイベント（ENTER / EXIT） */
+    bool skip_children;              /* 現在のイベントで子の省略が要求されたか */
+} amark_node_walk_t;
+
+typedef amark_error_t (*amark_node_walk_visit_fn_t)(void *context, amark_node_walk_t *walk,
+                                                    const amark_node_walk_hook_t *hook);
+
+amark_error_t amark_node_walk_run(amark_node_walk_t *walk, const amark_node_t *root,
+                                  const amark_node_walk_table_t *table, amark_node_walk_visit_fn_t visit,
+                                  void *context);
+void amark_node_walk_skip_children(amark_node_walk_t *walk);
+```
+- `amark_node_walk_table_set(table, kind, fn, user_data)`:
+  - `table == NULL` または `kind == NULL`: `AMARK_ERROR_INVALID_ARGUMENT`（14.4）
+  - 既存の項目あり・`fn != NULL`: その項目の `fn` と `user_data` を置き換える。確保なし（14.1）
+  - 既存の項目あり・`fn == NULL`: 項目を取り除く（末尾と入れ替え）（14.2）
+  - 既存の項目なし・`fn == NULL`: 何もせず `AMARK_OK`（14.2）
+  - 既存の項目なし・`fn != NULL`: 必要なら容量を 2 倍（初期 4）に伸長して末尾に追加。容量計算のあふれは `AMARK_ERROR_OVERFLOW`、確保失敗は `AMARK_ERROR_NO_MEMORY` で表を変更しない（14.1、14.4）
+- `amark_node_walk_table_find`: `kind` とポインタが等しい項目を返す。なければ、`table` または `kind` が `NULL`、または `count == 0` なら `NULL`（14.3）。計算量は登録数 h に比例
+- `amark_node_walk_table_init` / `_deinit`: 空の表にする / `items` を解放して空に戻す（14.9）。`NULL` は何もしない
+- `amark_node_walk_run(walk, root, table, visit, context)`（`walk`、`root`、`table`、`visit` が `NULL` なら `AMARK_ERROR_INVALID_ARGUMENT`。引数の検査は各レンダラの入口でも行う）:
+  1. `amark_node_iter_init(&walk->iter, (amark_node_t *)root)`（const を外すのはここだけ。イテレータは木を変更しない、14.5）
+  2. `amark_node_iter_next` が `DONE` を返すまで: `walk->node`・`walk->event` を設定し `skip_children = false`、`hook = find(table, kind)`、`visit(context, walk, hook)` を呼ぶ。非 `AMARK_OK` ならその値を直ちに返す（14.5、14.8）
+  3. `event == ENTER` かつ `skip_children` かつ `!amark_node_kind_is_leaf(kind)` なら、`amark_node_iter_reset(&walk->iter, node, EXIT)` の後、`walk->event = EXIT`、`walk->skip_children = false` として同じノードについて `visit(context, walk, hook)` を呼ぶ（`hook` は ENTER で引いたものと同じ項目）。非 `AMARK_OK` ならその値を直ちに返す。続く `amark_node_iter_next` は EXIT の続きを報告する（14.7）
+  4. 終われば `AMARK_OK`
+- `amark_node_walk_skip_children(walk)`: `walk->skip_children = true`。`NULL` は何もしない。効果は手順 3 の条件（ENTER かつ葉でない）を満たすときだけ（14.7）
+- イベント列は NodeIter のとおりで、葉は ENTER のみ（14.6）。子を省略したノードでも ENTER と EXIT はちょうど 1 回ずつ訪問され、子孫は訪問されない（14.7）。反復で動き深さに比例するスタックを使わない。走査の実行は確保しない（14.5、14.9）
+
+**Implementation Notes**
+- Integration: html-renderer と markdown-renderer は `tree/node_walk.h` を include し、同じ表と駆動部を使う（複製しない）。各レンダラは自分のフック型の関数を `amark_node_walk_hook_fn_t` に変換して登録し、訪問関数の中で元の型へ戻して呼ぶ。出力の巻き戻しと、子を取りうるノードごとの状態（Markdown のフレームなど）は訪問関数の側が持つ
+- Validation: NodeWalk は非公開で、node-tree の段階では公開 API から到達できない（使う側の html-renderer は後に実装される）。foundation の TestHarness は「テストは公開 API だけを使い `src/` を include しない」を原則とするが、その例外として `tests/node_walk_test.c` は `src/tree/node_walk.c` をテスト実行ファイルに直接コンパイルし、`tree/node_walk.h` を include して振る舞いを検証する。`node_walk.c` は公開 API だけを呼ぶため、静的・動的のどちらの構成でも公開シンボルだけでリンクでき、ライブラリ本体にはテスト専用のコードも export も加えない（foundation 要件 3.4）。木はテスト内で node-tree の公開 API で直接組む（`tests/support/test_tree` は html-renderer が後で作るため使わない）。加えて html-renderer の `html_hook_test.c` と markdown-renderer の `markdown_hook_test.c` が、各レンダラの公開 API を通して同じ契約（特に子の省略後の EXIT）を確認する
+- Risks: 走査中に木を変更する処理は走査を壊す（各レンダラが利用者の義務として文書化する）
+
 ### foundation への追加・統合
 
 #### ErrorCodeAddition
@@ -758,12 +876,12 @@ AMARK_API amark_error_t amark_node_iter_reset(amark_node_iter_t *iter, amark_nod
 | Field | Detail |
 |-------|--------|
 | Intent | 包括ヘッダ、ビルド、テスト登録、C++ 検査、steering の例の更新 |
-| Requirements | 12.1, 12.2 |
+| Requirements | 12.1, 12.2, 14.10 |
 
 **Contracts**: Batch [x]
 - Trigger: `cmake -S . -B build && cmake --build build && ctest --test-dir build`（静的・動的の両方）
 - Input: Modified Files の一覧
-- Output: 7 つのテスト実行ファイル（`amark_node_kind_test`、`amark_node_registry_test`、`amark_node_test`、`amark_node_value_test`、`amark_node_edit_test`、`amark_node_normalize_test`、`amark_node_iter_test`）が CTest に登録され成功する。foundation のヘッダ単独 include 検査が 3 つの新しい公開ヘッダにも自動で適用される。C++ 検査が木の生成・追加・走査・破棄を呼んでリンクできる。動的ライブラリの公開シンボルは本設計の `AMARK_API` 関数だけで、`node_internal.h` の内部関数は公開されない
+- Output: 8 つのテスト実行ファイル（`amark_node_kind_test`、`amark_node_registry_test`、`amark_node_test`、`amark_node_value_test`、`amark_node_edit_test`、`amark_node_normalize_test`、`amark_node_iter_test`、`amark_node_walk_test`）が CTest に登録され成功する。foundation のヘッダ単独 include 検査が 3 つの新しい公開ヘッダにも自動で適用される。C++ 検査が木の生成・追加・走査・破棄を呼んでリンクできる。動的ライブラリの公開シンボルは本設計の `AMARK_API` 関数だけで、`node_internal.h` の内部関数と `node_walk.h` の関数は公開されない（14.10）
 
 ## Data Models
 
@@ -808,7 +926,7 @@ graph TB
 
 ## Testing Strategy
 
-すべて公開 API だけを使い、確保失敗はテスト側の差し替えアロケータ（foundation の `test_allocator_*`）で注入する。
+すべて公開 API だけを使い、確保失敗はテスト側の差し替えアロケータ（foundation の `test_allocator_*`）で注入する。例外は非公開の NodeWalk を検証する `node_walk_test.c` で、`src/tree/node_walk.c` を直接コンパイルする（NodeWalk の Validation）。
 
 ### Unit Tests
 - `node_kind_test.c`: 18 標準種別の識別値（1〜18）・名前・分類・内容モデル（2.1〜2.3）、`amark_node_kind_is_leaf` が葉の 8 種別だけで真・`NULL` で偽（2.7）、`get_standard` が `NONE`・`EXTENSION`・未定義値で `NULL` を返し同じ値で常に同じハンドルを返すこと（2.6）、18 × 18 の受け入れ判定表が設計の表どおりであること（6.1、6.2、6.6）
@@ -818,6 +936,7 @@ graph TB
 - `node_edit_test.c`: 追加・先頭追加・前後挿入・置換・取り外しの位置とリンクの整合と参照（7.1、7.2、7.4〜7.6、8.1〜8.3）、子を持つ木の破棄と親を持つノードの破棄（1.4、1.5、1.6）、深さ 10 万段の破棄（13.1）、移動（7.3）、引数エラー（7.7）、規則違反と循環（6.7、6.8）、失敗時の全リンク不変（7.8）、深い木の構築が線形時間で終わる（13.2）
 - `node_normalize_test.c`: 結合・空除去・区切り・ネスト（11.1、11.2）、他ノード不変（11.3）、冪等性（11.4）、失敗注入の基本保証（11.5）、深さ 10 万段（13.1）
 - `node_iter_test.c`: イベント列の完全一致と葉・空コンテナの扱い（9.1、9.2）、終了の継続（9.3）、部分木限定（9.4）、`reset`（9.5）、走査中の確保 0 回（9.6）、走査中の安全な編集の結果（10.1〜10.3）、現在ノード取り外し後の `DONE` と `reset` による再開（10.4）、深さ 10 万段（13.1）
+- `node_walk_test.c`: 表の追加・置き換え（確保なし）・解除（末尾との入れ替え後も残りを検索できる）・未登録の解除・検索（一致なし、登録 0 件）、`kind == NULL`、伸長の失敗注入で表が不変（14.1〜14.4）。テスト用の訪問関数で記録したイベント列が NodeIter と一致し、葉は ENTER のみ、各イベントで引いた項目が登録どおり（14.5、14.6）。子を取りうるノードの ENTER で子を省略すると子孫は訪問されず、同じノードの EXIT がちょうど 1 回訪問され、続く兄弟・親の EXIT が通常どおり 1 回ずつ訪問されること。葉の ENTER と EXIT での省略の要求は無視されること（14.7）。ENTER と、子を省略した EXIT のそれぞれでの訪問関数のエラーがそのまま返り以後訪問されないこと（14.8）。計測アロケータで走査の実行中の確保 0 回、`deinit` 後の `live == 0`、深さ 10 万段の走査（14.9）
 
 ### Integration Tests
 - C++ 検査（`cxx_header_test.cpp`）: 包括ヘッダから木の生成・追加・走査・破棄を呼べる
@@ -838,4 +957,4 @@ graph TB
 
 ## Downstream Integration Guidance
 - **parser-core**: **拡張ごとに** `amark_node_registry_t` を 1 つ所有し、拡張が宣言したノード種別をそのレジストリへ `amark_node_registry_add` する。レジストリは parser-core の公開 API に出さない。方言は拡張の追加時に、拡張間の種別名の重複を検査する。拡張（または拡張を所有する方言）は、その種別のノードを含む文書と、その種別のフックを保持するレンダラより長く生きなければならないことを parser-core が利用者に約束する（標準種別だけの文書はこの制約を受けない）。解析中の状態はノードに持たせず parser-core が別に持つ。解析後に `amark_node_normalize` を呼べる
-- **html-renderer / markdown-renderer**: イテレータで走査し、標準種別は `amark_node_get_type` の `switch`、フック（追加・上書き）は `const amark_node_kind_t *` をキーに引く。拡張種別のハンドルは parser-core の `amark_extension_find_kind` / `amark_dialect_find_kind`（または `amark_extension_get_kind_at`）で得る。標準種別の上書きは `amark_node_kind_get_standard` のハンドルで同じ表に入れられる。葉の判定（ENTER だけが報告される種別か）は公開の `amark_node_kind_is_leaf` を使い、内容モデルから独自に導かない
+- **html-renderer / markdown-renderer**: 非公開の NodeWalk（`tree/node_walk.h`）で走査し（複製しない）、標準種別は `amark_node_get_type` の `switch`、フック（追加・上書き）は `const amark_node_kind_t *` をキーに引く。拡張種別のハンドルは parser-core の `amark_extension_find_kind` / `amark_dialect_find_kind`（または `amark_extension_get_kind_at`）で得る。標準種別の上書きは `amark_node_kind_get_standard` のハンドルで同じ表に入れられる。葉の判定（ENTER だけが報告される種別か）は公開の `amark_node_kind_is_leaf` を使い、内容モデルから独自に導かない

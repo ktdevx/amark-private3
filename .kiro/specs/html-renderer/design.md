@@ -4,16 +4,16 @@
 
 **Purpose**: Amark の木（または部分木）を HTML 文字列へレンダリングする。node-tree の enter / exit イテレータで木を反復走査し、ノード種別ごとにフック表を引いて、なければ組み込みの出力規則（cmark の `html.c` と同一）を適用する。出力は foundation の `amark_buffer_t` に追記する。生 HTML と危険な URL は既定で抑止し、soft break の出し方を選べる。拡張はノード種別ハンドルをキーに出力関数（フック）を登録して、拡張種別の出力を追加し、標準種別の出力を上書きできる。
 
-**Users**: ライブラリ利用者は木を HTML に変換する。commonmark は仕様適合テストで、パース結果を本レンダラで HTML にしてバイト比較する。拡張の作者（将来の gfm を含む）はフックで出力を追加する。markdown-renderer は本仕様のフックの形と内部の走査駆動部を共有する。
+**Users**: ライブラリ利用者は木を HTML に変換する。commonmark は仕様適合テストで、パース結果を本レンダラで HTML にしてバイト比較する。拡張の作者（将来の gfm を含む）はフックで出力を追加する。markdown-renderer は本仕様のフックの形を揃え、node-tree の非公開の振り分け走査（NodeWalk）を本仕様と共有する。
 
-**Impact**: foundation・node-tree の上に公開ヘッダ `amark/html.h`、HTML 用のソース群、レンダラ共通の内部モジュール `render_core`、テストを追加する。包括ヘッダ、ビルド・テストの登録、C++ 検査、テスト補助ライブラリを更新する。foundation と node-tree の公開 API とエラー列挙は変更しない。
+**Impact**: foundation・node-tree の上に公開ヘッダ `amark/html.h`、HTML 用のソース群、テストを追加する。フック表と走査駆動部は node-tree が所有する非公開モジュール `src/tree/node_walk.h`（NodeWalk）を使う。包括ヘッダ、ビルド・テストの登録、C++ 検査、テスト補助ライブラリを更新する。foundation と node-tree の公開 API とエラー列挙は変更しない。
 
 ### Goals
 - 標準 18 種別の木を、CommonMark 仕様（commonmark spec が固定する版。現時点の想定は 0.31.2）の期待 HTML とバイト単位で一致させる（生 HTML と危険な URL を許可した設定で）
 - 何も設定しない利用者が生 HTML や `javascript:` URL を出力しない
 - 拡張種別の追加と標準種別の上書きを、種別ハンドルをキーとする 1 つの登録 API で行える
 - 深さ 10 万段の木でもスタックあふれなく、ノード数と出力長に線形な時間で出力する
-- markdown-renderer が同じ形のフック機構を、同じ駆動部の上に作れる
+- markdown-renderer が同じ形のフック機構を、同じ駆動部（node-tree の NodeWalk）の上に作れる
 
 ### Non-Goals
 - パース、CommonMark 仕様の例の抽出と適合テストの実行（commonmark）
@@ -29,30 +29,30 @@
 - 標準 18 種別の HTML 出力規則（本書の「組み込み出力の表」）、HTML エスケープ表、URL 安全文字表、危険な URL の判定規則
 - 安全性の既定値（生 HTML・危険な URL を抑止）と soft break の出力方法
 - フックの呼び出し規則（ENTER / EXIT、葉は ENTER のみ、子の省略、組み込みへの委譲、未登録の拡張種別は透過、エラー伝播、失敗時の出力の巻き戻し）
-- レンダラ共通の内部モジュール `render_core`（フック表と走査駆動部）。`src/render/render_core.h` はレンダラ間で共有する非公開の内部契約（cross-renderer internal contract）であり、本仕様が所有する。markdown-renderer はこれを複製せずに再利用する
 - Cross-Spec Contract（markdown-renderer が揃えるべき形、拡張・parser-core との結び付け方、commonmark の適合テストの設定）
 
 ### Out of Boundary
 - 木の構造・値・種別の定義と、イテレータ・レジストリの振る舞い（node-tree）。本仕様は読むだけで木を変更しない
+- フック表と走査駆動部（node-tree の非公開モジュール `src/tree/node_walk.h`、NodeWalk。子の省略後の EXIT の訪問を含む）。本仕様はこれを使い、要件 10・11 の HTML 側の振る舞いをその上に作る。NodeWalk の契約の正本は node-tree の設計
 - エラー列挙、アロケータ、バッファ、スライス、UTF-8 の定義（foundation）。本仕様はエラーコードを追加しない
 - 拡張（構文＋ノード種別＋フック）をまとめて登録する単位と、その単位からレンダラへフックを登録する手順（parser-core と各拡張）。html-renderer は parser-core のヘッダを include しない
 - 仕様の例の抽出・比較の基盤と spec.txt の固定（commonmark）
-- Markdown 出力とその文脈依存のエスケープ（markdown-renderer）。`render_core` に Markdown 固有の処理（行頭プレフィックス、折り返し）を入れない
+- Markdown 出力とその文脈依存のエスケープ（markdown-renderer）
 
 ### Allowed Dependencies
 - foundation の公開ヘッダ: `amark/export.h`、`amark/error.h`、`amark/memory.h`、`amark/slice.h`、`amark/buffer.h`
 - node-tree の公開ヘッダ: `amark/node_kind.h`、`amark/node.h`、`amark/node_iter.h`（`src/tree/node_internal.h` は include しない）
+- node-tree の非公開ヘッダ: `src/tree/node_walk.h`（NodeWalk。レンダラ間で共有する内部契約）
 - C 標準ライブラリ: `<stddef.h>`、`<stdint.h>`、`<stdbool.h>`、`<string.h>`
 - テスト: Naos、foundation の `amark_test_support`（差し替えアロケータ）と本仕様が追加する木の組み立て補助
-- 依存方向（左ほど下位。右から左への include のみ許可）: `foundation, node-tree → render_core → html_escape → html_internal → html_standard → html_context → html_renderer`。`amark/html.h` は foundation と node-tree の公開ヘッダだけを include する。`render_core` は HTML のファイルを include しない
+- 依存方向（左ほど下位。右から左への include のみ許可）: `foundation, node-tree（node_walk を含む） → html_escape → html_internal → html_standard → html_context → html_renderer`。`amark/html.h` は foundation と node-tree の公開ヘッダだけを include する（`node_walk.h` は `html_internal.h` だけが include する）
 
 ### Revalidation Triggers
 - フック型の引数・戻り値、コンテキスト操作の意味（子の省略、委譲、行頭保証）、ENTER / EXIT の呼び出し規則の変更（markdown-renderer と拡張に影響）
-- `src/render/render_core.h` の内部契約（型、関数、走査の手順、子の省略後の EXIT の訪問を含む）の変更。どのような変更でも markdown-renderer の再検証を要する
 - 組み込み出力の表、エスケープ表、URL 安全文字表、危険な URL 判定の変更（commonmark の適合テストに影響）
 - 安全性の既定値、設定構造体のフィールドの変更
 - 失敗時の出力の巻き戻し規則、フック登録の置き換え・解除の規則の変更
-- node-tree のイテレータのイベント列と `amark_node_iter_reset` の意味、`amark_node_kind_is_leaf`、標準種別の値・親子規則、種別ハンドルの同一性の規則の変更（本仕様が再検証する側）
+- node-tree のイテレータのイベント列と `amark_node_iter_reset` の意味、`amark_node_kind_is_leaf`、`src/tree/node_walk.h` の内部契約（型、関数、走査の手順、子の省略後の EXIT の訪問）、標準種別の値・親子規則、種別ハンドルの同一性の規則の変更（本仕様が再検証する側）
 
 ## Architecture
 
@@ -63,7 +63,7 @@ graph TB
     Foundation[foundation error memory slice buffer]
     NodeTree[node-tree kind node iter]
     HtmlHeader[html public header]
-    RenderCore[render_core hook table and walk]
+    NodeWalk[node-tree node_walk hook table and walk]
     HtmlEscape[html_escape]
     HtmlInternal[html_internal private header]
     HtmlStandard[html_standard builtin output]
@@ -71,22 +71,22 @@ graph TB
     HtmlRenderer[html_renderer options renderer render]
     HtmlHeader --> Foundation
     HtmlHeader --> NodeTree
-    RenderCore --> NodeTree
+    NodeWalk --> NodeTree
     HtmlEscape --> HtmlHeader
-    HtmlInternal --> RenderCore
+    HtmlInternal --> NodeWalk
     HtmlInternal --> HtmlEscape
     HtmlStandard --> HtmlInternal
     HtmlContext --> HtmlStandard
     HtmlRenderer --> HtmlStandard
     HtmlRenderer --> HtmlContext
-    MarkdownRenderer[markdown-renderer later] --> RenderCore
+    MarkdownRenderer[markdown-renderer later] --> NodeWalk
     Commonmark[commonmark conformance tests] --> HtmlHeader
     Extensions[extensions and gfm] --> HtmlHeader
 ```
 
 **Architecture Integration**:
-- Selected pattern: 反復走査＋表引き。駆動部（`render_core`）が node-tree のイテレータを回し、各イベントでフック表を引いて HTML 側の訪問関数に渡す。訪問関数はフックがあればフックを、なければ組み込み出力を呼ぶ
-- Domain/feature boundaries: レンダラ非依存の走査とフック表（`render_core`）、文字列の符号化（`html_escape`）、標準種別の出力規則（`html_standard`）、フックに渡す操作（`html_context`）、公開の入口と設定（`html_renderer`）を別ファイルにする
+- Selected pattern: 反復走査＋表引き。駆動部（node-tree の NodeWalk）が node-tree のイテレータを回し、各イベントでフック表を引いて HTML 側の訪問関数に渡す。訪問関数はフックがあればフックを、なければ組み込み出力を呼ぶ
+- Domain/feature boundaries: レンダラ非依存の走査とフック表は node-tree の NodeWalk を使い、本仕様では文字列の符号化（`html_escape`）、標準種別の出力規則（`html_standard`）、フックに渡す操作（`html_context`）、公開の入口と設定（`html_renderer`）を別ファイルにする
 - Existing patterns preserved: foundation の共通 API 規約（エラー戻り値＋出力引数、必須ポインタの `NULL` で `AMARK_ERROR_INVALID_ARGUMENT`、失敗時の強い保証、`void` の後片付けは `NULL` で何もしない）、命名（`amark_<module>_<verb>`、`_t`、opaque は `_create` / `_destroy`、呼び出し側領域は `_init`）、ヘッダ規約（include ガード、`AMARK_BEGIN_DECLS`、`AMARK_API`）
 - New components rationale: 各コンポーネントは要件群に対応する（Components 表）
 - Steering compliance: レンダラはパーサに依存しない。可変のグローバル状態を持たない（表はすべて `static const`）。確保は `amark_*` 経由。木の深さに比例する再帰を使わない。テスト専用コードを本体に置かない
@@ -97,7 +97,7 @@ graph TB
 |-------|------------------|-----------------|-------|
 | 言語 | C99（foundation の設定を継承） | 本体とテスト | 新しい依存なし |
 | ランタイム API | foundation（エラー、アロケータ、スライス、バッファ） | 出力先、確保、借用文字列 | `amark_buffer_append`、`amark_buffer_truncate` |
-| 木 | node-tree（種別ハンドル、アクセサ、イテレータ） | 入力の走査と値の取得 | `amark_node_iter_*`、`amark_node_kind_is_leaf` |
+| 木 | node-tree（種別ハンドル、アクセサ、イテレータ、非公開の NodeWalk） | 入力の走査と値の取得、フック表と走査駆動部 | `amark_node_iter_*`、`amark_node_kind_is_leaf`、`amark_node_walk_*` |
 | テスト | Naos v0.4.0、`amark_test_support` | テスト実行ファイル、失敗注入 | foundation の `naos_add_executable` 規約 |
 | 出力規則の基準 | cmark `html.c` / houdini（規則のみ採用、コードは取り込まない） | 期待 HTML との一致 | 詳細は `research.md` |
 
@@ -108,10 +108,7 @@ graph TB
 include/amark/
 └── html.h                    # 設定、レンダラ、フック型、コンテキスト操作、単発描画、エスケープ・URL ユーティリティ、利用者の義務（コメント）
 src/
-├── render/
-│   ├── render_core.h             # 非公開（レンダラ共通）: フック表と走査駆動部の型・関数。export しない
-│   └── render_core.c             # フック表の init/deinit/set/find、走査駆動部（イテレータ、子の省略と省略後の EXIT の訪問。葉の判定は node-tree の amark_node_kind_is_leaf）
-└── html/
+└── html/                         # フック表と走査駆動部は node-tree の src/tree/node_walk.{h,c} を使う（本仕様では作らない）
     ├── html_escape.c             # amark_html_escape、amark_html_escape_url、amark_html_url_is_dangerous（static const の表）
     ├── html_internal.h           # 非公開: struct amark_html_context、struct amark_html_renderer、設定の検証、組み込み出力の宣言
     ├── html_standard.c           # 標準 18 種別の組み込み出力、行頭保証、tight 判定、画像の alt 平坦化
@@ -133,7 +130,7 @@ tests/
 ### Modified Files
 実装時に html-renderer のタスクとして変更する（本 spec の作成時には変更しない）。
 - `include/amark/amark.h` — `amark/html.h` を include に追加
-- `src/CMakeLists.txt` — `render/render_core.c`、`html/html_escape.c`、`html/html_standard.c`、`html/html_context.c`、`html/html_renderer.c` をソース一覧に追加
+- `src/CMakeLists.txt` — `html/html_escape.c`、`html/html_standard.c`、`html/html_context.c`、`html/html_renderer.c` をソース一覧に追加
 - `tests/CMakeLists.txt` — `amark_test_support` に `support/test_tree.c` を追加し、7 つのテスト実行ファイル `amark_html_escape_test` ほかを `naos_add_executable` で登録
 - `tests/cxx_header_test.cpp` — C++ から木を組んで `amark_html_render` とフック登録を呼ぶ確認を追加
 
@@ -165,7 +162,7 @@ graph TB
 ```
 
 - 子の省略の要求はイベントごとに初期化する。葉（`amark_node_kind_is_leaf` が真）の ENTER では無視する（葉には EXIT がない）
-- 子の省略後の EXIT の訪問（11.3）: node-tree の `amark_node_iter_reset(iter, node, EXIT)` は「次の `next` はその位置の続きを報告する」ため、リセットだけでは同じノードの EXIT が報告されない。駆動部はリセットの直後に `walk->event = EXIT`、`skip_children = false` として同じノードの EXIT で訪問関数を自ら呼ぶ。続く `next` は EXIT の続き（次の兄弟の ENTER または親の EXIT）を報告するため、EXIT は二重に訪問されない
+- 子の省略後の EXIT の訪問（11.3）: node-tree の `amark_node_iter_reset(iter, node, EXIT)` は「次の `next` はその位置の続きを報告する」ため、リセットだけでは同じノードの EXIT が報告されない。node-tree の NodeWalk（駆動部）はリセットの直後に `walk->event = EXIT`、`skip_children = false` として同じノードの EXIT で訪問関数を自ら呼ぶ。続く `next` は EXIT の続き（次の兄弟の ENTER または親の EXIT）を報告するため、EXIT は二重に訪問されない（node-tree 要件 14.7。本仕様の 11.3 はこの手順で満たす）
 - EXIT の訪問はフックのある種別ではフックを（11.3 の「出るときの呼び出し」）、ない種別では組み込み出力を呼ぶ。組み込みで子を省略するのは image だけで、その EXIT は何も出さないため HTML の出力は変わらない
 - 組み込みの image は ENTER で子の省略を自ら要求する（「画像の alt 平坦化」）。フックが image の ENTER で `render_default` を呼んだ場合も同じ
 - エラー時は `amark_buffer_truncate(output, start)` で出力先を呼び出し前の長さに戻す（`start` は呼び出し時の `output->length`）
@@ -198,7 +195,7 @@ sequenceDiagram
 
 | Requirement | Summary | Components | Interfaces | Flows |
 |-------------|---------|------------|------------|-------|
-| 1.1, 1.2, 1.3, 1.4, 1.5, 1.6 | 入口、部分木、追記、木を変えない、引数、決定性 | HtmlRenderer, RenderCore | `amark_html_render`、`amark_html_renderer_render` | 1 イベントの処理 |
+| 1.1, 1.2, 1.3, 1.4, 1.5, 1.6 | 入口、部分木、追記、木を変えない、引数、決定性 | HtmlRenderer, node-tree NodeWalk | `amark_html_render`、`amark_html_renderer_render` | 1 イベントの処理 |
 | 1.7 | 行頭保証はこの描画の出力だけを見る | HtmlStandard, HtmlContext | `amark_html_context_ensure_newline` | — |
 | 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9, 2.10, 2.11, 2.12 | ブロック種別 | HtmlStandard | 組み込み出力の表 | — |
 | 3.1, 3.2, 3.3, 3.4 | tight / loose | HtmlStandard | tight 判定 | — |
@@ -208,22 +205,21 @@ sequenceDiagram
 | 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7 | 安全性の設定 | HtmlRenderer, HtmlStandard, HtmlEscape, HtmlContext | `amark_html_options_t`、`amark_html_url_is_dangerous`、`amark_html_context_write_url` | — |
 | 8.1, 8.2, 8.3, 8.4 | soft break | HtmlRenderer, HtmlStandard | `amark_html_softbreak_t`、設定の検証 | — |
 | 9.1, 9.2, 9.3 | 仕様との一致 | HtmlStandard, HtmlEscape, CommonmarkFixtureTest | 組み込み出力の表 | — |
-| 10.1, 10.2, 10.3, 10.4, 10.5, 10.6, 10.7, 10.8, 10.9 | フックの登録 | HtmlRenderer, RenderCore | `amark_html_renderer_set_hook`、`amark_render_hook_table_*` | — |
-| 11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.7, 11.8 | フックの呼び出しと制御 | RenderCore, HtmlContext, HtmlRenderer | `amark_html_render_fn_t`、`amark_html_context_*` | 1 イベントの処理 |
+| 10.1, 10.2, 10.3, 10.4, 10.5, 10.6, 10.7, 10.8, 10.9 | フックの登録 | HtmlRenderer, node-tree NodeWalk | `amark_html_renderer_set_hook`、`amark_node_walk_table_*` | — |
+| 11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.7, 11.8 | フックの呼び出しと制御 | HtmlRenderer, HtmlContext, node-tree NodeWalk | `amark_html_render_fn_t`、`amark_html_context_*` | 1 イベントの処理 |
 | 12.1, 12.2, 12.3, 12.4, 12.5, 12.6 | エラーと資源 | 全コンポーネント | 共通 API 規約、巻き戻し | 1 イベントの処理 |
-| 13.1, 13.2, 13.3, 13.4 | 深い木、線形、スレッド、グローバル状態なし | RenderCore, HtmlStandard, HtmlRenderer | 反復走査、`static const` の表、決定的な計数による線形性の検査 | alt 平坦化 |
+| 13.1, 13.2, 13.3, 13.4 | 深い木、線形、スレッド、グローバル状態なし | HtmlRenderer, HtmlStandard, node-tree NodeWalk | 反復走査、`static const` の表、決定的な計数による線形性の検査 | alt 平坦化 |
 
 ## Components and Interfaces
 
 | Component | Domain/Layer | Intent | Req Coverage | Key Dependencies (P0/P1) | Contracts |
 |-----------|--------------|--------|--------------|--------------------------|-----------|
 | HtmlPublicHeader | 公開 API | 型・関数・利用者の義務の宣言 | 10.8, 11.8, 12.1 | foundation, node-tree (P0) | Service |
-| RenderCore | レンダラ共通（非公開） | フック表と走査駆動部 | 1.4, 10.1–10.7, 11.1–11.3, 11.7, 12.4, 12.5, 13.1, 13.2 | node-tree Iter (P0), Memory (P0) | Service, State |
 | HtmlEscape | 符号化 | HTML エスケープ、URL 符号化、危険な URL 判定 | 6.1–6.5, 7.5 | Buffer (P0) | Service |
-| HtmlInternal | 非公開 | 構造体と内部関数の共有定義 | 全体の前提 | RenderCore, HtmlEscape (P0) | State |
+| HtmlInternal | 非公開 | 構造体と内部関数の共有定義 | 全体の前提 | node-tree NodeWalk, HtmlEscape (P0) | State |
 | HtmlStandard | 出力規則 | 標準 18 種別の組み込み出力 | 1.2, 1.7, 2.1–2.12, 3.1–3.4, 4.1–4.8, 5.1–5.5, 7.1–7.4, 8.1–8.3, 9.1–9.3, 13.2 | HtmlInternal (P0), node-tree Node (P0) | Service |
 | HtmlContext | フック操作 | フックに渡す出力・制御・参照の手段 | 1.7, 11.3–11.5 | HtmlStandard (P0) | Service |
-| HtmlRenderer | 入口 | 設定、レンダラ、フック登録、描画、巻き戻し | 1.1–1.6, 7.6, 8.4, 10.1–10.9, 11.6, 11.7, 12.2–12.6, 13.3, 13.4 | RenderCore (P0), HtmlStandard (P0), HtmlContext (P0) | Service, State |
+| HtmlRenderer | 入口 | 設定、レンダラ、フック登録、訪問関数、描画、巻き戻し | 1.1–1.6, 7.6, 8.4, 10.1–10.9, 11.1–11.3, 11.6, 11.7, 12.2–12.6, 13.1, 13.3, 13.4 | node-tree NodeWalk (P0), HtmlStandard (P0), HtmlContext (P0) | Service, State |
 | TestTreeSupport | テスト補助 | 手組みの木を簡潔に作る | 1.3 | node-tree 公開 API (P0) | Service |
 | CommonmarkFixtureTest | テスト | 仕様の代表例のバイト比較 | 9.1, 9.2, 9.3 | TestTreeSupport (P0) | Batch |
 | HtmlIntegration | ビルド・テスト登録 | 包括ヘッダ、ビルド、テスト、C++ 検査 | 12.1, 12.2 | foundation BuildSystem, TestHarness (P0) | Batch |
@@ -307,86 +303,12 @@ AMARK_API bool amark_html_url_is_dangerous(amark_slice_t url);
   - 登録が終わったレンダラは、異なる出力先に対して複数スレッドから同時に描画してよい（13.3）
 - フックの登録はパーサ・拡張の仕組みを使わず、種別ハンドルだけで行う（10.8）。ハンドルは `amark_node_kind_get_standard(type)`（標準）、node-tree の `amark_node_registry_add` / `amark_node_registry_find` の結果、または parser-core の `amark_extension_find_kind` / `amark_extension_get_kind_at` / `amark_dialect_find_kind` の結果で得る（後者は拡張パッケージの側が呼び、html-renderer のコードは parser-core のヘッダを include しない）
 
-### レンダラ共通
+### 上流の非公開部品（参照のみ）
 
-#### RenderCore
-
-| Field | Detail |
-|-------|--------|
-| Intent | 種別ハンドルをキーとするフック表と、反復の走査駆動部。HTML と Markdown のレンダラで共有する |
-| Requirements | 1.4, 10.1, 10.2, 10.3, 10.4, 10.5, 10.6, 10.7, 11.1, 11.2, 11.3, 11.7, 12.4, 12.5, 13.1, 13.2 |
-
-**Responsibilities & Constraints**
-- レンダラ固有の知識（HTML の表、Markdown のプレフィックス）を持たない。フック関数はレンダラごとに型が異なるため、汎用の関数ポインタ型で保持し、取り出した側が元の型へ戻す（C99 で往復が保証される関数ポインタ間の変換）
-- 宣言に `AMARK_API` を付けず、動的ライブラリから export しない
-
-**Contracts**: Service [x] / State [x]
-
-##### Service Interface
-```c
-/* src/render/render_core.h（非公開） */
-#include <amark/error.h>
-#include <amark/node_iter.h>
-
-typedef void (*amark_render_hook_fn_t)(void);  /* 保持用の汎用型。呼び出し側がレンダラの型へ戻す */
-
-typedef struct amark_render_hook
-{
-    const amark_node_kind_t *kind;
-    amark_render_hook_fn_t fn;
-    void *user_data;
-} amark_render_hook_t;
-
-typedef struct amark_render_hook_table
-{
-    amark_render_hook_t *items;
-    size_t count;
-    size_t capacity;
-} amark_render_hook_table_t;
-
-void amark_render_hook_table_init(amark_render_hook_table_t *table);
-void amark_render_hook_table_deinit(amark_render_hook_table_t *table);
-amark_error_t amark_render_hook_table_set(amark_render_hook_table_t *table, const amark_node_kind_t *kind,
-                                          amark_render_hook_fn_t fn, void *user_data);
-const amark_render_hook_t *amark_render_hook_table_find(const amark_render_hook_table_t *table,
-                                                        const amark_node_kind_t *kind);
-
-typedef struct amark_render_walk
-{
-    amark_node_iter_t iter;
-    const amark_node_t *node;        /* 現在のノード */
-    amark_node_iter_event_t event;   /* 現在のイベント（ENTER / EXIT） */
-    bool skip_children;              /* 現在のイベントで子の省略が要求されたか */
-} amark_render_walk_t;
-
-typedef amark_error_t (*amark_render_visit_fn_t)(void *context, amark_render_walk_t *walk,
-                                                 const amark_render_hook_t *hook);
-
-amark_error_t amark_render_walk_run(amark_render_walk_t *walk, const amark_node_t *root,
-                                    const amark_render_hook_table_t *table, amark_render_visit_fn_t visit,
-                                    void *context);
-void amark_render_walk_skip_children(amark_render_walk_t *walk);
-```
-- `amark_render_hook_table_set(table, kind, fn, user_data)`:
-  - `kind == NULL`: `AMARK_ERROR_INVALID_ARGUMENT`（10.7）
-  - 既存の項目あり・`fn != NULL`: その項目の `fn` と `user_data` を置き換える。確保なし（10.4）
-  - 既存の項目あり・`fn == NULL`: 項目を取り除く（末尾と入れ替え）（10.5）
-  - 既存の項目なし・`fn == NULL`: 何もせず `AMARK_OK`
-  - 既存の項目なし・`fn != NULL`: 必要なら容量を 2 倍（初期 4）に伸長して末尾に追加。容量計算のあふれは `AMARK_ERROR_OVERFLOW`、確保失敗は `AMARK_ERROR_NO_MEMORY` で表を変更しない（12.4）
-- `amark_render_hook_table_find`: `kind` とポインタが等しい項目を返す。なければ、または `count == 0` なら `NULL`（10.3）。計算量は登録数 h に比例
-- `amark_render_hook_table_deinit`: `items` を解放して空に戻す（12.5）。`NULL` は何もしない
-- `amark_render_walk_run(walk, root, table, visit, context)`:
-  1. `amark_node_iter_init(&walk->iter, (amark_node_t *)root)`（const を外すのはここだけ）
-  2. `amark_node_iter_next` が `DONE` を返すまで: `walk->node`・`walk->event` を設定し `skip_children = false`、`hook = find(table, kind)`、`visit(context, walk, hook)` を呼ぶ。非 `AMARK_OK` ならその値を直ちに返す（11.7）
-  3. `event == ENTER` かつ `skip_children` かつ `!amark_node_kind_is_leaf(kind)` なら、`amark_node_iter_reset(&walk->iter, node, EXIT)` の後、`walk->event = EXIT`、`walk->skip_children = false` として同じノードについて `visit(context, walk, hook)` を呼ぶ（`hook` は ENTER で引いたものと同じ種別の項目）。非 `AMARK_OK` ならその値を直ちに返す。続く `amark_node_iter_next` は EXIT の続きを報告する（11.3）
-  4. 終われば `AMARK_OK`
-- イベント列は node-tree のイテレータのとおりで、葉は ENTER のみ（11.1、11.2）。子を省略したノードでも ENTER と EXIT はちょうど 1 回ずつ訪問され、子孫は訪問されない（11.3）。反復で動き深さに比例するスタックを使わない（13.1）。確保しない
-- 葉の判定は node-tree の公開関数 `amark_node_kind_is_leaf(kind)`（`content == NONE`）を使い、`render_core` 独自の判定関数は持たない
-
-**Implementation Notes**
-- Integration: markdown-renderer は `render_core.h` を include し、同じ表と駆動部を使う（Cross-Spec Contract）。`render_core.h` はレンダラ間で共有する内部契約であり、その型・関数・手順（特に子の省略後の EXIT の訪問）の変更は markdown-renderer の再検証を要する
-- Validation: 非公開のため、HTML のフックを通して公開 API から検証する（`html_hook_test.c`、`html_render_test.c`）。子の省略後の EXIT の訪問は、子を取る種別のフックが ENTER で子を省略したとき、同じノードの EXIT でフックがちょうど 1 回呼ばれ子孫のフックが呼ばれないことで確認する
-- Risks: 走査中に木を変更するフックは走査を壊す（義務として文書化）
+- **NodeWalk**（node-tree 所有、要件 14）: `src/tree/node_walk.h` の処理の表 `amark_node_walk_table_*`（種別ハンドルをキーに設定・置き換え・解除・検索）と走査駆動部 `amark_node_walk_run` / `amark_node_walk_skip_children`。型・関数・手順の正本は node-tree の設計の NodeWalk であり、本仕様は使うだけで変更しない
+- 本仕様の要件との対応: 表の設定の規則が 10.3〜10.5・10.7・12.4（表を変えない確保失敗）を、駆動部の ENTER / EXIT（葉は ENTER のみ）が 11.1・11.2 を、子の省略後に同じノードの EXIT を 1 回訪問する手順が 11.3 を、訪問関数のエラーで直ちに止める手順が 11.7 を、反復の走査が 13.1 を満たす。出力の巻き戻し（12.3）は HtmlRenderer が行う
+- 本仕様は HTML のフック型 `amark_html_render_fn_t` を `amark_node_walk_hook_fn_t` に変換して登録し、訪問関数の中で元の型へ戻して呼ぶ（変換は `html_renderer.c` の 2 か所に限る）
+- Validation: NodeWalk 自体の振る舞いは node-tree の `node_walk_test.c` が検証する。本仕様は HTML のフックを通して公開 API から同じ契約を確認する（`html_hook_test.c`、`html_render_test.c`）。子の省略後の EXIT の訪問（11.3）は、子を取る種別のフックが ENTER で子を省略したとき、同じノードの EXIT でフックがちょうど 1 回呼ばれ子孫のフックが呼ばれないことで確認する
 
 ### 符号化
 
@@ -440,12 +362,12 @@ URL 符号化（6.2、6.3）:
 ```c
 /* src/html/html_internal.h（非公開。宣言は AMARK_API を付けず export しない） */
 #include <amark/html.h>
-#include "render/render_core.h"
+#include "tree/node_walk.h"
 
 struct amark_html_renderer
 {
     amark_html_options_t options;
-    amark_render_hook_table_t hooks;
+    amark_node_walk_table_t hooks;
 };
 
 struct amark_html_context
@@ -453,7 +375,7 @@ struct amark_html_context
     const amark_html_options_t *options;
     amark_buffer_t *output;
     size_t start;                       /* 描画開始時の output->length（行頭保証と巻き戻しの基準） */
-    amark_render_walk_t *walk;          /* 現在のノード・イベント・子の省略 */
+    amark_node_walk_t *walk;            /* 現在のノード・イベント・子の省略 */
 };
 
 bool amark_html_options_valid(const amark_html_options_t *options);                    /* html_renderer.c */
@@ -461,7 +383,7 @@ amark_error_t amark_html_standard_render(amark_html_context_t *context);        
 amark_error_t amark_html_standard_newline(amark_html_context_t *context);              /* html_standard.c: 行頭保証（cr）の本体 */
 amark_error_t amark_html_standard_write_url(amark_html_context_t *context, amark_slice_t url); /* html_standard.c: 安全性の設定を適用した URL 出力 */
 ```
-- 依存の向き: `html_standard.c` は `html_context.c` に依存しない。`html_context.c` は `html_standard.c` の内部関数を呼ぶ。`html_renderer.c` は両方を呼ぶ（実装順: render_core → html_escape → html_standard → html_context → html_renderer）。`amark_html_options_valid` は `html_renderer.c` だけが使う
+- 依存の向き: `html_standard.c` は `html_context.c` に依存しない。`html_context.c` は `html_standard.c` の内部関数を呼ぶ。`html_renderer.c` は両方を呼ぶ（実装順: html_escape → html_standard → html_context → html_renderer。node-tree の node_walk は実装済みの前提）。`amark_html_options_valid` は `html_renderer.c` だけが使う
 - `amark_html_options_valid`: `softbreak` が定義済みの 3 値のいずれかなら真（8.4）
 
 #### HtmlStandard
@@ -509,7 +431,7 @@ amark_error_t amark_html_standard_write_url(amark_html_context_t *context, amark
 - 本コンポーネントのすべての出力は `amark_buffer_append` 系を直接使う。失敗は戻り値で返し、巻き戻しは HtmlRenderer が行う
 
 **Implementation Notes**
-- Integration: 画像の ENTER で `amark_render_walk_skip_children` を呼ぶ。フックが image の ENTER で `render_default` を呼んだ場合も同じ関数を通るため子は省略される
+- Integration: 画像の ENTER で `amark_node_walk_skip_children` を呼ぶ。フックが image の ENTER で `render_default` を呼んだ場合も同じ関数を通るため子は省略される
 - Validation: `html_block_test.c`・`html_inline_test.c` で表の全行（list の開始番号 0・1・2、見出し 1〜6、info の各形、空のコンテナ、tight / loose の入れ子、部分木起点の tight 段落）、`html_commonmark_test.c` で仕様の代表例を確認する
 - Risks: 仕様の版の更新で期待出力が変わる（Revalidation Trigger）
 
@@ -526,7 +448,7 @@ amark_error_t amark_html_standard_write_url(amark_html_context_t *context, amark
 - `amark_html_context_write_escaped(context, text)`: `amark_html_escape(context->output, text)`
 - `amark_html_context_write_url(context, url)`: `amark_html_standard_write_url`（組み込みの `url(x)` と同じ。安全性の設定を適用）
 - `amark_html_context_ensure_newline(context)`: `amark_html_standard_newline`（組み込みの cr と同じ、1.7）
-- `amark_html_context_skip_children(context)`: `amark_render_walk_skip_children(context->walk)`。現在のイベントが ENTER で葉でないときだけ効果を持つ。`NULL` は何もしない（11.3）
+- `amark_html_context_skip_children(context)`: `amark_node_walk_skip_children(context->walk)`。現在のイベントが ENTER で葉でないときだけ効果を持つ。`NULL` は何もしない（11.3）
 - `amark_html_context_render_default(context)`: `amark_html_standard_render(context)`。現在の (ノード, イベント) の組み込み出力（拡張種別は何もしない）。同じフック内で複数回呼べば複数回出力する（11.4）
 - `amark_html_context_get_options(context)`: 描画に使っている設定。`NULL` は `NULL`（11.5）
 - 書き込みの失敗は戻り値で返す。フックがそれを返せば描画が中止され、出力先が巻き戻される
@@ -543,10 +465,10 @@ amark_error_t amark_html_standard_write_url(amark_html_context_t *context, amark
 - `amark_html_options_init(options)`: `{allow_raw_html = false, allow_dangerous_urls = false, softbreak = NEWLINE}`。`NULL` は何もしない（7.1、7.3、7.6、8.1）
 - `amark_html_renderer_create(options, renderer)`: `renderer == NULL` は `AMARK_ERROR_INVALID_ARGUMENT`。`options` が `NULL` なら既定値、非 `NULL` で `!amark_html_options_valid` なら `AMARK_ERROR_INVALID_ARGUMENT`（8.4）。1 回の `amark_malloc` で確保し（失敗で `AMARK_ERROR_NO_MEMORY`、`*renderer` は変更しない、12.4）、設定を複製し、フック表を初期化して `*renderer` に書く（10.9）
 - `amark_html_renderer_destroy(renderer)`: フック表を deinit して解放する。`NULL` は何もしない（12.5）
-- `amark_html_renderer_set_hook(renderer, kind, render, user_data)`: `renderer` または `kind` が `NULL` なら `AMARK_ERROR_INVALID_ARGUMENT`。`amark_render_hook_table_set(&renderer->hooks, kind, (amark_render_hook_fn_t)render, user_data)` の結果を返す。`render == NULL` は解除（10.1、10.2、10.4〜10.7）
+- `amark_html_renderer_set_hook(renderer, kind, render, user_data)`: `renderer` または `kind` が `NULL` なら `AMARK_ERROR_INVALID_ARGUMENT`。`amark_node_walk_table_set(&renderer->hooks, kind, (amark_node_walk_hook_fn_t)render, user_data)` の結果を返す。`render == NULL` は解除（10.1、10.2、10.4〜10.7）
 - `amark_html_renderer_render(renderer, root, output)`: `renderer`、`root`、`output` のいずれかが `NULL` なら `AMARK_ERROR_INVALID_ARGUMENT`（1.5）。描画の手順:
-  1. `start = output->length`、`amark_render_walk_t walk`、コンテキスト `{&renderer->options, output, start, &walk}` をスタック上に用意する（確保なし、12.6）
-  2. `amark_render_walk_run(&walk, root, &renderer->hooks, visit, &context)`
+  1. `start = output->length`、`amark_node_walk_t walk`、コンテキスト `{&renderer->options, output, start, &walk}` をスタック上に用意する（確保なし、12.6）
+  2. `amark_node_walk_run(&walk, root, &renderer->hooks, visit, &context)`
   3. 結果が非 `AMARK_OK` なら `amark_buffer_truncate(output, start)` してその結果を返す（12.3）
 - `amark_html_render(root, options, output)`: `root`、`output` の `NULL` と設定の検証は同上。空のフック表を持つ一時的なレンダラ相当（スタック上、確保なし）で `amark_html_renderer_render` と同じ手順を行う（1.1）
 - 訪問関数 `visit(context, walk, hook)`（`static`）: `hook` があれば `((amark_html_render_fn_t)hook->fn)(context, walk->node, walk->event, hook->user_data)`、なければ `amark_html_standard_render(context)` を呼び、結果を返す（10.1、10.2、10.6、11.6、11.7）
@@ -605,7 +527,7 @@ amark_node_t *test_tree_link(amark_node_type_t type, const char *url, const char
 
 **Contracts**: Batch [x]
 - Trigger: `cmake -S . -B build && cmake --build build && ctest --test-dir build`（静的・動的の両方）
-- Output: Modified Files の変更により、7 つのテスト実行ファイルが CTest に登録され成功する。foundation のヘッダ単独 include 検査が `amark/html.h` に自動で適用される。C++ 検査が木の描画とフック登録を呼んでリンクできる。動的ライブラリの公開シンボルに `render_core` と `html_internal.h` の内部関数が含まれない
+- Output: Modified Files の変更により、7 つのテスト実行ファイルが CTest に登録され成功する。foundation のヘッダ単独 include 検査が `amark/html.h` に自動で適用される。C++ 検査が木の描画とフック登録を呼んでリンクできる。動的ライブラリの公開シンボルに `node_walk.h` と `html_internal.h` の内部関数が含まれない
 
 ## Data Models
 
@@ -679,13 +601,13 @@ graph TB
 ## Cross-Spec Contract
 
 ### markdown-renderer が揃えるもの
-markdown-renderer は次を同じ形で提供し、内部では `src/render/render_core.h` のフック表と走査駆動部をそのまま使う（複製しない）。
+markdown-renderer は次を同じ形で提供する。フック表と走査駆動部は本仕様と同じく node-tree の `src/tree/node_walk.h`（NodeWalk）を使い（複製しない）、本仕様の非公開ファイルには依存しない。
 - 型: `amark_markdown_options_t`（`_init` で既定値）、opaque な `amark_markdown_renderer_t`、opaque な `amark_markdown_context_t`
 - フック型: `typedef amark_error_t (*amark_markdown_render_fn_t)(amark_markdown_context_t *context, const amark_node_t *node, amark_node_iter_event_t event, void *user_data);`
 - 関数: `amark_markdown_renderer_create(const amark_markdown_options_t *options, amark_markdown_renderer_t **renderer)`、`amark_markdown_renderer_destroy`、`amark_markdown_renderer_set_hook(renderer, kind, render, user_data)`、`amark_markdown_renderer_render(renderer, root, output)`、単発の `amark_markdown_render(root, options, output)`
 - コンテキスト操作（意味を同じにする）: `_write`、`_ensure_newline`、`_skip_children`、`_render_default`、`_get_options`。Markdown 固有の操作（行頭プレフィックス、文脈依存のエスケープ）はこれらに加えて定義してよい
 - 規則: 種別ハンドルをキーにする（標準種別は `amark_node_kind_get_standard`）、同じ種別の再登録は置き換え、`render == NULL` は解除、ENTER / EXIT の 2 回（葉は ENTER のみ）、子の省略は ENTER でだけ有効、`render_default` は現在の (ノード, イベント) に限る、未登録の拡張種別は自身を出さず子を出す、フックのエラーで中止し出力先を呼び出し前の長さに戻す、`const` の木を変更しない、新しいエラーコードを作らない
-- `render_core` に Markdown 固有の処理が必要になった場合は、レンダラ非依存の形で `render_core` を改訂し、本仕様の Revalidation Trigger として扱う
+- NodeWalk に Markdown 固有の処理は入れない。Markdown の行の書き出し（プレフィックス、折り返し）は markdown-renderer に置く。NodeWalk の変更が必要になった場合は node-tree の改訂として扱い、node-tree の Revalidation Trigger により本仕様と markdown-renderer を再検証する
 
 ### 拡張・parser-core との結び付け
 - html-renderer は parser-core に依存しない（本仕様のコードは parser-core のヘッダを include せず、parser-core もレンダラに依存しない）。拡張の単位（構文＋ノード種別）からレンダラへの結び付けは、両方に依存する拡張パッケージの側が「種別ハンドルを得て `amark_html_renderer_set_hook` を呼ぶ」ことで行う
@@ -699,7 +621,7 @@ markdown-renderer は次を同じ形で提供し、内部では `src/render/rend
 
 ### Cross-Spec Change Note
 - 新しいエラーコード: なし（既存の `AMARK_ERROR_INVALID_ARGUMENT`、`AMARK_ERROR_NO_MEMORY`、`AMARK_ERROR_OVERFLOW` を再利用）
-- foundation・node-tree の API への変更要求: なし。葉の判定には node-tree が公開する `amark_node_kind_is_leaf` を使う（`render_core` に独自の判定関数を置かない）
+- foundation・node-tree の API への変更要求: なし。フック表と走査駆動部は node-tree の非公開モジュール NodeWalk（node-tree 要件 14）を使い、葉の判定は node-tree が公開する `amark_node_kind_is_leaf` による
 - 共有ファイル: `include/amark/amark.h`、`src/CMakeLists.txt`、`tests/CMakeLists.txt`、`tests/cxx_header_test.cpp`、`amark_test_support` のソース一覧は foundation が所有する追記専用のファイルであり、本仕様は自分のブロックを追記するだけで既存の行を変更しない
 - テスト補助: `tests/support/test_tree.{h,c}`、関数名 `test_tree_*`（テスト補助の命名規約 `test_<area>_*` どおり）
-- `render_core` の子の省略後の EXIT の訪問（11.3）は本仕様の設計と実装に含まれる。markdown-renderer はこれを前提にし、`render_core` を変更しない
+- 子の省略後の EXIT の訪問（11.3）は node-tree の NodeWalk の手順（node-tree 要件 14.7）で実現する。本仕様と markdown-renderer はこれを前提にし、NodeWalk を変更しない

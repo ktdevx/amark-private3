@@ -7,7 +7,7 @@
   - cmark の `commonmark.c` は再パース可能な出力の基本形（ASCII 句読点のバックスラッシュエスケープ、行頭の `- + =` と数字＋`.` `)` のエスケープ、フェンス長 = 最長の連続 + 1、コードスパンは最短の未使用のバッククォート数、info にバッククォートがあればチルダ）を示すが、強調の隣接（`EMPH(EMPH)` だけを `_` にする）、隣接するリスト（`<!-- end list -->` の HTML ブロックを挿入し HTML が変わる）、折り返しの行頭（数字だけを避ける）は不完全である。往復で HTML の一致を求める本仕様では、これらを規則として設計し直す必要がある
   - 区切り文字の並び（delimiter run）は「開き専用（left-flanking かつ right-flanking でない）」または「閉じ専用」であれば、木の入れ子が括弧の対応になっているため、パーサの「最も近い同じ文字の開きと対にする」処理で必ず意図どおりに対になる。両用（both-flanking）の並びは、同じ文字・同じ長さの開いている祖先がなければ無害（長さの異なる祖先とは長さの和の規則で対にならない）
   - 数値文字参照（`&#N;`）は前後とも ASCII 句読点であり、区切りの隣の文字・行頭行末の空白・制御文字・リンク先と title の改行を、意味を変えずに「句読点」に変える万能の逃げ道になる。flanking の判定には Unicode の句読点・空白の分類が必要で、commonmark が内部に持つ表をレンダラ層から使えるように移す必要がある
-  - html-renderer の `render_core` は、子の省略で `amark_node_iter_reset(node, EXIT)` を呼ぶが、node-tree の `reset` は「その位置の続き」から報告するため、省略したノードの EXIT が訪問されない。html-renderer 要件 11.3（省略後に EXIT を呼ぶ）と食い違っており、Markdown のフレーム管理（EXIT で確実に後片付けする）にも必要なため修正を依頼する
+  - 走査駆動部（当時は html-renderer 所有。現在は node-tree の `node_walk`）は、子の省略で `amark_node_iter_reset(node, EXIT)` を呼ぶが、node-tree の `reset` は「その位置の続き」から報告するため、省略したノードの EXIT が訪問されない。html-renderer 要件 11.3（省略後に EXIT を呼ぶ）と食い違っており、Markdown のフレーム管理（EXIT で確実に後片付けする）にも必要なため修正を依頼した（修正済み。現在は node-tree 要件 14.7）
 
 ## Research Log
 
@@ -40,21 +40,21 @@
 ### 上流設計との整合
 - **Sources Consulted**: `.kiro/specs/html-renderer/design.md`（Cross-Spec Contract）、`.kiro/specs/node-tree/design.md`、`.kiro/specs/commonmark/design.md`、`.kiro/specs/parser-core/design.md`、`.kiro/specs/foundation/design.md`
 - **Findings**:
-  - html-renderer は `amark_markdown_*` の型・関数・コンテキスト操作の名前と規則を指定し、`src/render/render_core.h`（フック表 `amark_render_hook_table_*`、走査 `amark_render_walk_run`、`amark_render_walk_skip_children`。葉の判定は node-tree の `amark_node_kind_is_leaf`）を複製せずに使うことを求める。Markdown 固有の処理を render_core に入れないことも求める
-  - node-tree の `amark_node_iter_reset` は「次の next はその続きを報告する」。当初の render_core の手順 3 は EXIT の訪問を行う記述がなかったが、横断レビューの結果 html-renderer 側で修正され、リセットの直後に同じノードの EXIT を訪問する（html-renderer 要件 11.3）
+  - html-renderer は `amark_markdown_*` の型・関数・コンテキスト操作の名前と規則を指定し、フック表と走査駆動部を複製せずに使うことを求める。これは現在 node-tree の非公開モジュール `src/tree/node_walk.h`（表 `amark_node_walk_table_*`、走査 `amark_node_walk_run`、`amark_node_walk_skip_children`。葉の判定は `amark_node_kind_is_leaf`）が提供する。Markdown 固有の処理を駆動部に入れないことも求める
+  - node-tree の `amark_node_iter_reset` は「次の next はその続きを報告する」。当初の駆動部の手順 3 は EXIT の訪問を行う記述がなかったが、横断レビューの結果修正され、リセットの直後に同じノードの EXIT を訪問する（html-renderer 要件 11.3。その後、駆動部は同じ機能のまま node-tree へ移り node-tree 要件 14.7 となった）
   - node-tree はリストの区切り文字・箇条書き記号・フェンスの別・見出しの形式を保持しない（Non-Goals）。レンダラは常に正規化した記法を選ぶ
   - parser-core は解析後に `amark_node_normalize` を呼ぶため、隣接する text は結合されている。文字参照で書いた文字も復号後に結合される
   - Unicode の句読点・空白の分類は、commonmark が最初から非公開モジュール `src/base/unicode_class.{h,c}`（生成物 `src/base/unicode_class_data.c`、`amark_unicode_is_punctuation` / `amark_unicode_is_whitespace`）として作る。レンダラはパーサの非公開ヘッダに依存せずに同じ分類を使える
   - foundation は後方復号 `amark_utf8_decode_previous` を公開する。出力の最後の文字の復号にはこれを使う
   - エラー列挙は 0〜7 が割り当て済み（唯一の定義元は foundation の設計のエラー列挙の表。`INVALID_STATE = 7` を含む）
-- **Implications**: 型・関数の形は html-renderer に合わせる。render_core は変更せず（省略後の EXIT の訪問は html-renderer の規則）、フレームと行の管理は Markdown 側に置く。Unicode 分類は commonmark の `unicode_class` をそのまま使う。新しいエラーコードは作らず、プレフィックスの不正な操作は `AMARK_ERROR_INVALID_STATE` を再利用する
+- **Implications**: 型・関数の形は html-renderer に合わせる。NodeWalk は変更せず（省略後の EXIT の訪問は node-tree の規則）、フレームと行の管理は Markdown 側に置く。Unicode 分類は commonmark の `unicode_class` をそのまま使う。新しいエラーコードは作らず、プレフィックスの不正な操作は `AMARK_ERROR_INVALID_STATE` を再利用する
 
 ## Architecture Pattern Evaluation
 
 | Option | Description | Strengths | Risks / Limitations | Notes |
 |--------|-------------|-----------|---------------------|-------|
-| render_core の走査＋Markdown の訪問関数でフレーム管理（採用） | 駆動部は共有し、訪問関数が ENTER / EXIT ごとにノードフレームを積み降ろす | フックの有無にかかわらずプレフィックスとフレームが釣り合う。render_core を Markdown 非依存に保てる | 省略後の EXIT の訪問が駆動部に必要（html-renderer の RenderCore 手順 3 が提供） | html-renderer の約束どおり |
-| render_core にプレフィックス・行ごとのフックを追加 | 駆動部が行の管理を持つ | 他形式（man など）にも使える | Markdown 固有の処理が共通部に入る（html-renderer の Out of Boundary に反する） | 不採用 |
+| NodeWalk の走査＋Markdown の訪問関数でフレーム管理（採用） | 駆動部は共有し、訪問関数が ENTER / EXIT ごとにノードフレームを積み降ろす | フックの有無にかかわらずプレフィックスとフレームが釣り合う。NodeWalk を Markdown 非依存に保てる | 省略後の EXIT の訪問が駆動部に必要（node-tree の NodeWalk 手順 3 が提供） | node-tree の約束どおり |
+| NodeWalk にプレフィックス・行ごとのフックを追加 | 駆動部が行の管理を持つ | 他形式（man など）にも使える | Markdown 固有の処理が共通部に入る（node-tree の Out of Boundary に反する）。共有ライターの切り出しは第 2 の利用者が現れるまで見送る | 不採用 |
 | 出力を一度中間表現（行のリスト）にしてから整形 | 2 パス | 折り返しが単純 | 確保と処理が倍、フックの書き込みの意味が複雑 | 不採用 |
 | 原文の記法をノードに記憶 | ロスレスに近い | 出力が原文に近い | node-tree の Non-Goals、brief の Out of Boundary | 不採用 |
 
@@ -112,12 +112,13 @@
 
 ## Risks & Mitigations
 - 強調の計画が満たせない形がパース由来の木にも現れる — 往復テストの強調の節で検出し、除外一覧に載せる前に計画の規則を見直す（除外は設計への記載が条件）
-- `render_core.h` の内部契約が変わり、フレームの釣り合いが崩れる — html-renderer の Revalidation Trigger により本仕様を再検証する。`markdown_hook_test.c` で子の省略の後の EXIT を確認する
+- `node_walk.h` の内部契約が変わり、フレームの釣り合いが崩れる — node-tree の Revalidation Trigger により本仕様を再検証する。`markdown_hook_test.c` で子の省略の後の EXIT を確認する
 - 壁時計の時間による線形性の検査が環境で揺れる — 訪問回数・出力のバイト数・確保回数の決定的な計数で検査する
 - 出力の書き換え（直前の文字の置換、折り返しの挿入）がフックの出力を壊す — 書き換えは組み込みの text が書いた最後の文字と、組み込みの text の折り返し候補に限る
 
 ## References
 - [cmark src/commonmark.c](https://github.com/commonmark/cmark/blob/master/src/commonmark.c) — 正規化出力とエスケープの基準
 - [CommonMark Spec 0.31.2](https://spec.commonmark.org/0.31.2/) — flanking、段落、リスト、文字参照の規則
-- `.kiro/specs/html-renderer/design.md` — Cross-Spec Contract と render_core
+- `.kiro/specs/html-renderer/design.md` — Cross-Spec Contract
+- `.kiro/specs/node-tree/design.md` — NodeWalk（フック表と走査駆動部）
 - `.kiro/specs/commonmark/design.md` — 簡易パース、spec の例の抽出器、CharClass

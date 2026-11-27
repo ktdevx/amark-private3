@@ -65,7 +65,7 @@
 
 ### Decision: フックの形は揃え、型はレンダラごとに分ける
 - **Context**: markdown-renderer は同じ形のフック機構を持つ（steering）。GFM 拡張は 1 つの拡張で HTML と Markdown の出力を提供する
-- **Selected Approach**: フック関数は `amark_error_t (*)(context, const amark_node_t *node, amark_node_iter_event_t event, void *user_data)`。context はレンダラごとの opaque 型（`amark_html_context_t` / `amark_markdown_context_t`）。登録は `<renderer>_set_hook(renderer, kind, fn, user_data)`。内部のフック表と走査駆動部（`render_core`）は両レンダラで共有する
+- **Selected Approach**: フック関数は `amark_error_t (*)(context, const amark_node_t *node, amark_node_iter_event_t event, void *user_data)`。context はレンダラごとの opaque 型（`amark_html_context_t` / `amark_markdown_context_t`）。登録は `<renderer>_set_hook(renderer, kind, fn, user_data)`。内部のフック表と走査駆動部は両レンダラで共有する（node-tree の非公開モジュール `node_walk`。下の「走査駆動部を node-tree へ移す」）
 - **Rationale**: 拡張の作者には同じ書き方を、型検査にはレンダラの取り違えの検出を与える。駆動部の共有で ENTER / EXIT、子の省略、エラー伝播の意味が構造的に一致する
 - **Trade-offs**: 拡張は HTML 用と Markdown 用で 2 つの関数を書く（出力内容が違うため本質的に必要）
 
@@ -85,8 +85,14 @@
 
 ### Decision: 子の省略後は駆動部が EXIT を自ら訪問する
 - **Context**: node-tree の `amark_node_iter_reset(iter, node, EXIT)` は「次の `next` はその位置の続きを報告する」。リセットだけでは同じノードの EXIT が報告されず、要件 11.3（子を省略しても出るときの呼び出しを行う）と markdown-renderer のフレームの釣り合いを満たさない
-- **Selected Approach**: `render_core` はリセットの直後に、イベントを EXIT にして同じノードの EXIT で訪問関数を呼ぶ。以後の `next` は EXIT の続きを報告する
+- **Selected Approach**: 走査駆動部はリセットの直後に、イベントを EXIT にして同じノードの EXIT で訪問関数を呼ぶ。以後の `next` は EXIT の続きを報告する（現在は node-tree の NodeWalk の手順。node-tree 要件 14.7）
 - **Rationale**: イテレータの意味を変えずに、ENTER / EXIT がちょうど 1 回ずつ訪問される。HTML の組み込みで子を省略するのは image だけで、その EXIT は何も出さないため出力は変わらない
+
+### Decision: 走査駆動部を node-tree へ移す
+- **Context**: 横断レビュー（2026-11-27）。フック表と走査駆動部は当初、本仕様が非公開の共通層として所有し、markdown-renderer が本仕様の非公開ファイルに依存していた（履歴）
+- **Selected Approach**: 同じ機能のまま node-tree の非公開モジュール `src/tree/node_walk.{h,c}`（NodeWalk、node-tree 要件 14）へ移し、本仕様は使う側になる。要件 10・11 の番号と HTML 側の振る舞いは変えない
+- **Rationale**: 判断と理由の正本は node-tree の `research.md`（2 つの現在の利用者、イテレータの意味に関わる契約、機能の追加なし、実装前で最も安い）
+- **Trade-offs**: NodeWalk の契約の変更は node-tree の Revalidation Trigger として本仕様を再検証する
 
 ### Decision: 線形性は決定的な計数で検査する
 - **Context**: 要件 13.2（ノード数と出力長に線形な時間）。壁時計の時間の比は CI の負荷・環境で揺れ、誤検出と見逃しが起こる
@@ -98,7 +104,7 @@
 - **Rationale**: 既存コードで表現できる。foundation の規則（再利用を優先）に従う
 
 ### Generalization / Build vs Adopt / Simplification
-- Generalization: 「走査＋フック表＋子の省略＋エラー時の巻き戻し」は HTML / Markdown 共通の問題であり、内部モジュール `render_core` として 1 つにした。公開インターフェースは各レンダラに置く
+- Generalization: 「走査＋フック表＋子の省略」は HTML / Markdown 共通の問題であり、node-tree の非公開モジュール `node_walk` として 1 つにした。エラー時の巻き戻しと公開インターフェースは各レンダラに置く
 - Build vs Adopt: cmark のコードはライセンス（BSD-2）上取り込み可能だが、アロケータ・バッファ・ノード API が異なるため規則（表と振る舞い）だけを採用し、実装は自作する。外部依存は増やさない
 - Simplification: ソース位置属性、`CMARK_OPT_SAFE` 以外の cmark オプション（smart、validate-utf8 など。パーサ側の責務）、平坦化中のフック呼び出し、優先順位付きの複数フックは採らない
 

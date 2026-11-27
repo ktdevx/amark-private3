@@ -103,9 +103,23 @@
 - **Rationale**: 利用者の分岐に意味がある区別だけをコードにする。`ALREADY_EXISTS` は parser-core の拡張名の重複にも再利用できる汎用名にする
 
 ### Decision: 葉の判定 `amark_node_kind_is_leaf` を公開する
-- **Context**: 横断レビュー。html-renderer の render_core は、イテレータが ENTER だけを報告する種別（葉）を判定する必要があり、内容モデルから独自に導くと判定がずれるおそれがある
+- **Context**: 横断レビュー。レンダラの走査駆動部（当時は html-renderer 所有。現在は本仕様の NodeWalk）は、イテレータが ENTER だけを報告する種別（葉）を判定する必要があり、内容モデルから独自に導くと判定がずれるおそれがある
 - **Selected Approach**: 当初は内部関数だった `amark_node_kind_is_leaf` を `include/amark/node_kind.h` の公開 API にする（要件 2.7）。定義は `content == AMARK_NODE_CONTENT_NONE`、`NULL` は偽
 - **Rationale**: イテレータとレンダラが同じ関数で葉を判定し、ENTER / EXIT の扱いが常に一致する
+
+### Decision: レンダラ共有の振り分け走査を node-tree の非公開モジュール `node_walk` にする
+- **Context**: 横断レビュー（2026-11-27）。種別ハンドルをキーとするフック表と反復の走査駆動部は、当初 html-renderer が非公開の共通層として所有し、markdown-renderer がその非公開ファイルに依存していた
+- **Alternatives Considered**: 1. html-renderer の所有のまま / 2. node-tree の非公開モジュールへ移す / 3. 公開 API にする、または共有の文字列ライターも切り出す
+- **Selected Approach**: 2。`src/tree/node_walk.{h,c}`（要件 14）に、従来と同じ機能（表の設定・置き換え・解除・検索と、子の省略と省略後の EXIT の訪問を含む反復の駆動部）だけを名前の接頭辞を変えて移す。公開せず、レンダラ固有の処理を持たない。Markdown の行の書き出し（プレフィックスのスタック、折り返し、改行の保証）は markdown-renderer に残す
+- **Rationale**: 現に 2 つの利用者（HTML と Markdown のレンダラ）がある。子の省略後の EXIT の訪問はイテレータ（`amark_node_iter_reset` が続きから報告する）の意味に関わる契約で、まさにその継ぎ目で不具合（省略したノードの EXIT が訪問されない）が見つかった。移しても機能は増えず、実装前の今が最も安い
+- **Not the rationale**: 将来の GFM や第三者のレンダラのための汎用化は理由にしない。公開や共有ライターの切り出しは、実際に第 2 の利用者（レンダラ以外、または別の書き出し形式）が現れるまで見送る
+- **Trade-offs**: node-tree にレンダラ向けの内部モジュールが入る。契約の変更は html-renderer と markdown-renderer の再検証を要する（Revalidation Trigger）
+
+### Decision: `node_walk` はテスト実行ファイルにソースを直接コンパイルして検証する
+- **Context**: foundation の TestHarness はテストが公開 API だけを使うことを原則とする。NodeWalk は非公開で、node-tree の段階では公開 API から到達できない（html-renderer は後に実装され、`tests/support/test_tree` もそのとき作られる）
+- **Alternatives Considered**: 1. html-renderer の公開 API を通してだけ検証する / 2. テスト用の export やフックを本体に置く / 3. `src/tree/node_walk.c` をテスト実行ファイルに直接コンパイルする
+- **Selected Approach**: 3。`amark_node_walk_test` のソースに `src/tree/node_walk.c` を加え、`src/` を include パスに足す。木はテスト内で公開 API だけで組む。1 は node-tree の完了時点で検証できず、2 は foundation 要件 3.4（テスト専用コードを本体に置かない）に反する
+- **Rationale**: `node_walk.c` は公開 API だけを呼ぶため、静的・動的のどちらの構成でもリンクでき、本体には何も足さない。例外はこの 1 実行ファイルに限り、レンダラの公開 API を通した確認（`html_hook_test.c`、`markdown_hook_test.c`）も残す
 
 ### Decision: 正規化は基本保証
 - **Context**: 11.5

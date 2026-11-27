@@ -2,11 +2,11 @@
 
 ## Overview
 
-**Purpose**: Amark の木（または部分木）を CommonMark 方言の Markdown 文字列へレンダリングする。html-renderer と共有する `render_core` の走査駆動部で木を反復走査し、ノード種別ごとにフック表を引いて、なければ組み込みの出力規則を適用する。行頭プレフィックス（ブロック引用の `> `、リスト項目の字下げ）をノード単位のスタックで管理し、行頭・インライン・リンク先・title・info string で文脈に応じたエスケープを行い、強調の区切り文字を flanking の規則から計画する。出力は原文の記法を保持しない正規化した記法で、再パースした木が元の木と同じ HTML になることを正しさの基準とする。
+**Purpose**: Amark の木（または部分木）を CommonMark 方言の Markdown 文字列へレンダリングする。html-renderer と共有する node-tree の非公開の振り分け走査（NodeWalk、`src/tree/node_walk.h`）で木を反復走査し、ノード種別ごとにフック表を引いて、なければ組み込みの出力規則を適用する。行頭プレフィックス（ブロック引用の `> `、リスト項目の字下げ）をノード単位のスタックで管理し、行頭・インライン・リンク先・title・info string で文脈に応じたエスケープを行い、強調の区切り文字を flanking の規則から計画する。出力は原文の記法を保持しない正規化した記法で、再パースした木が元の木と同じ HTML になることを正しさの基準とする。
 
 **Users**: ライブラリ利用者は編集した木を Markdown として書き戻す。拡張の作者（将来の gfm を含む）はフックで拡張種別の Markdown 出力を追加する。保守者は CommonMark 仕様の全例による往復テストで再パースの正しさを確かめる。
 
-**Impact**: 公開ヘッダ `amark/markdown.h`、Markdown 用のソース群、テストを追加する。html-renderer の `render_core`（子の省略後の EXIT の訪問を含む）、commonmark が作る非公開モジュール `src/base/unicode_class.h`、foundation の `amark_utf8_decode_previous` をそのまま使い、上流の仕様には変更を求めない。エラーコードとノード種別は追加しない。
+**Impact**: 公開ヘッダ `amark/markdown.h`、Markdown 用のソース群、テストを追加する。node-tree の非公開モジュール `node_walk`（子の省略後の EXIT の訪問を含む）、commonmark が作る非公開モジュール `src/base/unicode_class.h`、foundation の `amark_utf8_decode_previous` をそのまま使い、上流の仕様には変更を求めない。エラーコードとノード種別は追加しない。
 
 ### Goals
 - CommonMark 方言のパーサが生成した木について、出力の再パースで HTML がバイト単位で一致し（全 652 例、除外 0 件を目標）、2 回目のレンダリングが 1 回目と同一になる
@@ -33,7 +33,7 @@
 - 往復テスト・冪等性テストと、その除外一覧（空を目標）
 
 ### Out of Boundary
-- 走査駆動部とフック表の実装（html-renderer の `render_core`。子を省略したノードの EXIT を訪問する規則を含む）。本仕様は `render_core` を変更せず、Markdown 固有の処理を入れない
+- 走査駆動部とフック表の実装（node-tree の NodeWalk。子を省略したノードの EXIT を訪問する規則を含む）。本仕様は NodeWalk を変更せず、Markdown 固有の処理（行の書き出し）を入れない
 - 木の構造・値・種別とイテレータの振る舞い（node-tree）。本仕様は木を変更しない
 - エラー列挙、アロケータ、バッファ、スライス、UTF-8（foundation）。新しいエラーコードを追加しない
 - CommonMark の構文の解釈と仕様の例の抽出器（commonmark）。往復テストで見つかったパーサ側の不具合の修正は commonmark の作業
@@ -44,16 +44,16 @@
 ### Allowed Dependencies
 - foundation の公開ヘッダ: `amark/export.h`、`amark/error.h`、`amark/memory.h`、`amark/slice.h`、`amark/utf8.h`、`amark/buffer.h`
 - node-tree の公開ヘッダ: `amark/node_kind.h`、`amark/node.h`、`amark/node_iter.h`（`src/tree/node_internal.h` は include しない）
-- 非公開: `src/render/render_core.h`（html-renderer 所有のレンダラ間の内部契約）、`src/base/unicode_class.h`（commonmark 所有。`amark_unicode_is_punctuation` / `amark_unicode_is_whitespace`）
+- 非公開: `src/tree/node_walk.h`（node-tree 所有のレンダラ間の内部契約）、`src/base/unicode_class.h`（commonmark 所有。`amark_unicode_is_punctuation` / `amark_unicode_is_whitespace`）
 - C 標準ライブラリ: `<stddef.h>`、`<stdint.h>`、`<stdbool.h>`、`<string.h>`
 - テストだけ: `amark/commonmark.h`、`amark/html.h`、`tests/support/test_spec_examples.h`、`tests/support/test_tree.h`、`tests/support/test_allocator.h`、Naos
-- 依存方向（左ほど下位。右から左への include のみ）: `foundation, node-tree, render_core, unicode_class → markdown_internal.h → markdown_writer → markdown_escape → markdown_emphasis → markdown_block, markdown_inline → markdown_context → markdown_renderer`。`amark/markdown.h` は foundation と node-tree の公開ヘッダだけを include する。ライブラリ本体の Markdown のソースは html-renderer・parser-core・commonmark のヘッダを include しない
+- 依存方向（左ほど下位。右から左への include のみ）: `foundation, node-tree（node_walk を含む）, unicode_class → markdown_internal.h → markdown_writer → markdown_escape → markdown_emphasis → markdown_block, markdown_inline → markdown_context → markdown_renderer`。`amark/markdown.h` は foundation と node-tree の公開ヘッダだけを include する。ライブラリ本体の Markdown のソースは html-renderer・parser-core・commonmark のヘッダを include しない
 
 ### Revalidation Triggers
 - フック型・コンテキスト操作の意味・ENTER / EXIT の規則の変更（拡張、gfm に影響。html-renderer と同時に変える）
 - 組み込み出力の規則、エスケープ表、強調の計画の規則、設定のフィールドと既定値の変更（往復テストの再実行、利用者の出力差分）
 - 表現できない木の近似規則、往復テストの除外一覧の変更
-- 上流側: html-renderer の `render_core.h` の内部契約（どの変更でも本仕様を再検証する）、node-tree のイテレータと標準種別の値、foundation の `amark_utf8_decode_previous` の意味、commonmark の仕様の版・構文の規則・`unicode_class` の分類と表の版の変更（本仕様が再検証する側）
+- 上流側: node-tree の `node_walk.h` の内部契約（どの変更でも本仕様を再検証する）、イテレータと標準種別の値、html-renderer のフックの形（Cross-Spec Contract）、foundation の `amark_utf8_decode_previous` の意味、commonmark の仕様の版・構文の規則・`unicode_class` の分類と表の版の変更（本仕様が再検証する側）
 
 ## Architecture
 
@@ -63,7 +63,7 @@
 graph TB
     Foundation[foundation buffer slice utf8 memory]
     NodeTree[node-tree kind node iter]
-    RenderCore[render_core hook table and walk]
+    NodeWalk[node-tree node_walk hook table and walk]
     UnicodeClass[unicode_class by commonmark]
     Header[markdown public header]
     Internal[markdown_internal private header]
@@ -77,7 +77,7 @@ graph TB
     Header --> Foundation
     Header --> NodeTree
     Internal --> Header
-    Internal --> RenderCore
+    Internal --> NodeWalk
     Internal --> UnicodeClass
     Writer --> Internal
     Escape --> Writer
@@ -104,7 +104,7 @@ graph TB
 |-------|------------------|-----------------|-------|
 | 言語 | C99（foundation の設定を継承） | 本体とテスト | 新しい依存なし |
 | ランタイム API | foundation（バッファ、スライス、UTF-8、アロケータ） | 出力先、作業領域、復号 | `amark_buffer_truncate`、`amark_utf8_decode`、`amark_utf8_decode_previous`（出力の最後の文字の後方復号） |
-| 木と走査 | node-tree、html-renderer の `render_core` | 入力の走査、フック表 | 子を省略したノードの EXIT も訪問される |
+| 木と走査 | node-tree（公開 API と非公開の NodeWalk） | 入力の走査、フック表 | 子を省略したノードの EXIT も訪問される |
 | 文字分類 | `unicode_class`（commonmark 所有、Unicode 16.0.0 の表） | flanking の判定 | 本仕様は使うだけ |
 | テスト | Naos v0.4.0、`amark_test_support`、commonmark、html-renderer、spec 0.31.2 | 往復・冪等性・単体・失敗注入 | `AMARK_COMMONMARK_SPEC_PATH` |
 | 出力規則の基準 | cmark `commonmark.c`（規則の一部のみ採用、コードは取り込まない） | エスケープ、フェンス、コードスパン | 詳細は `research.md` |
@@ -166,7 +166,7 @@ graph TB
     Restore --> Done
 ```
 
-- フレームはフックの有無にかかわらず子を取りうるノードの ENTER で積み、EXIT で降ろす。html-renderer の `render_core` は子を省略したノードでも同じノードの EXIT を訪問する（html-renderer 設計の RenderCore 手順 3、要件 11.3）ため釣り合う
+- フレームはフックの有無にかかわらず子を取りうるノードの ENTER で積み、EXIT で降ろす。node-tree の NodeWalk は子を省略したノードでも同じノードの EXIT を訪問する（node-tree 設計の NodeWalk 手順 3、node-tree 要件 14.7）ため釣り合う
 - 「parent に通知」: 降ろしたノードが emphasis / strong / list なら、親フレームに「最後に終えた子」と、その記号（区切り文字・箇条書き記号・番号の区切り文字）を記録する（隣接の判定に使う）
 
 ### 行の書き出しの状態
@@ -201,12 +201,12 @@ stateDiagram-v2
 | 8.1–8.5 | 折り返し | MarkdownWriter, MarkdownEscape, MarkdownInline | 折り返し候補の規則 | 行の状態 |
 | 9.1–9.5 | 再パースの正しさ | 全組み込み, RoundTripTest | 組み込み出力の規則 | — |
 | 9.6 | 表現できない木 | MarkdownBlock, MarkdownInline, MarkdownEmphasis | 近似規則の表 | — |
-| 10.1–10.9 | フックの登録 | MarkdownRenderer, RenderCore | `amark_markdown_renderer_set_hook` | — |
-| 11.1–11.4, 11.8, 11.9 | 呼び出しと制御 | RenderCore, MarkdownRenderer, MarkdownContext | `amark_markdown_render_fn_t`、`_skip_children`、`_render_default` | 1 イベント |
+| 10.1–10.9 | フックの登録 | MarkdownRenderer, node-tree NodeWalk | `amark_markdown_renderer_set_hook` | — |
+| 11.1–11.4, 11.8, 11.9 | 呼び出しと制御 | MarkdownRenderer, MarkdownContext, node-tree NodeWalk | `amark_markdown_render_fn_t`、`_skip_children`、`_render_default` | 1 イベント |
 | 11.5, 11.6, 11.7 | コンテキスト操作とプレフィックス | MarkdownContext, MarkdownWriter | `amark_markdown_context_*` | 1 イベント |
 | 11.10 | 利用者の義務 | MarkdownPublicHeader | ヘッダのコメント | — |
 | 12.1–12.6 | エラーと資源 | 全コンポーネント | 共通 API 規約、巻き戻し、作業領域の解放 | 1 イベント |
-| 13.1–13.4 | 深い木、線形、スレッド、グローバル状態なし | RenderCore, MarkdownRenderer, MarkdownWriter, MarkdownEmphasis | 反復走査、フレーム、償却定数の判定、決定的な計数による線形性の検査 | — |
+| 13.1–13.4 | 深い木、線形、スレッド、グローバル状態なし | MarkdownRenderer, node-tree NodeWalk, MarkdownWriter, MarkdownEmphasis | 反復走査、フレーム、償却定数の判定、決定的な計数による線形性の検査 | — |
 | 14.1–14.7 | 往復・冪等性テスト | RoundTripTest, 単体テスト群 | `test_spec_examples_load`、除外一覧 | — |
 
 ## Components and Interfaces
@@ -214,14 +214,14 @@ stateDiagram-v2
 | Component | Domain/Layer | Intent | Req Coverage | Key Dependencies (P0/P1) | Contracts |
 |-----------|--------------|--------|--------------|--------------------------|-----------|
 | MarkdownPublicHeader | 公開 API | 型・関数・利用者の義務の宣言 | 7.1, 10.8, 11.5, 11.10, 12.1 | foundation, node-tree (P0) | Service |
-| MarkdownInternal | 非公開 | 構造体と内部関数の共有定義 | 全体の前提 | RenderCore, commonmark UnicodeClass (P0) | State |
+| MarkdownInternal | 非公開 | 構造体と内部関数の共有定義 | 全体の前提 | node-tree NodeWalk, commonmark UnicodeClass (P0) | State |
 | MarkdownWriter | 行の管理 | 区切り・プレフィックス・行末・折り返し・置換 | 1.7–1.9, 2.2, 2.14, 2.15, 3.9, 8.1–8.5, 11.6, 11.7 | Buffer, Utf8 `amark_utf8_decode_previous` (P0) | Service, State |
 | MarkdownEscape | 符号化 | エスケープ、リンク先・title・info、コード計算 | 2.11, 2.12, 4.5, 4.6, 4.10, 5.1–5.11 | MarkdownWriter (P0) | Service |
 | MarkdownEmphasis | 強調 | 分類・先読み・区切り文字の計画 | 4.7, 6.1–6.6 | MarkdownEscape, commonmark UnicodeClass (P0), Utf8 (P0) | Service |
 | MarkdownBlock | 出力規則 | 標準ブロック種別 | 1.2, 2.1–2.15, 3.1–3.9, 9.6 | MarkdownWriter, MarkdownEscape (P0) | Service |
 | MarkdownInline | 出力規則 | 標準インライン種別 | 4.1–4.11, 8.3, 9.6 | MarkdownEmphasis, MarkdownEscape (P0) | Service |
 | MarkdownContext | フック操作 | フックに渡す出力・制御・参照 | 11.3–11.7 | MarkdownBlock, MarkdownInline, MarkdownWriter (P0) | Service |
-| MarkdownRenderer | 入口 | 設定、レンダラ、フック登録、訪問関数、描画、巻き戻し | 1.1–1.6, 7.1–7.4, 10.1–10.9, 11.1–11.4, 11.8, 11.9, 12.2–12.6, 13.1–13.4 | RenderCore (P0), MarkdownContext (P0) | Service, State |
+| MarkdownRenderer | 入口 | 設定、レンダラ、フック登録、訪問関数、描画、巻き戻し | 1.1–1.6, 7.1–7.4, 10.1–10.9, 11.1–11.4, 11.8, 11.9, 12.2–12.6, 13.1–13.4 | node-tree NodeWalk (P0), MarkdownContext (P0) | Service, State |
 | RoundTripTest | テスト | 全例の往復と冪等性 | 9.1–9.3, 14.1–14.6 | commonmark, html-renderer, SpecExamples (P0) | Batch |
 | UnitTests | テスト | 手組みの木による単体・失敗注入・性能 | 14.7 ほか各要件 | TestTreeSupport, test_allocator (P0) | Batch |
 | MarkdownIntegration | ビルド・テスト登録 | 包括ヘッダ、ビルド、テスト、C++ 検査 | 12.1, 12.2 | foundation BuildSystem (P0) | Batch |
@@ -321,7 +321,7 @@ AMARK_API amark_error_t amark_markdown_context_pop_prefix(amark_markdown_context
 
 - **UnicodeClass**（commonmark 所有）: `src/base/unicode_class.h` の `bool amark_unicode_is_punctuation(uint32_t c)`（ASCII 句読点、または一般カテゴリ P / S）と `bool amark_unicode_is_whitespace(uint32_t c)`（Zs、タブ、LF、FF、CR）。表は生成物 `src/base/unicode_class_data.c`。commonmark が最初からこのモジュールとして作り、パーサの flanking 判定と本仕様の flanking 判定が同一の分類を使う（6.5）。本仕様は include して呼ぶだけで、実装・表・生成器を変更しない
 - **後方復号**（foundation）: `amark/utf8.h` の `amark_utf8_decode_previous`。出力の末尾から最後の 1 文字を復号するのに使い、本仕様は独自の後方復号を持たない
-- **RenderCore**（html-renderer 所有）: `src/render/render_core.h` のフック表と走査駆動部。子を省略したノードでも同じノードの EXIT が 1 回訪問される（html-renderer 要件 11.3）。葉の判定は node-tree の `amark_node_kind_is_leaf`
+- **NodeWalk**（node-tree 所有、要件 14）: `src/tree/node_walk.h` の処理の表 `amark_node_walk_table_*` と走査駆動部 `amark_node_walk_run` / `amark_node_walk_skip_children`。子を省略したノードでも同じノードの EXIT が 1 回訪問される（node-tree 要件 14.7）。葉の判定は node-tree の `amark_node_kind_is_leaf`。行の書き出しは持たない（MarkdownWriter が本仕様に残る）
 
 ### 非公開
 
@@ -338,13 +338,13 @@ AMARK_API amark_error_t amark_markdown_context_pop_prefix(amark_markdown_context
 ```c
 /* src/markdown/markdown_internal.h（非公開。宣言は AMARK_API を付けず export しない） */
 #include <amark/markdown.h>
-#include "render/render_core.h"
+#include "tree/node_walk.h"
 #include "base/unicode_class.h"
 
 struct amark_markdown_renderer
 {
     amark_markdown_options_t options;
-    amark_render_hook_table_t hooks;
+    amark_node_walk_table_t hooks;
 };
 
 typedef enum amark_md_class { AMARK_MD_CLASS_SPACE, AMARK_MD_CLASS_PUNCT, AMARK_MD_CLASS_OTHER } amark_md_class_t;
@@ -387,7 +387,7 @@ struct amark_markdown_context
 {
     const amark_markdown_renderer_t *renderer;  /* 設定とフック表（単発描画ではスタック上の一時レンダラ） */
     amark_md_writer_t writer;
-    amark_render_walk_t *walk;
+    amark_node_walk_t *walk;
     amark_md_frame_t *frames;     /* 子を取りうる開いているノードのフレーム（深さ順） */
     size_t frame_count, frame_capacity;
     const amark_node_t *root;
@@ -614,7 +614,7 @@ struct amark_markdown_context
 - `write_url(ctx, url)` / `write_title(ctx, title)`: リンク先 / title の書式（title は引用符を含めて書く）
 - `ensure_newline(ctx)` / `ensure_blank_line(ctx)`: Writer の `ensure(1)` / `ensure(2)`
 - `push_prefix(ctx, prefix)` / `pop_prefix(ctx)`: Writer のプレフィックス操作。ノードを出るときに自動で戻る（11.6）。積んでいない段の pop は `AMARK_ERROR_INVALID_STATE`（11.7）
-- `skip_children(ctx)`: `amark_render_walk_skip_children`。ENTER で葉でないときだけ効果。`NULL` は何もしない（11.3）
+- `skip_children(ctx)`: `amark_node_walk_skip_children`。ENTER で葉でないときだけ効果。`NULL` は何もしない（11.3）
 - `render_default(ctx)`: `amark_md_standard_render`。現在の (ノード, イベント) の組み込み出力（拡張種別は区切りだけ）（11.4）
 - `get_options(ctx)`: 描画に使っている設定。`NULL` は `NULL`
 - `context == NULL` は `AMARK_ERROR_INVALID_ARGUMENT`（`void` / ポインタを返すものを除く）。書き込みの失敗は戻り値で返し、フックがそれを返せば描画が中止され巻き戻される
@@ -634,10 +634,10 @@ struct amark_markdown_context
 - 設定の検証（7.3）: 各 `char` が定義された値のいずれか、列挙が定義済みの値なら有効。`wrap_width` は任意の値
 - `amark_markdown_renderer_create(options, renderer)`: `renderer == NULL`、非 `NULL` の `options` が無効なら `AMARK_ERROR_INVALID_ARGUMENT`。`options == NULL` は既定値。1 回の `amark_malloc`（失敗で `AMARK_ERROR_NO_MEMORY`、`*renderer` は変更しない、12.4）、設定の複製、フック表の初期化（7.4、10.9）
 - `amark_markdown_renderer_destroy`: フック表を deinit して解放。`NULL` は何もしない（12.5）
-- `amark_markdown_renderer_set_hook(renderer, kind, render, user_data)`: `renderer` / `kind` の `NULL` は `AMARK_ERROR_INVALID_ARGUMENT`（10.7）。`amark_render_hook_table_set` の結果を返す（置き換え・解除・追加の規則は html-renderer と同じ、10.1〜10.6）
+- `amark_markdown_renderer_set_hook(renderer, kind, render, user_data)`: `renderer` / `kind` の `NULL` は `AMARK_ERROR_INVALID_ARGUMENT`（10.7）。`amark_node_walk_table_set` の結果を返す（置き換え・解除・追加の規則は html-renderer と同じ、10.1〜10.6）
 - `amark_markdown_renderer_render(renderer, root, output)`（1.5: いずれかの `NULL` は `AMARK_ERROR_INVALID_ARGUMENT`）:
   1. コンテキストをスタック上に用意し、Writer を初期化（`start = output->length`）。起点のフレームの外側に、強調のスコープとなる番兵のフレームを 1 つ置く
-  2. `amark_render_walk_run(&walk, root, &renderer->hooks, visit, &context)`
+  2. `amark_node_walk_run(&walk, root, &renderer->hooks, visit, &context)`
   3. 成功なら `flush_end`
   4. 作業領域（フレーム、プレフィックス、`scratch`）を解放する（12.6）
   5. 2・3 が失敗なら `amark_buffer_truncate(output, start)` してその結果を返す（12.3）
@@ -697,7 +697,7 @@ struct amark_markdown_context
   - 除外一覧: 例の番号と理由の静的な表（初期は空）。載った例だけを比較から外し、外した数を表示する（14.5）。除外を加えるときは本書の「表現できない木」に理由を記す
   - 全例の処理後、計測アロケータで `live == 0`
 - C++ 検査とヘッダ単独 include 検査（MarkdownIntegration）
-- 上流の前提の確認: `markdown_hook_test.c` で子を省略したノードの EXIT でフックが呼ばれ、フレームとプレフィックスが釣り合うこと（`render_core` の規則の検証は html-renderer の `html_hook_test.c` が所有する）
+- 上流の前提の確認: `markdown_hook_test.c` で子を省略したノードの EXIT でフックが呼ばれ、フレームとプレフィックスが釣り合うこと（NodeWalk の規則の検証は node-tree の `node_walk_test.c` が所有する）
 
 ### Performance
 - 深さ 10 万段の描画が完了する（13.1）
@@ -714,7 +714,8 @@ struct amark_markdown_context
 ## Upstream Dependencies
 
 本仕様は上流の仕様に変更を求めない。次の上流の提供物を前提にする。
-- html-renderer: `src/render/render_core.h`（レンダラ間の内部契約）。子の省略を要求した非葉ノードについても、同じノードの EXIT で訪問関数が 1 回呼ばれる（html-renderer 設計の RenderCore 手順 3）。この契約の変更は本仕様の再検証を要する
+- node-tree: `src/tree/node_walk.h`（NodeWalk、レンダラ間の内部契約）。子の省略を要求した非葉ノードについても、同じノードの EXIT で訪問関数が 1 回呼ばれる（node-tree 要件 14.7）。この契約の変更は本仕様の再検証を要する（node-tree の Revalidation Trigger）
+- html-renderer: フックの形（Cross-Spec Contract）、テストで使う `amark_html_render` と `tests/support/test_tree.h`。本仕様は html-renderer の非公開ファイルに依存しない
 - commonmark: `src/base/unicode_class.{h,c}` と生成物 `src/base/unicode_class_data.c`（`amark_unicode_is_punctuation` / `amark_unicode_is_whitespace`）。commonmark が最初から作る
 - foundation: `amark_utf8_decode_previous`（後方復号）と、エラー列挙の表（`AMARK_ERROR_INVALID_STATE` = 7 を含む 0〜7）
 - node-tree: `amark_node_kind_is_leaf`、`amark_node_iter_reset` の意味

@@ -297,7 +297,7 @@ sequenceDiagram
 - トップレベル時に `CMAKE_RUNTIME_OUTPUT_DIRECTORY` が未定義なら `${PROJECT_BINARY_DIR}/bin` とする（3.3）
 - `src/CMakeLists.txt` のターゲット `amark`:
   - ソース: `src/<dir>/*.c` を `src/` からの相対パス（例: `base/buffer.c`）で列挙する。glob は使わない。本 spec では `base/` の error、memory、slice、utf8、buffer、version。テスト用のソースは含めない（3.4）
-  - サブディレクトリ: モジュール群ごとに `src/base/`（基盤）、`src/tree/`（node-tree）、`src/parser/`（parser-core）、`src/render/`（レンダラ共通層）、`src/html/`、`src/markdown/`、`src/commonmark/`。新しい構文群（例: 将来の GFM）は `src/<name>/` を足す。`src/` 全体でファイルのベース名を一意に保つ（静的ライブラリのメンバ名とオブジェクト名の衝突を避け、grep で所属が分かるようにする）
+  - サブディレクトリ: モジュール群ごとに `src/base/`（基盤）、`src/tree/`（node-tree）、`src/parser/`（parser-core）、`src/html/`、`src/markdown/`、`src/commonmark/`。新しい構文群（例: 将来の GFM）は `src/<name>/` を足す。`src/` 全体でファイルのベース名を一意に保つ（静的ライブラリのメンバ名とオブジェクト名の衝突を避け、grep で所属が分かるようにする）
   - 非公開の include ディレクトリ: `${PROJECT_SOURCE_DIR}/src`（PRIVATE）。非公開ヘッダは `src/` からの相対パスで include する（例: `#include "tree/node_internal.h"`）。同じディレクトリ内でも同じ書き方にする
   - プロパティ: `C_STANDARD 99`、`C_STANDARD_REQUIRED ON`、`C_EXTENSIONS OFF`、`C_VISIBILITY_PRESET hidden`、`VISIBILITY_INLINES_HIDDEN ON`、`DEBUG_POSTFIX d`、`OUTPUT_NAME amark`、`VERSION ${PROJECT_VERSION}`、`SOVERSION`（1.0 前は `0.<minor>`、以後 `<major>`）、`EXPORT_NAME amark`
   - include ディレクトリ: `$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>`、`$<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>`、`$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>`
@@ -663,7 +663,7 @@ AMARK_API amark_slice_t amark_buffer_as_slice(const amark_buffer_t *buffer);
 - `tests/CMakeLists.txt` は `AMARK_BUILD_TESTS AND BUILD_TESTING` のときだけ読み込まれる
 - Naos: `FetchContent_Declare(Naos GIT_REPOSITORY https://github.com/vabelorg/naos.git GIT_TAG v0.4.0)` と `FetchContent_MakeAvailable(Naos)`（3.1）
 - モジュールごとに 1 実行ファイル: `naos_add_executable(amark_<module>_test SOURCES <module>_test.c LIBRARIES Amark::amark amark_test_support)`。CTest 名は `amark_<module>_test.<suite>.<test>`（3.2）。各テストターゲットに `amark_target_warnings` を適用する
-- テストは `#include <amark/amark.h>` または個別の公開ヘッダだけを使い、`src/` を include しない。動的構成では非公開シンボルが見えないため、公開 API 以外を呼ぶテストはリンクに失敗する（3.5）
+- テストは `#include <amark/amark.h>` または個別の公開ヘッダだけを使い、`src/` を include しない。動的構成では非公開シンボルが見えないため、公開 API 以外を呼ぶテストはリンクに失敗する（3.5）。唯一の例外は node-tree の `amark_node_walk_test` で、公開 API から到達できない非公開モジュール `src/tree/node_walk.c`（公開 API だけを呼ぶ）をテスト実行ファイルに直接コンパイルして検証する（node-tree の設計の NodeWalk）。ライブラリ本体には何も加えない（3.4）
 - ヘッダ単独 include 検査: 公開ヘッダ（`include/amark/*.h` と生成された `version.h`）ごとに、そのヘッダだけを include する翻訳単位をビルドツリーに生成し、オブジェクトライブラリ `amark_header_check` としてビルドする。どれかが単独でコンパイルできなければビルドが失敗する（11.3）。生成した翻訳単位は `src/` を include パスに含めずにコンパイルし、公開ヘッダが非公開ヘッダに依存していればコンパイルに失敗する（11.6）
 - C++ 検査: `enable_language(CXX)` を `tests/` 内で行い、`cxx_header_test.cpp`（C++11）を `naos_add_executable(amark_cxx_header_test ...)` で登録する。`amark.h` を include し、`amark_error_string`、`amark_slice_from_cstr`、バッファの追記と後片付けを呼んでリンクできることを確認する（11.4）。後続 spec は自分の主要 API の呼び出しを、spec 名のコメント付きのテストまたはブロックとして追記する
 - 後続 spec のテスト登録: `tests/CMakeLists.txt` の末尾に spec 名のコメント付きブロックを追記し、上と同じ `naos_add_executable` の形で自分のモジュールのテストを登録する。テスト補助を追加する場合は同じブロックで `amark_test_support` のソース一覧に `support/test_<area>.c` を追記する（`target_sources(amark_test_support PRIVATE ...)`）。いずれも追記専用（「BuildSystem」の共有の骨組みファイルの規則）
@@ -791,7 +791,7 @@ test_allocator_stats_t test_allocator_stats(void);
 
 #### SteeringUpdate
 - 以下は設計段階で steering に反映済み。実装時は実際のファイル構成・オプション名・コマンドとの差分だけを同期する（12.5）
-- `structure.md`: 確定したディレクトリ構成（公開ヘッダはモジュール単位の `include/amark/<module>.h`）、モジュールの依存方向、テスト配置（モジュールごとの実行ファイル、`tests/support/` と `test_<area>` の命名、`tests/data/`、`tests/package/`）、`tools/` の生成スクリプト、レンダラ共通の内部層 `src/render/render_core.h`、公開ヘッダの規約（include ガード、`AMARK_BEGIN_DECLS`、`AMARK_API`）、共有の骨組みファイルの追記規則
+- `structure.md`: 確定したディレクトリ構成（公開ヘッダはモジュール単位の `include/amark/<module>.h`）、モジュールの依存方向、テスト配置（モジュールごとの実行ファイル、`tests/support/` と `test_<area>` の命名、`tests/data/`、`tests/package/`）、`tools/` の生成スクリプト、レンダラが共有する非公開の振り分け走査 `src/tree/node_walk.h`（node-tree 所有）、公開ヘッダの規約（include ガード、`AMARK_BEGIN_DECLS`、`AMARK_API`）、共有の骨組みファイルの追記規則
 - `tech.md`: ビルドオプション表、Common Commands（警告エラー化、インストール、利用者確認）、命名例の修正（`void amark_buffer_init`、出力引数で返す `amark_node_create`）、文字列の所有権規約、エラーコード一覧表の規則（本書が唯一の正本、末尾追加、4 か所同時更新）、機械的に検査する規約（整形、ソースヘッダ、`-Wswitch`、ヘッダ単独 include）と検査しない規約（演算順序の括弧付け、ステップ間の空行、命名の一部）、clang-format 18、リリース手順（12.1、12.4、12.5）
 - 命名規約（11.1、11.2）は本書の全インターフェースで守り、steering にも明記する
 
