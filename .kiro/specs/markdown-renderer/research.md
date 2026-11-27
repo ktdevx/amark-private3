@@ -40,11 +40,11 @@
 ### 上流設計との整合
 - **Sources Consulted**: `.kiro/specs/html-renderer/design.md`（Cross-Spec Contract）、`.kiro/specs/node-tree/design.md`、`.kiro/specs/commonmark/design.md`、`.kiro/specs/parser-core/design.md`、`.kiro/specs/foundation/design.md`
 - **Findings**:
-  - html-renderer は `amark_markdown_*` の型・関数・コンテキスト操作の名前と規則を指定し、`src/render_core.h`（フック表 `amark_render_hook_table_*`、走査 `amark_render_walk_run`、`amark_render_walk_skip_children`。葉の判定は node-tree の `amark_node_kind_is_leaf`）を複製せずに使うことを求める。Markdown 固有の処理を render_core に入れないことも求める
+  - html-renderer は `amark_markdown_*` の型・関数・コンテキスト操作の名前と規則を指定し、`src/render/render_core.h`（フック表 `amark_render_hook_table_*`、走査 `amark_render_walk_run`、`amark_render_walk_skip_children`。葉の判定は node-tree の `amark_node_kind_is_leaf`）を複製せずに使うことを求める。Markdown 固有の処理を render_core に入れないことも求める
   - node-tree の `amark_node_iter_reset` は「次の next はその続きを報告する」。当初の render_core の手順 3 は EXIT の訪問を行う記述がなかったが、横断レビューの結果 html-renderer 側で修正され、リセットの直後に同じノードの EXIT を訪問する（html-renderer 要件 11.3）
   - node-tree はリストの区切り文字・箇条書き記号・フェンスの別・見出しの形式を保持しない（Non-Goals）。レンダラは常に正規化した記法を選ぶ
   - parser-core は解析後に `amark_node_normalize` を呼ぶため、隣接する text は結合されている。文字参照で書いた文字も復号後に結合される
-  - Unicode の句読点・空白の分類は、commonmark が最初から非公開モジュール `src/unicode_class.{h,c}`（生成物 `src/unicode_class_data.c`、`amark_unicode_is_punctuation` / `amark_unicode_is_whitespace`）として作る。レンダラはパーサの非公開ヘッダに依存せずに同じ分類を使える
+  - Unicode の句読点・空白の分類は、commonmark が最初から非公開モジュール `src/base/unicode_class.{h,c}`（生成物 `src/base/unicode_class_data.c`、`amark_unicode_is_punctuation` / `amark_unicode_is_whitespace`）として作る。レンダラはパーサの非公開ヘッダに依存せずに同じ分類を使える
   - foundation は後方復号 `amark_utf8_decode_previous` を公開する。出力の最後の文字の復号にはこれを使う
   - エラー列挙は 0〜7 が割り当て済み（唯一の定義元は foundation の設計のエラー列挙の表。`INVALID_STATE = 7` を含む）
 - **Implications**: 型・関数の形は html-renderer に合わせる。render_core は変更せず（省略後の EXIT の訪問は html-renderer の規則）、フレームと行の管理は Markdown 側に置く。Unicode 分類は commonmark の `unicode_class` をそのまま使う。新しいエラーコードは作らず、プレフィックスの不正な操作は `AMARK_ERROR_INVALID_STATE` を再利用する
@@ -96,7 +96,7 @@
 - **Alternatives Considered**:
   1. 非 ASCII を常に参照にする — 日本語が読めなくなる
   2. markdown-renderer が commonmark_internal.h を include — レンダラがパーサに依存する（structure.md 違反）
-  3. commonmark が最初から作る非公開モジュール `src/unicode_class.{h,c}`（生成物 `src/unicode_class_data.c`）を include して使う（採用）
+  3. commonmark が最初から作る非公開モジュール `src/base/unicode_class.{h,c}`（生成物 `src/base/unicode_class_data.c`）を include して使う（採用）
 - **Rationale**: パーサとレンダラが同一の分類を使い、表の重複がない。本仕様が commonmark のファイルを移設・変更する必要がない（横断レビューで決定）
 - **Follow-up**: commonmark の分類の表の版が変わったら本仕様の往復テストを再実行する（Revalidation Trigger）
 

@@ -27,7 +27,7 @@
 - **Findings**:
   - 失敗しうる関数は `amark_error_t` を返し、結果は出力引数で返す。必須ポインタが `NULL` なら `AMARK_ERROR_INVALID_ARGUMENT`。失敗時は呼び出し前の状態を保つ（強い保証）
   - 文字列は借用が `amark_slice_t`、所有が NUL 終端付きの長さ付き文字列。UTF-8 の検査は入力を受け取るモジュールが `amark_utf8_validate` で行う
-  - エラー列挙は末尾追加のみ。追加時は `error.h`、`src/error.c`、`tests/error_test.c` を同時に更新する
+  - エラー列挙は末尾追加のみ。追加時は `error.h`、`src/base/error.c`、`tests/error_test.c` を同時に更新する
   - 可変のグローバル状態はアロケータだけ。テストはモジュールごとの実行ファイルで、公開 API だけを使い、失敗注入は `tests/support/` の差し替えアロケータで行う
   - steering の `tech.md` の例 `amark_node_t *amark_node_create(amark_node_type_t type)` は、foundation 確定後の規約（エラー戻り値＋出力引数）と食い違っている
 - **Implications**: `amark_node_create(type, &node)` の形を採り、tech.md の例は実装時に更新する。新しいエラーコードは 2 つだけ foundation の列挙へ追加する。値の設定時に UTF-8 を検査する

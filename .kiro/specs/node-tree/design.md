@@ -45,7 +45,7 @@
 - foundation の公開ヘッダ: `amark/export.h`、`amark/error.h`、`amark/memory.h`、`amark/slice.h`、`amark/utf8.h`（`amark/buffer.h` は使わない）
 - C 標準ライブラリ: `<stddef.h>`、`<stdint.h>`、`<stdbool.h>`、`<string.h>`
 - テスト: Naos、`tests/support/` の差し替えアロケータ（foundation 提供）
-- 依存方向（左ほど下位。右から左への include のみ許可）: `foundation → node_kind → node → node_iter`。`src/node_internal.h` は node-tree の `.c` だけが include し、公開ヘッダからは include しない。node-tree は parser-core やレンダラのヘッダを include しない
+- 依存方向（左ほど下位。右から左への include のみ許可）: `foundation → node_kind → node → node_iter`。`src/tree/node_internal.h` は node-tree の `.c` だけが include し、公開ヘッダからは include しない。node-tree は parser-core やレンダラのヘッダを include しない
 
 ### Revalidation Triggers
 - `amark_node_type_t` の既存値の変更・削除（禁止。標準種別の追加は 19〜254 に末尾追加）、`AMARK_NODE_EXTENSION` の値の変更
@@ -105,14 +105,15 @@ include/amark/
 ├── node.h               # amark_node_t、生成・破棄、種別・参照、値のアクセサ、付随データ、編集、正規化
 └── node_iter.h          # amark_node_iter_t とイベント、走査 API、走査中の編集の安全性規則（コメント）
 src/
-├── node_internal.h      # 非公開: struct amark_node_kind、struct amark_node、所有文字列、内部関数の宣言（export しない）
-├── node_kind.c          # 標準種別の static const 表、種別の問い合わせ、受け入れ判定 can_contain
-├── node_registry.c      # レジストリの生成・破棄、種別の登録（記述子と名前の検証、複製）、名前による検索
-├── node.c               # ノードの生成（標準・拡張）、取り外し、値の解放と反復による破棄、種別の取得、親・子・兄弟の参照
-├── node_value.c         # 見出し・リスト・文字列値のアクセサ、付随データの設定と取得、所有文字列の置き換え
-├── node_edit.c          # 追加・挿入・置換、循環と親子規則の検証、移動（取り外しは node.c を使う）
-├── node_normalize.c     # 反復走査による隣接 text の結合と空 text の除去
-└── node_iter.c          # イテレータの初期化、次イベントの遅延計算、位置の再設定
+└── tree/
+    ├── node_internal.h      # 非公開: struct amark_node_kind、struct amark_node、所有文字列、内部関数の宣言（export しない）
+    ├── node_kind.c          # 標準種別の static const 表、種別の問い合わせ、受け入れ判定 can_contain
+    ├── node_registry.c      # レジストリの生成・破棄、種別の登録（記述子と名前の検証、複製）、名前による検索
+    ├── node.c               # ノードの生成（標準・拡張）、取り外し、値の解放と反復による破棄、種別の取得、親・子・兄弟の参照
+    ├── node_value.c         # 見出し・リスト・文字列値のアクセサ、付随データの設定と取得、所有文字列の置き換え
+    ├── node_edit.c          # 追加・挿入・置換、循環と親子規則の検証、移動（取り外しは node.c を使う）
+    ├── node_normalize.c     # 反復走査による隣接 text の結合と空 text の除去
+    └── node_iter.c          # イテレータの初期化、次イベントの遅延計算、位置の再設定
 tests/
 ├── node_kind_test.c       # 標準種別の識別値・名前・分類・内容モデル、受け入れ判定の全組み合わせ
 ├── node_registry_test.c   # 登録・検索・名前規則・重複・記述子の矛盾、失敗注入、ハンドルの安定性
@@ -126,13 +127,13 @@ tests/
 ### Modified Files
 実装時に node-tree のタスクとして変更する（本 spec の作成時には変更しない）。
 - `include/amark/error.h` — `AMARK_ERROR_INVALID_CHILD = 5`、`AMARK_ERROR_ALREADY_EXISTS = 6` を末尾に追加（値は foundation design.md のエラー表で登録済み。Cross-Spec Change Note 参照）
-- `src/error.c` — 追加コードの文字列を `switch` に追加
+- `src/base/error.c` — 追加コードの文字列を `switch` に追加
 - `tests/error_test.c` — 追加コードの値と文字列の確認を追加
 - `include/amark/amark.h` — `node_kind.h`、`node.h`、`node_iter.h` の include を node-tree のブロックとして追記
-- `src/CMakeLists.txt` — `node_kind.c`、`node_registry.c`、`node.c`、`node_value.c`、`node_edit.c`、`node_normalize.c`、`node_iter.c` をソース一覧に追記
+- `src/CMakeLists.txt` — `tree/node_kind.c`、`tree/node_registry.c`、`tree/node.c`、`tree/node_value.c`、`tree/node_edit.c`、`tree/node_normalize.c`、`tree/node_iter.c` をソース一覧に追記
 - `tests/CMakeLists.txt` — 7 つのテスト実行ファイル `amark_node_kind_test` ほかを `naos_add_executable` で追記登録
 - `tests/cxx_header_test.cpp` — C++ から木の生成・追加・走査・破棄を呼ぶ確認を追記
-- 上の 4 つ（と `error.h`・`src/error.c`・`tests/error_test.c`）は foundation が所有する追記専用の共有ファイルである。node-tree は自分のブロックを末尾に追記するだけで、既存の行を変更・並べ替えしない
+- 上の 4 つ（と `error.h`・`src/base/error.c`・`tests/error_test.c`）は foundation が所有する追記専用の共有ファイルである。node-tree は自分のブロックを末尾に追記するだけで、既存の行を変更・並べ替えしない
 - `.kiro/steering/tech.md` — 命名の例 `amark_node_t *amark_node_create(amark_node_type_t type);` を確定した `amark_error_t amark_node_create(amark_node_type_t type, amark_node_t **node);` に直す
 
 ## Cross-Spec Change Note（foundation のエラー列挙）
@@ -140,7 +141,7 @@ tests/
 本仕様が使う追加コード `AMARK_ERROR_INVALID_CHILD = 5`（`"invalid child node"`）と `AMARK_ERROR_ALREADY_EXISTS = 6`（`"already exists"`）は、foundation design.md のエラー表（0〜7 と所有 spec の一覧。値・文字列・意味の唯一の定義元）に登録済みである。本書では再定義しない。
 
 - 本仕様での使い方: `INVALID_CHILD` は編集操作の親子規則違反・循環・document を子にする場合、`ALREADY_EXISTS` は種別名の重複（標準名を含む）。`ALREADY_EXISTS` は parser-core の拡張名などにも再利用される汎用の意味である
-- 実装時は node-tree のタスクとして `error.h`、`src/error.c`、`tests/error_test.c` に 2 コードを同時に追記する（追記専用。既存の値は変えない）
+- 実装時は node-tree のタスクとして `error.h`、`src/base/error.c`、`tests/error_test.c` に 2 コードを同時に追記する（追記専用。既存の値は変えない）
 - 種別の不一致（値を持たない種別へのアクセス）、範囲外の値、親を持たない兄弟への挿入などは既存の `AMARK_ERROR_INVALID_ARGUMENT` を使う
 
 ## System Flows
@@ -252,7 +253,7 @@ stateDiagram-v2
 
 ##### State Management
 ```c
-/* src/node_internal.h（公開ヘッダから include しない。宣言は AMARK_API を付けず export しない） */
+/* src/tree/node_internal.h（公開ヘッダから include しない。宣言は AMARK_API を付けず export しない） */
 typedef struct amark_node_string
 {
     char *data;    /* NULL（未設定 = 空文字列）または amark_malloc で確保した length + 1 バイト */
@@ -312,7 +313,7 @@ amark_slice_t amark_node_string_get(const amark_node_string_t *string);         
 | Requirements | 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 4.7, 6.1, 6.2, 6.3, 6.4, 6.5, 6.6 |
 
 **Responsibilities & Constraints**
-- 標準種別は `src/node_kind.c` の `static const struct amark_node_kind` の表に持つ。可変のグローバル状態ではない。ハンドルはプロセス内で常に同一（2.6）
+- 標準種別は `src/tree/node_kind.c` の `static const struct amark_node_kind` の表に持つ。可変のグローバル状態ではない。ハンドルはプロセス内で常に同一（2.6）
 - 受け入れ判定は本コンポーネントだけが持つ。編集（NodeEdit）は必ずこれを呼ぶ（6.6 の「編集と同じ判定」を構造的に保証する）
 
 **Contracts**: Service [x]
@@ -750,7 +751,7 @@ AMARK_API amark_error_t amark_node_iter_reset(amark_node_iter_t *iter, amark_nod
 | Intent | foundation の列挙へ 2 コードを追加する |
 | Requirements | 12.1 |
 
-- foundation design.md のエラー表に登録済みの値（5、6）と文字列どおりに、`error.h`・`src/error.c`・`tests/error_test.c` へ同時に追記する。foundation の `-Wswitch` による文字列漏れ検出がそのまま働く
+- foundation design.md のエラー表に登録済みの値（5、6）と文字列どおりに、`error.h`・`src/base/error.c`・`tests/error_test.c` へ同時に追記する。foundation の `-Wswitch` による文字列漏れ検出がそのまま働く
 
 #### NodeIntegration
 

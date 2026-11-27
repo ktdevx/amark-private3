@@ -106,7 +106,7 @@
 
 ### Decision: 句読点・空白の分類を共有の非公開モジュールにする
 - **Context**: 要件 7.1、10.2。markdown-renderer も出力側の flanking で同じ分類を必要とする
-- **Selected Approach**: 最初から `src/unicode_class.{h,c}` と生成物 `src/unicode_class_data.c` に `amark_unicode_is_punctuation` / `amark_unicode_is_whitespace` を置く（非公開、export しない）。畳み込みの表はラベルの正規化だけが使うため `src/commonmark_unicode_data.c` に commonmark 専用として残す。生成器は 2 つのファイルを出力する。直前の文字の復号は foundation の `amark_utf8_decode_previous` を使う
+- **Selected Approach**: 最初から `src/base/unicode_class.{h,c}` と生成物 `src/base/unicode_class_data.c` に `amark_unicode_is_punctuation` / `amark_unicode_is_whitespace` を置く（非公開、export しない）。畳み込みの表はラベルの正規化だけが使うため `src/commonmark/commonmark_unicode_data.c` に commonmark 専用として残す。生成器は 2 つのファイルを出力する。直前の文字の復号は foundation の `amark_utf8_decode_previous` を使う
 - **Rationale**: レンダラがパーサの非公開ヘッダに依存せず、同一の表と判定を共有できる
 
 ## Risks & Mitigations

@@ -29,7 +29,7 @@
 - 標準 18 種別の HTML 出力規則（本書の「組み込み出力の表」）、HTML エスケープ表、URL 安全文字表、危険な URL の判定規則
 - 安全性の既定値（生 HTML・危険な URL を抑止）と soft break の出力方法
 - フックの呼び出し規則（ENTER / EXIT、葉は ENTER のみ、子の省略、組み込みへの委譲、未登録の拡張種別は透過、エラー伝播、失敗時の出力の巻き戻し）
-- レンダラ共通の内部モジュール `render_core`（フック表と走査駆動部）。`src/render_core.h` はレンダラ間で共有する非公開の内部契約（cross-renderer internal contract）であり、本仕様が所有する。markdown-renderer はこれを複製せずに再利用する
+- レンダラ共通の内部モジュール `render_core`（フック表と走査駆動部）。`src/render/render_core.h` はレンダラ間で共有する非公開の内部契約（cross-renderer internal contract）であり、本仕様が所有する。markdown-renderer はこれを複製せずに再利用する
 - Cross-Spec Contract（markdown-renderer が揃えるべき形、拡張・parser-core との結び付け方、commonmark の適合テストの設定）
 
 ### Out of Boundary
@@ -41,14 +41,14 @@
 
 ### Allowed Dependencies
 - foundation の公開ヘッダ: `amark/export.h`、`amark/error.h`、`amark/memory.h`、`amark/slice.h`、`amark/buffer.h`
-- node-tree の公開ヘッダ: `amark/node_kind.h`、`amark/node.h`、`amark/node_iter.h`（`src/node_internal.h` は include しない）
+- node-tree の公開ヘッダ: `amark/node_kind.h`、`amark/node.h`、`amark/node_iter.h`（`src/tree/node_internal.h` は include しない）
 - C 標準ライブラリ: `<stddef.h>`、`<stdint.h>`、`<stdbool.h>`、`<string.h>`
 - テスト: Naos、foundation の `amark_test_support`（差し替えアロケータ）と本仕様が追加する木の組み立て補助
 - 依存方向（左ほど下位。右から左への include のみ許可）: `foundation, node-tree → render_core → html_escape → html_internal → html_standard → html_context → html_renderer`。`amark/html.h` は foundation と node-tree の公開ヘッダだけを include する。`render_core` は HTML のファイルを include しない
 
 ### Revalidation Triggers
 - フック型の引数・戻り値、コンテキスト操作の意味（子の省略、委譲、行頭保証）、ENTER / EXIT の呼び出し規則の変更（markdown-renderer と拡張に影響）
-- `src/render_core.h` の内部契約（型、関数、走査の手順、子の省略後の EXIT の訪問を含む）の変更。どのような変更でも markdown-renderer の再検証を要する
+- `src/render/render_core.h` の内部契約（型、関数、走査の手順、子の省略後の EXIT の訪問を含む）の変更。どのような変更でも markdown-renderer の再検証を要する
 - 組み込み出力の表、エスケープ表、URL 安全文字表、危険な URL 判定の変更（commonmark の適合テストに影響）
 - 安全性の既定値、設定構造体のフィールドの変更
 - 失敗時の出力の巻き戻し規則、フック登録の置き換え・解除の規則の変更
@@ -108,13 +108,15 @@ graph TB
 include/amark/
 └── html.h                    # 設定、レンダラ、フック型、コンテキスト操作、単発描画、エスケープ・URL ユーティリティ、利用者の義務（コメント）
 src/
-├── render_core.h             # 非公開（レンダラ共通）: フック表と走査駆動部の型・関数。export しない
-├── render_core.c             # フック表の init/deinit/set/find、走査駆動部（イテレータ、子の省略と省略後の EXIT の訪問。葉の判定は node-tree の amark_node_kind_is_leaf）
-├── html_escape.c             # amark_html_escape、amark_html_escape_url、amark_html_url_is_dangerous（static const の表）
-├── html_internal.h           # 非公開: struct amark_html_context、struct amark_html_renderer、設定の検証、組み込み出力の宣言
-├── html_standard.c           # 標準 18 種別の組み込み出力、行頭保証、tight 判定、画像の alt 平坦化
-├── html_context.c            # amark_html_context_* の公開関数
-└── html_renderer.c           # 設定の初期化、レンダラの生成・破棄・フック登録、描画の入口（巻き戻し）、訪問関数
+├── render/
+│   ├── render_core.h             # 非公開（レンダラ共通）: フック表と走査駆動部の型・関数。export しない
+│   └── render_core.c             # フック表の init/deinit/set/find、走査駆動部（イテレータ、子の省略と省略後の EXIT の訪問。葉の判定は node-tree の amark_node_kind_is_leaf）
+└── html/
+    ├── html_escape.c             # amark_html_escape、amark_html_escape_url、amark_html_url_is_dangerous（static const の表）
+    ├── html_internal.h           # 非公開: struct amark_html_context、struct amark_html_renderer、設定の検証、組み込み出力の宣言
+    ├── html_standard.c           # 標準 18 種別の組み込み出力、行頭保証、tight 判定、画像の alt 平坦化
+    ├── html_context.c            # amark_html_context_* の公開関数
+    └── html_renderer.c           # 設定の初期化、レンダラの生成・破棄・フック登録、描画の入口（巻き戻し）、訪問関数
 tests/
 ├── support/
 │   ├── test_tree.h           # テスト用: 木を簡潔に組み立てる補助の宣言（本体には含めない）
@@ -131,7 +133,7 @@ tests/
 ### Modified Files
 実装時に html-renderer のタスクとして変更する（本 spec の作成時には変更しない）。
 - `include/amark/amark.h` — `amark/html.h` を include に追加
-- `src/CMakeLists.txt` — `render_core.c`、`html_escape.c`、`html_standard.c`、`html_context.c`、`html_renderer.c` をソース一覧に追加
+- `src/CMakeLists.txt` — `render/render_core.c`、`html/html_escape.c`、`html/html_standard.c`、`html/html_context.c`、`html/html_renderer.c` をソース一覧に追加
 - `tests/CMakeLists.txt` — `amark_test_support` に `support/test_tree.c` を追加し、7 つのテスト実行ファイル `amark_html_escape_test` ほかを `naos_add_executable` で登録
 - `tests/cxx_header_test.cpp` — C++ から木を組んで `amark_html_render` とフック登録を呼ぶ確認を追加
 
@@ -322,7 +324,7 @@ AMARK_API bool amark_html_url_is_dangerous(amark_slice_t url);
 
 ##### Service Interface
 ```c
-/* src/render_core.h（非公開） */
+/* src/render/render_core.h（非公開） */
 #include <amark/error.h>
 #include <amark/node_iter.h>
 
@@ -436,9 +438,9 @@ URL 符号化（6.2、6.3）:
 
 ##### State Management
 ```c
-/* src/html_internal.h（非公開。宣言は AMARK_API を付けず export しない） */
+/* src/html/html_internal.h（非公開。宣言は AMARK_API を付けず export しない） */
 #include <amark/html.h>
-#include "render_core.h"
+#include "render/render_core.h"
 
 struct amark_html_renderer
 {
@@ -677,7 +679,7 @@ graph TB
 ## Cross-Spec Contract
 
 ### markdown-renderer が揃えるもの
-markdown-renderer は次を同じ形で提供し、内部では `src/render_core.h` のフック表と走査駆動部をそのまま使う（複製しない）。
+markdown-renderer は次を同じ形で提供し、内部では `src/render/render_core.h` のフック表と走査駆動部をそのまま使う（複製しない）。
 - 型: `amark_markdown_options_t`（`_init` で既定値）、opaque な `amark_markdown_renderer_t`、opaque な `amark_markdown_context_t`
 - フック型: `typedef amark_error_t (*amark_markdown_render_fn_t)(amark_markdown_context_t *context, const amark_node_t *node, amark_node_iter_event_t event, void *user_data);`
 - 関数: `amark_markdown_renderer_create(const amark_markdown_options_t *options, amark_markdown_renderer_t **renderer)`、`amark_markdown_renderer_destroy`、`amark_markdown_renderer_set_hook(renderer, kind, render, user_data)`、`amark_markdown_renderer_render(renderer, root, output)`、単発の `amark_markdown_render(root, options, output)`

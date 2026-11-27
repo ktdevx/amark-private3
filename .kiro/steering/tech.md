@@ -27,7 +27,7 @@
 
 ### メモリ
 
-ライブラリ内の動的確保はすべて、差し替え可能なグローバルアロケータを経由する: `amark_malloc`, `amark_realloc`, `amark_calloc`, `amark_free`。`malloc` などを直接呼ばない（直接呼ぶのは `src/memory.c` の既定アロケータだけ）。
+ライブラリ内の動的確保はすべて、差し替え可能なグローバルアロケータを経由する: `amark_malloc`, `amark_realloc`, `amark_calloc`, `amark_free`。`malloc` などを直接呼ばない（直接呼ぶのは `src/base/memory.c` の既定アロケータだけ）。
 
 ### 文字列の所有権
 
@@ -41,7 +41,7 @@
 
 - 失敗しうる公開関数は `amark_error_t` を返し、結果は出力引数で返す。成功は `AMARK_OK`（0）
 - **全コードの唯一の正本は `foundation` spec の設計にあるエラーコード一覧表**（値・所有 spec・文字列・意味）。他の spec の設計は表を参照し、値や文字列を定義し直さない
-- 追加は末尾のみ。公開済みの値の変更・削除・再利用は禁止。新しいコードが必要な spec は一覧表へ行を追記し（「次の空き番号」を見込みで使わない）、`error.h` の列挙、`src/error.c` の `switch`、`tests/error_test.c` の確認を同時に更新する
+- 追加は末尾のみ。公開済みの値の変更・削除・再利用は禁止。新しいコードが必要な spec は一覧表へ行を追記し（「次の空き番号」を見込みで使わない）、`error.h` の列挙、`src/base/error.c` の `switch`、`tests/error_test.c` の確認を同時に更新する
 - 意味が合えば既存のコードを再利用する
 
 ### 命名

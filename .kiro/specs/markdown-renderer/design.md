@@ -6,7 +6,7 @@
 
 **Users**: ライブラリ利用者は編集した木を Markdown として書き戻す。拡張の作者（将来の gfm を含む）はフックで拡張種別の Markdown 出力を追加する。保守者は CommonMark 仕様の全例による往復テストで再パースの正しさを確かめる。
 
-**Impact**: 公開ヘッダ `amark/markdown.h`、Markdown 用のソース群、テストを追加する。html-renderer の `render_core`（子の省略後の EXIT の訪問を含む）、commonmark が作る非公開モジュール `src/unicode_class.h`、foundation の `amark_utf8_decode_previous` をそのまま使い、上流の仕様には変更を求めない。エラーコードとノード種別は追加しない。
+**Impact**: 公開ヘッダ `amark/markdown.h`、Markdown 用のソース群、テストを追加する。html-renderer の `render_core`（子の省略後の EXIT の訪問を含む）、commonmark が作る非公開モジュール `src/base/unicode_class.h`、foundation の `amark_utf8_decode_previous` をそのまま使い、上流の仕様には変更を求めない。エラーコードとノード種別は追加しない。
 
 ### Goals
 - CommonMark 方言のパーサが生成した木について、出力の再パースで HTML がバイト単位で一致し（全 652 例、除外 0 件を目標）、2 回目のレンダリングが 1 回目と同一になる
@@ -37,14 +37,14 @@
 - 木の構造・値・種別とイテレータの振る舞い（node-tree）。本仕様は木を変更しない
 - エラー列挙、アロケータ、バッファ、スライス、UTF-8（foundation）。新しいエラーコードを追加しない
 - CommonMark の構文の解釈と仕様の例の抽出器（commonmark）。往復テストで見つかったパーサ側の不具合の修正は commonmark の作業
-- Unicode の句読点・空白の分類の実装・表・生成（commonmark が `src/unicode_class.{h,c}` と生成物 `src/unicode_class_data.c` として所有する。版と内容は commonmark が決める）
+- Unicode の句読点・空白の分類の実装・表・生成（commonmark が `src/base/unicode_class.{h,c}` と生成物 `src/base/unicode_class_data.c` として所有する。版と内容は commonmark が決める）
 - UTF-8 の後方復号（foundation の `amark_utf8_decode_previous`）
 - 拡張の単位からレンダラへのフックの結び付け（parser-core と各拡張）
 
 ### Allowed Dependencies
 - foundation の公開ヘッダ: `amark/export.h`、`amark/error.h`、`amark/memory.h`、`amark/slice.h`、`amark/utf8.h`、`amark/buffer.h`
-- node-tree の公開ヘッダ: `amark/node_kind.h`、`amark/node.h`、`amark/node_iter.h`（`src/node_internal.h` は include しない）
-- 非公開: `src/render_core.h`（html-renderer 所有のレンダラ間の内部契約）、`src/unicode_class.h`（commonmark 所有。`amark_unicode_is_punctuation` / `amark_unicode_is_whitespace`）
+- node-tree の公開ヘッダ: `amark/node_kind.h`、`amark/node.h`、`amark/node_iter.h`（`src/tree/node_internal.h` は include しない）
+- 非公開: `src/render/render_core.h`（html-renderer 所有のレンダラ間の内部契約）、`src/base/unicode_class.h`（commonmark 所有。`amark_unicode_is_punctuation` / `amark_unicode_is_whitespace`）
 - C 標準ライブラリ: `<stddef.h>`、`<stdint.h>`、`<stdbool.h>`、`<string.h>`
 - テストだけ: `amark/commonmark.h`、`amark/html.h`、`tests/support/test_spec_examples.h`、`tests/support/test_tree.h`、`tests/support/test_allocator.h`、Naos
 - 依存方向（左ほど下位。右から左への include のみ）: `foundation, node-tree, render_core, unicode_class → markdown_internal.h → markdown_writer → markdown_escape → markdown_emphasis → markdown_block, markdown_inline → markdown_context → markdown_renderer`。`amark/markdown.h` は foundation と node-tree の公開ヘッダだけを include する。ライブラリ本体の Markdown のソースは html-renderer・parser-core・commonmark のヘッダを include しない
@@ -116,14 +116,15 @@ graph TB
 include/amark/
 └── markdown.h                  # 設定と列挙、レンダラ、フック型、コンテキスト操作、単発描画、利用者の義務（コメント）
 src/
-├── markdown_internal.h         # 非公開: struct amark_markdown_renderer / context、フレーム、Writer の状態、内部関数の宣言
-├── markdown_writer.c           # 行の書き出し: 遅延区切り、プレフィックス、行末の空白の除去、桁、折り返し、直前の文字の置換、数値文字参照
-├── markdown_escape.c           # text の文脈依存エスケープ、リンク先・title・info の書式、コードスパンとフェンスの計算、オートリンクの判定
-├── markdown_emphasis.c         # 文字の分類、先読み、区切り文字の計画（開き・閉じ）
-├── markdown_block.c            # 標準ブロック種別の組み込み出力、区切り、リスト記号の選択
-├── markdown_inline.c           # 標準インライン種別の組み込み出力
-├── markdown_context.c          # amark_markdown_context_* の公開関数
-└── markdown_renderer.c         # 設定の初期化と検証、レンダラの生成・破棄・フック登録、訪問関数（フレーム）、描画の入口と巻き戻し
+└── markdown/
+    ├── markdown_internal.h         # 非公開: struct amark_markdown_renderer / context、フレーム、Writer の状態、内部関数の宣言
+    ├── markdown_writer.c           # 行の書き出し: 遅延区切り、プレフィックス、行末の空白の除去、桁、折り返し、直前の文字の置換、数値文字参照
+    ├── markdown_escape.c           # text の文脈依存エスケープ、リンク先・title・info の書式、コードスパンとフェンスの計算、オートリンクの判定
+    ├── markdown_emphasis.c         # 文字の分類、先読み、区切り文字の計画（開き・閉じ）
+    ├── markdown_block.c            # 標準ブロック種別の組み込み出力、区切り、リスト記号の選択
+    ├── markdown_inline.c           # 標準インライン種別の組み込み出力
+    ├── markdown_context.c          # amark_markdown_context_* の公開関数
+    └── markdown_renderer.c         # 設定の初期化と検証、レンダラの生成・破棄・フック登録、訪問関数（フレーム）、描画の入口と巻き戻し
 tests/
 ├── markdown_escape_test.c      # text・行頭・ATX・リンク先・title・info・コードスパン・フェンス・オートリンク（要件 2.11, 2.12, 4.5, 4.6, 4.10, 5）
 ├── markdown_block_test.c       # ブロック種別、区切り、リスト、tight / loose、プレフィックスの入れ子（要件 2, 3）
@@ -138,7 +139,7 @@ tests/
 ### Modified Files
 実装時に本仕様のタスクとして変更する（本 spec の作成時には変更しない）。
 - `include/amark/amark.h` — `amark/markdown.h` を include に追加
-- `src/CMakeLists.txt` — `markdown_*.c` 7 ファイルを追加（`unicode_class.c` / `unicode_class_data.c` は commonmark が追加済み）
+- `src/CMakeLists.txt` — `markdown/markdown_*.c` 7 ファイルを追加（`base/unicode_class.c` / `base/unicode_class_data.c` は commonmark が追加済み）
 - `tests/CMakeLists.txt` — 8 つのテスト実行ファイル `amark_markdown_escape_test` ほかを `naos_add_executable` で登録。往復テストに `AMARK_COMMONMARK_SPEC_PATH` のコンパイル定義を与える
 - `tests/cxx_header_test.cpp` — C++ から木を組んで `amark_markdown_render` とフック登録を呼ぶ確認を追加
 - `include/amark/amark.h`、`src/CMakeLists.txt`、`tests/CMakeLists.txt`、`tests/cxx_header_test.cpp` は foundation が所有する追記専用のファイルで、本仕様は自分のブロックを追記するだけで既存の行を変更しない
@@ -318,9 +319,9 @@ AMARK_API amark_error_t amark_markdown_context_pop_prefix(amark_markdown_context
 
 ### 上流の非公開部品（参照のみ）
 
-- **UnicodeClass**（commonmark 所有）: `src/unicode_class.h` の `bool amark_unicode_is_punctuation(uint32_t c)`（ASCII 句読点、または一般カテゴリ P / S）と `bool amark_unicode_is_whitespace(uint32_t c)`（Zs、タブ、LF、FF、CR）。表は生成物 `src/unicode_class_data.c`。commonmark が最初からこのモジュールとして作り、パーサの flanking 判定と本仕様の flanking 判定が同一の分類を使う（6.5）。本仕様は include して呼ぶだけで、実装・表・生成器を変更しない
+- **UnicodeClass**（commonmark 所有）: `src/base/unicode_class.h` の `bool amark_unicode_is_punctuation(uint32_t c)`（ASCII 句読点、または一般カテゴリ P / S）と `bool amark_unicode_is_whitespace(uint32_t c)`（Zs、タブ、LF、FF、CR）。表は生成物 `src/base/unicode_class_data.c`。commonmark が最初からこのモジュールとして作り、パーサの flanking 判定と本仕様の flanking 判定が同一の分類を使う（6.5）。本仕様は include して呼ぶだけで、実装・表・生成器を変更しない
 - **後方復号**（foundation）: `amark/utf8.h` の `amark_utf8_decode_previous`。出力の末尾から最後の 1 文字を復号するのに使い、本仕様は独自の後方復号を持たない
-- **RenderCore**（html-renderer 所有）: `src/render_core.h` のフック表と走査駆動部。子を省略したノードでも同じノードの EXIT が 1 回訪問される（html-renderer 要件 11.3）。葉の判定は node-tree の `amark_node_kind_is_leaf`
+- **RenderCore**（html-renderer 所有）: `src/render/render_core.h` のフック表と走査駆動部。子を省略したノードでも同じノードの EXIT が 1 回訪問される（html-renderer 要件 11.3）。葉の判定は node-tree の `amark_node_kind_is_leaf`
 
 ### 非公開
 
@@ -335,10 +336,10 @@ AMARK_API amark_error_t amark_markdown_context_pop_prefix(amark_markdown_context
 
 ##### State Management
 ```c
-/* src/markdown_internal.h（非公開。宣言は AMARK_API を付けず export しない） */
+/* src/markdown/markdown_internal.h（非公開。宣言は AMARK_API を付けず export しない） */
 #include <amark/markdown.h>
-#include "render_core.h"
-#include "unicode_class.h"
+#include "render/render_core.h"
+#include "base/unicode_class.h"
 
 struct amark_markdown_renderer
 {
@@ -713,8 +714,8 @@ struct amark_markdown_context
 ## Upstream Dependencies
 
 本仕様は上流の仕様に変更を求めない。次の上流の提供物を前提にする。
-- html-renderer: `src/render_core.h`（レンダラ間の内部契約）。子の省略を要求した非葉ノードについても、同じノードの EXIT で訪問関数が 1 回呼ばれる（html-renderer 設計の RenderCore 手順 3）。この契約の変更は本仕様の再検証を要する
-- commonmark: `src/unicode_class.{h,c}` と生成物 `src/unicode_class_data.c`（`amark_unicode_is_punctuation` / `amark_unicode_is_whitespace`）。commonmark が最初から作る
+- html-renderer: `src/render/render_core.h`（レンダラ間の内部契約）。子の省略を要求した非葉ノードについても、同じノードの EXIT で訪問関数が 1 回呼ばれる（html-renderer 設計の RenderCore 手順 3）。この契約の変更は本仕様の再検証を要する
+- commonmark: `src/base/unicode_class.{h,c}` と生成物 `src/base/unicode_class_data.c`（`amark_unicode_is_punctuation` / `amark_unicode_is_whitespace`）。commonmark が最初から作る
 - foundation: `amark_utf8_decode_previous`（後方復号）と、エラー列挙の表（`AMARK_ERROR_INVALID_STATE` = 7 を含む 0〜7）
 - node-tree: `amark_node_kind_is_leaf`、`amark_node_iter_reset` の意味
 - 新しいエラーコード: なし

@@ -20,7 +20,7 @@
 - レンダラはパーサに依存しない。パーサはレンダラに依存しない
 - 構文拡張はパーサエンジンの公開拡張 API だけに依存し、エンジンの非公開部分に触れない
 - 1 つの拡張が構文・ノード種別・レンダラフックをまとめて提供する場合、それらを結び付けるのは拡張の側である
-- **レンダラ共通層** `src/render_core.h`（非公開）は HTML と Markdown の両レンダラが共有する内部層で、html-renderer spec が所有する。変更したときは markdown-renderer への影響を再検証する
+- **レンダラ共通層** `src/render/render_core.h`（非公開）は HTML と Markdown の両レンダラが共有する内部層で、html-renderer spec が所有する。変更したときは markdown-renderer への影響を再検証する
 
 ## Directory Patterns
 
@@ -33,7 +33,21 @@
 ### ライブラリ本体
 **Location**: `src/`
 **Purpose**: 実装と非公開ヘッダ。テストのためだけのコードは置かない
-**Pattern**: モジュール単位で `<module>.c` と、必要なら非公開の `<module>.h` を対にする（例: `src/render_core.{h,c}`、`src/unicode_class.{h,c}`）。生成したデータは `<module>_data.c` としてリポジトリに含める（例: `src/unicode_class_data.c`）
+**Pattern**: 層・モジュール群ごとのサブディレクトリに分け、`src/` 直下にはビルド定義だけを置く
+
+| ディレクトリ | 中身 |
+|---|---|
+| `src/base/` | 基盤（エラー、アロケータ、スライス、UTF-8、バッファ、バージョン）と、複数のモジュールが内部で共有する文字分類（`unicode_class`） |
+| `src/tree/` | ノード、種別、編集、走査 |
+| `src/parser/` | 構文非依存のパーサエンジン、拡張、方言 |
+| `src/render/` | レンダラ共通層（`render_core`） |
+| `src/html/`, `src/markdown/` | 各レンダラ |
+| `src/commonmark/` | CommonMark の構文拡張と、その専用の表 |
+
+- 新しい構文群（例: 将来の GFM）は `src/<name>/` を足す。ディレクトリはさらに入れ子にしない
+- 各ディレクトリの中は `<module>.c` と、必要なら非公開の `<module>.h` を対にする。生成したデータは `<module>_data.c` としてリポジトリに含める（例: `src/base/unicode_class_data.c`）
+- ファイルのベース名は `src/` 全体で一意にする（静的ライブラリのメンバ名の衝突を避け、ファイル名だけで所属が分かるようにするため）
+- ディレクトリは置き場所であって所有の単位ではない。たとえば `src/base/unicode_class.*` は commonmark spec が所有するが、基盤層の部品なので `base/` に置く
 
 ### テスト
 **Location**: `tests/`
@@ -81,9 +95,10 @@
 ```c
 #include <amark/node.h>   /* 公開ヘッダ: 山括弧、amark/ 付き */
 
-#include "buffer.h"       /* 非公開ヘッダ: 二重引用符 */
+#include "tree/node_internal.h"  /* 非公開ヘッダ: 二重引用符、src/ からの相対パス */
 ```
 
+- 非公開ヘッダは `src/` を起点にディレクトリ付きで include する。同じディレクトリ内のヘッダも同じ書き方にする
 - 公開ヘッダは非公開ヘッダを include しない
 - 公開ヘッダは単体で include でき、C++ からも使える。include ガードは `AMARK_<NAME>_H`、宣言は `AMARK_BEGIN_DECLS` / `AMARK_END_DECLS` で囲む
 - 公開関数には `AMARK_API` を付け、静的・動的の両方のビルドで同じヘッダを使う
@@ -98,4 +113,4 @@
 ---
 _Document patterns, not file trees. New files following patterns shouldn't require updates_
 
-_updated_at: 2026-11-27 — 各 spec の設計に合わせて公開ヘッダの配置、テスト補助の命名、テストデータ・生成ツールの置き場所、レンダラ共通層、共有の骨組みファイルの追記規則を反映_
+_updated_at: 2026-11-27 — `src/` をサブディレクトリに分割。各 spec の設計に合わせて公開ヘッダの配置、テスト補助の命名、テストデータ・生成ツールの置き場所、レンダラ共通層、共有の骨組みファイルの追記規則を反映_

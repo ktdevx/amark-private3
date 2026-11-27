@@ -1,6 +1,6 @@
 # Implementation Plan
 
-> 前提: foundation、node-tree、parser-core、html-renderer、commonmark の実装が完了していること（ビルドとテスト登録の規約、差し替えアロケータ、UTF-8 の後方復号 `amark_utf8_decode_previous`、手組みの木の補助、子を省略したノードの EXIT も訪問する `render_core`、commonmark が作る Unicode の句読点・空白の分類 `src/unicode_class.h`、CommonMark の簡易パース、spec 0.31.2 と例の抽出器）。本計画はそれらの公開 API・非公開の共有部品と規約の上に積み、上流のファイルは変更しない。
+> 前提: foundation、node-tree、parser-core、html-renderer、commonmark の実装が完了していること（ビルドとテスト登録の規約、差し替えアロケータ、UTF-8 の後方復号 `amark_utf8_decode_previous`、手組みの木の補助、子を省略したノードの EXIT も訪問する `render_core`、commonmark が作る Unicode の句読点・空白の分類 `src/base/unicode_class.h`、CommonMark の簡易パース、spec 0.31.2 と例の抽出器）。本計画はそれらの公開 API・非公開の共有部品と規約の上に積み、上流のファイルは変更しない。
 >
 > 並行実行について: 各タスクはライブラリのソース一覧とテスト登録の同じビルド定義ファイル（foundation 所有の追記専用ファイル）に追記し、実装順の依存（公開ヘッダ → 行の管理 → 符号化 → 組み込み出力 → 強調 → フック → 往復）があるため `(P)` を付けられるタスクはない。
 

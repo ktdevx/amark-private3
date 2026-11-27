@@ -16,7 +16,7 @@
 
 ### Non-Goals
 - ノード、パーサ、レンダラ、CLI ツール、他言語バインディング
-- Unicode の文字分類、大文字小文字の畳み込み、正規化。句読点・空白の分類は commonmark spec が所有する非公開モジュール `src/unicode_class.{h,c}`（生成データ `src/unicode_class_data.c`、関数 `amark_unicode_is_punctuation` / `amark_unicode_is_whitespace`）が提供し、markdown-renderer も利用する。公開の `amark/utf8.h` には分類を加えない。大文字小文字の畳み込みも必要とする spec が非公開モジュールとして持つ
+- Unicode の文字分類、大文字小文字の畳み込み、正規化。句読点・空白の分類は commonmark spec が所有する非公開モジュール `src/base/unicode_class.{h,c}`（生成データ `src/base/unicode_class_data.c`、関数 `amark_unicode_is_punctuation` / `amark_unicode_is_whitespace`）が提供し、markdown-renderer も利用する。公開の `amark/utf8.h` には分類を加えない。大文字小文字の畳み込みも必要とする spec が非公開モジュールとして持つ
 - pkg-config ファイル、パッケージマネージャ（vcpkg、Conan など）向けの定義
 - スレッドセーフなアロケータ差し替え、確保の統計やリーク検出をライブラリ本体で行うこと
 
@@ -129,12 +129,13 @@ include/amark/
 └── buffer.h                       # amark_buffer_t と操作
 src/
 ├── CMakeLists.txt                 # ライブラリターゲット amark の定義
-├── error.c
-├── memory.c                       # 既定アロケータと現在のアロケータ（唯一のグローバル状態）
-├── slice.c
-├── utf8.c
-├── buffer.c
-└── version.c                      # 実行時のバージョン問い合わせ
+└── base/
+    ├── error.c
+    ├── memory.c                       # 既定アロケータと現在のアロケータ（唯一のグローバル状態）
+    ├── slice.c
+    ├── utf8.c
+    ├── buffer.c
+    └── version.c                      # 実行時のバージョン問い合わせ
 tests/
 ├── CMakeLists.txt                 # Naos の取得、テスト補助ライブラリ、各テスト実行ファイルの登録、ヘッダ検査、ソースヘッダ検査
 ├── support/                       # 静的ライブラリ amark_test_support。ファイルは test_<area>.{h,c}（後続 spec が追記）
@@ -295,7 +296,9 @@ sequenceDiagram
 - `include(CTest)` はトップレベル時のみ行う。トップレベルでないとき Naos は取得しない（2.4）
 - トップレベル時に `CMAKE_RUNTIME_OUTPUT_DIRECTORY` が未定義なら `${PROJECT_BINARY_DIR}/bin` とする（3.3）
 - `src/CMakeLists.txt` のターゲット `amark`:
-  - ソース: `src/*.c`（本 spec では error、memory、slice、utf8、buffer、version）。テスト用のソースは含めない（3.4）
+  - ソース: `src/<dir>/*.c` を `src/` からの相対パス（例: `base/buffer.c`）で列挙する。glob は使わない。本 spec では `base/` の error、memory、slice、utf8、buffer、version。テスト用のソースは含めない（3.4）
+  - サブディレクトリ: モジュール群ごとに `src/base/`（基盤）、`src/tree/`（node-tree）、`src/parser/`（parser-core）、`src/render/`（レンダラ共通層）、`src/html/`、`src/markdown/`、`src/commonmark/`。新しい構文群（例: 将来の GFM）は `src/<name>/` を足す。`src/` 全体でファイルのベース名を一意に保つ（静的ライブラリのメンバ名とオブジェクト名の衝突を避け、grep で所属が分かるようにする）
+  - 非公開の include ディレクトリ: `${PROJECT_SOURCE_DIR}/src`（PRIVATE）。非公開ヘッダは `src/` からの相対パスで include する（例: `#include "tree/node_internal.h"`）。同じディレクトリ内でも同じ書き方にする
   - プロパティ: `C_STANDARD 99`、`C_STANDARD_REQUIRED ON`、`C_EXTENSIONS OFF`、`C_VISIBILITY_PRESET hidden`、`VISIBILITY_INLINES_HIDDEN ON`、`DEBUG_POSTFIX d`、`OUTPUT_NAME amark`、`VERSION ${PROJECT_VERSION}`、`SOVERSION`（1.0 前は `0.<minor>`、以後 `<major>`）、`EXPORT_NAME amark`
   - include ディレクトリ: `$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>`、`$<BUILD_INTERFACE:${PROJECT_BINARY_DIR}/include>`、`$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>`
   - コンパイル定義: `AMARK_BUILDING`（PRIVATE）。`BUILD_SHARED_LIBS` が真なら `AMARK_SHARED`（PUBLIC）
@@ -402,7 +405,7 @@ AMARK_API const char *amark_version_string(void);
 - 列挙はライブラリ全体で 1 つ。後続 spec は自分のコードを末尾に追加する。既存の値の変更・削除・再利用は禁止（7.5）
 - 下の「エラーコード一覧表」が全 spec のコードの唯一の正本である。各 spec の設計は一覧表の行を参照し、値と文字列を独自に定義し直さない
 - 新しいコードが必要な spec は、自分の設計の Cross-Spec Change Note で本表へ行を追記する（本 spec の改訂として扱う）。「次の空き番号」を各 spec が見込みで決めて使うことはしない。並行する spec が同じ番号を求めた場合は、本表への追記順で番号を確定させる
-- 追加時は本表、`error.h` の列挙、`src/error.c` の `switch`、`tests/error_test.c` の確認を同時に更新する
+- 追加時は本表、`error.h` の列挙、`src/base/error.c` の `switch`、`tests/error_test.c` の確認を同時に更新する
 - 個数を表す番兵定数は公開しない
 
 **エラーコード一覧表**（正本、追記専用）
@@ -447,7 +450,7 @@ AMARK_API const char *amark_error_string(amark_error_t error);
 - Invariants: `AMARK_OK == 0`。`if (error)` で失敗を判定できる
 
 **Implementation Notes**
-- Validation: `src/error.c` は `default` ラベルのない `switch` で各コードの文字列を返し、`switch` の後で `"unknown error"` を返す。GCC / Clang の `-Wswitch` と CI の警告エラー化により、列挙に追加されて文字列のないコードをビルド時に検出する（7.6）。テストは定義済みのすべてのコードについて、一覧表どおりの値と文字列（`"unknown error"` 以外の非空で互いに異なる文字列）を個別に確認する
+- Validation: `src/base/error.c` は `default` ラベルのない `switch` で各コードの文字列を返し、`switch` の後で `"unknown error"` を返す。GCC / Clang の `-Wswitch` と CI の警告エラー化により、列挙に追加されて文字列のないコードをビルド時に検出する（7.6）。テストは定義済みのすべてのコードについて、一覧表どおりの値と文字列（`"unknown error"` 以外の非空で互いに異なる文字列）を個別に確認する
 
 #### Memory
 
@@ -457,8 +460,8 @@ AMARK_API const char *amark_error_string(amark_error_t error);
 | Requirements | 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8, 6.9 |
 
 **Responsibilities & Constraints**
-- ライブラリ内のソースは `malloc` / `realloc` / `calloc` / `free` を直接呼ばない。直接呼ぶのは `src/memory.c` の既定アロケータだけ（6.1、6.2）
-- 現在のアロケータは `src/memory.c` の `static` 変数 1 つに持つ。これがライブラリ唯一の可変グローバル状態
+- ライブラリ内のソースは `malloc` / `realloc` / `calloc` / `free` を直接呼ばない。直接呼ぶのは `src/base/memory.c` の既定アロケータだけ（6.1、6.2）
+- 現在のアロケータは `src/base/memory.c` の `static` 変数 1 つに持つ。これがライブラリ唯一の可変グローバル状態
 
 **Contracts**: Service [x] / State [x]
 
@@ -788,7 +791,7 @@ test_allocator_stats_t test_allocator_stats(void);
 
 #### SteeringUpdate
 - 以下は設計段階で steering に反映済み。実装時は実際のファイル構成・オプション名・コマンドとの差分だけを同期する（12.5）
-- `structure.md`: 確定したディレクトリ構成（公開ヘッダはモジュール単位の `include/amark/<module>.h`）、モジュールの依存方向、テスト配置（モジュールごとの実行ファイル、`tests/support/` と `test_<area>` の命名、`tests/data/`、`tests/package/`）、`tools/` の生成スクリプト、レンダラ共通の内部層 `src/render_core.h`、公開ヘッダの規約（include ガード、`AMARK_BEGIN_DECLS`、`AMARK_API`）、共有の骨組みファイルの追記規則
+- `structure.md`: 確定したディレクトリ構成（公開ヘッダはモジュール単位の `include/amark/<module>.h`）、モジュールの依存方向、テスト配置（モジュールごとの実行ファイル、`tests/support/` と `test_<area>` の命名、`tests/data/`、`tests/package/`）、`tools/` の生成スクリプト、レンダラ共通の内部層 `src/render/render_core.h`、公開ヘッダの規約（include ガード、`AMARK_BEGIN_DECLS`、`AMARK_API`）、共有の骨組みファイルの追記規則
 - `tech.md`: ビルドオプション表、Common Commands（警告エラー化、インストール、利用者確認）、命名例の修正（`void amark_buffer_init`、出力引数で返す `amark_node_create`）、文字列の所有権規約、エラーコード一覧表の規則（本書が唯一の正本、末尾追加、4 か所同時更新）、機械的に検査する規約（整形、ソースヘッダ、`-Wswitch`、ヘッダ単独 include）と検査しない規約（演算順序の括弧付け、ステップ間の空行、命名の一部）、clang-format 18、リリース手順（12.1、12.4、12.5）
 - 命名規約（11.1、11.2）は本書の全インターフェースで守り、steering にも明記する
 

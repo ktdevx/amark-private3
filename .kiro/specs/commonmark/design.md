@@ -2,11 +2,11 @@
 
 ## Overview
 
-**Purpose**: CommonMark 仕様 0.31.2 の全構文を、parser-core の公開拡張 API だけを使う 17 個の拡張として提供し、それらをまとめた CommonMark 方言プリセットと、Markdown テキストから木・HTML を得る簡易 API を提供する。flanking の判定・ラベルの正規化・文字参照に必要なデータ（HTML5 名前付き文字参照、Unicode 16.0.0 の句読点・空白・大文字小文字の畳み込み）を、`tools/` の生成器で作った静的な表として持つ。句読点・空白の判定は、markdown-renderer と共有する非公開モジュール `src/unicode_class.{h,c}`（生成物 `src/unicode_class_data.c`）として本仕様が新設する。仕様の例（652 件）の適合テストと cmark 相当の病的入力テストをテスト側に置く。
+**Purpose**: CommonMark 仕様 0.31.2 の全構文を、parser-core の公開拡張 API だけを使う 17 個の拡張として提供し、それらをまとめた CommonMark 方言プリセットと、Markdown テキストから木・HTML を得る簡易 API を提供する。flanking の判定・ラベルの正規化・文字参照に必要なデータ（HTML5 名前付き文字参照、Unicode 16.0.0 の句読点・空白・大文字小文字の畳み込み）を、`tools/` の生成器で作った静的な表として持つ。句読点・空白の判定は、markdown-renderer と共有する非公開モジュール `src/base/unicode_class.{h,c}`（生成物 `src/base/unicode_class_data.c`）として本仕様が新設する。仕様の例（652 件）の適合テストと cmark 相当の病的入力テストをテスト側に置く。
 
 **Users**: ライブラリ利用者は簡易 API またはプリセットの方言で CommonMark を解析する。方言を組み立てる利用者は構文の単位を選んで方言を作る（例: 生 HTML なし）。将来の gfm はプリセットに拡張を足して GFM 方言を作り、markdown-renderer は本方言の解析結果で往復テストを行う。
 
-**Impact**: 公開ヘッダ `amark/commonmark.h` と `amark/commonmark_html.h`、`src/commonmark_*.c` 群、共有の非公開モジュール `src/unicode_class.{h,c}`、生成した表 3 つ、生成器 2 つ、テストとテストデータを追加する。parser-core の契約の緩和 1 件と意味の明確化 2 件（C1〜C3）は parser-core の文書に適用済みで、本仕様はそれに依存する振る舞いを確かめるだけである（API の追加・変更なし）。エラーコード（foundation の表の 0〜7 が唯一の正本）とノード種別は追加しない。
+**Impact**: 公開ヘッダ `amark/commonmark.h` と `amark/commonmark_html.h`、`src/commonmark/commonmark_*.c` 群、共有の非公開モジュール `src/base/unicode_class.{h,c}`、生成した表 3 つ、生成器 2 つ、テストとテストデータを追加する。parser-core の契約の緩和 1 件と意味の明確化 2 件（C1〜C3）は parser-core の文書に適用済みで、本仕様はそれに依存する振る舞いを確かめるだけである（API の追加・変更なし）。エラーコード（foundation の表の 0〜7 が唯一の正本）とノード種別は追加しない。
 
 ### Goals
 - 0.31.2 の spec.txt の全 652 例で、生 HTML と危険な URL を許可した html-renderer の出力が期待 HTML とバイト単位で一致する
@@ -28,7 +28,7 @@
 - CommonMark 0.31.2 の各構文の規則（開始・継続・終了・flanking・rule of 3・リンクの宛先と title・ラベルの正規化・HTML ブロックの 7 種類・文字参照・コードスパンの規則）と、その拡張の記述子・名前・優先順位
 - 拡張間の内部の約束: リンク参照定義の値の型と定義テーブルの名前空間 `commonmark.link`
 - CommonMark が必要とするデータの表（エンティティ、Unicode の句読点・空白・畳み込み）、その生成器、出典とライセンスの表記
-- 非公開の共有モジュール UnicodeClass（`src/unicode_class.h`、`src/unicode_class.c`、生成物 `src/unicode_class_data.c`）: `amark_unicode_is_punctuation` / `amark_unicode_is_whitespace`。`include/` に置かず export しない。markdown-renderer も利用者（消費側）である
+- 非公開の共有モジュール UnicodeClass（`src/base/unicode_class.h`、`src/base/unicode_class.c`、生成物 `src/base/unicode_class_data.c`）: `amark_unicode_is_punctuation` / `amark_unicode_is_whitespace`。`include/` に置かず export しない。markdown-renderer も利用者（消費側）である
 - 病的入力への構文側の対策（内容ごとの記憶、ラベル長の打ち切り、宛先の括弧の入れ子の上限、参照展開の量の上限）
 - 仕様適合テスト（spec.txt の固定、抽出器、比較・報告）と病的入力テスト
 - parser-core に適用済みの C1〜C3 に依存する振る舞いの確認（Cross-Spec Change Note）
@@ -43,13 +43,13 @@
 
 ### Allowed Dependencies
 - foundation の公開ヘッダ: `export.h`、`error.h`、`memory.h`、`slice.h`、`utf8.h`（`amark_utf8_decode`、`amark_utf8_decode_previous`）、`buffer.h`
-- 本仕様が所有する非公開ヘッダ `src/unicode_class.h`: `<stdint.h>`・`<stdbool.h>` だけに依存する基盤層の部品。commonmark の CharClass と markdown-renderer が include する
+- 本仕様が所有する非公開ヘッダ `src/base/unicode_class.h`: `<stdint.h>`・`<stdbool.h>` だけに依存する基盤層の部品。commonmark の CharClass と markdown-renderer が include する
 - node-tree の公開ヘッダ: `node_kind.h`、`node.h`
 - parser-core の公開ヘッダ: `parse_shared.h`、`block_syntax.h`、`inline_syntax.h`、`extension.h`、`dialect.h`、`parser.h`
 - html-renderer の公開ヘッダ `html.h`: 公開ヘッダ `amark/commonmark_html.h`、簡易変換の実装 `commonmark_convert.c`、テストだけが include する。`amark/commonmark.h` と構文のソースは include しない
 - C 標準ライブラリ: `<stddef.h>`、`<stdint.h>`、`<stdbool.h>`、`<string.h>`
 - テスト: Naos、`amark_test_support`（差し替えアロケータ）。生成器: Python 3（標準ライブラリのみ、開発時だけ）
-- 依存方向（左ほど下位。右から左への include のみ）: `上流の公開ヘッダ, unicode_class.h → commonmark_internal.h（データ・文字・走査の共通部品） → 各構文のソース → commonmark_dialect.c → commonmark_convert.c`（公開ヘッダは `commonmark.h → commonmark_html.h`）。構文のソース同士は互いを include・呼び出しせず、共通部品だけを使う。parser-core の `src/parser_internal.h` と node-tree の `src/node_internal.h` は include しない
+- 依存方向（左ほど下位。右から左への include のみ）: `上流の公開ヘッダ, unicode_class.h → commonmark_internal.h（データ・文字・走査の共通部品） → 各構文のソース → commonmark_dialect.c → commonmark_convert.c`（公開ヘッダは `commonmark.h → commonmark_html.h`）。構文のソース同士は互いを include・呼び出しせず、共通部品だけを使う。parser-core の `src/parser/parser_internal.h` と node-tree の `src/tree/node_internal.h` は include しない
 
 ### Revalidation Triggers
 - 対象の仕様の版の変更（期待 HTML と構文の規則が変わる。html-renderer も再検証）
@@ -134,39 +134,41 @@ include/amark/
 ├── commonmark.h                     # 単位の列挙、拡張の生成・名前、方言への追加・生成、簡易パース（レンダラのヘッダを含まない）
 └── commonmark_html.h                # HTML への簡易変換（commonmark.h と html.h を include）
 src/
-├── unicode_class.h                  # 非公開（基盤層、markdown-renderer と共有）: amark_unicode_is_punctuation / amark_unicode_is_whitespace
-├── unicode_class.c                  # 非公開: ASCII は表を引かず、0x80 以上は unicode_class_data.c の表を二分探索
-├── unicode_class_data.c             # 生成物: 句読点（P・S）の範囲表、Zs の表。先頭に出典・版・SHA-256・ライセンス
-├── commonmark_internal.h            # 非公開: 記述子の extern 宣言、共通部品の宣言、定義の値の型、名前空間
-├── commonmark_entity_data.c         # 生成物: 名前付き文字参照の表（名前の昇順）。先頭に出典・SHA-256・ライセンス
-├── commonmark_unicode_data.c        # 生成物: 大文字小文字の畳み込みの表だけ（commonmark 専用）。先頭に出典・版・SHA-256・ライセンス
-├── commonmark_chars.c               # ASCII 句読点の判定、前後の文字の復号（後方は amark_utf8_decode_previous）、畳み込み。Unicode の句読点・空白は unicode_class に委ねる
-├── commonmark_entity.c              # 文字参照の照合と復号（名前付き・10 進・16 進）、エスケープと文字参照の解決（unescape）
-├── commonmark_scan.c                # ラベルの走査と正規化、リンクの宛先・title の走査
-├── commonmark_html_scan.c           # HTML の開き・閉じタグ、コメント、処理命令、宣言、CDATA の走査、HTML ブロックの開始・終了条件
-├── commonmark_block_util.c          # 字下げの桁の先読み、指定桁までの空白の読み飛ばし、行の残りの取り出し
-├── commonmark_thematic_break.c      # 拡張: 区切り線
-├── commonmark_atx_heading.c         # 拡張: ATX 見出し
-├── commonmark_setext_heading.c      # 拡張: Setext 見出し
-├── commonmark_indented_code.c       # 拡張: インデントコードブロック
-├── commonmark_fenced_code.c         # 拡張: フェンスコードブロック
-├── commonmark_html_block.c          # 拡張: HTML ブロック
-├── commonmark_link_reference.c      # 拡張: リンク参照定義（段落の内容の処理器）
-├── commonmark_block_quote.c         # 拡張: ブロック引用
-├── commonmark_list.c                # 拡張: リストとリスト項目（解析状態に開いているリストの記録）
-├── commonmark_backslash_escape.c    # 拡張: バックスラッシュエスケープ
-├── commonmark_entity_inline.c       # 拡張: 文字参照（インライン）
-├── commonmark_code_span.c           # 拡張: コードスパン（解析状態に `` ` `` の位置の記憶）
-├── commonmark_emphasis.c            # 拡張: 強調・強い強調（デリミタ処理器）
-├── commonmark_link.c                # 拡張: リンクと画像（ブラケット、参照の解決、展開量の上限）
-├── commonmark_autolink.c            # 拡張: オートリンク
-├── commonmark_html_inline.c         # 拡張: 生 HTML（解析状態に閉じのない構造の記憶）
-├── commonmark_line_break.c          # 拡張: ハード改行・ソフト改行
-├── commonmark_dialect.c             # 単位と記述子の表、拡張の生成、名前、方言への追加・生成、簡易パース
-└── commonmark_convert.c             # HTML への簡易変換（html.h を include する唯一の本体ソース）
+├── base/
+│   ├── unicode_class.h                  # 非公開（基盤層、markdown-renderer と共有）: amark_unicode_is_punctuation / amark_unicode_is_whitespace
+│   ├── unicode_class.c                  # 非公開: ASCII は表を引かず、0x80 以上は unicode_class_data.c の表を二分探索
+│   └── unicode_class_data.c             # 生成物: 句読点（P・S）の範囲表、Zs の表。先頭に出典・版・SHA-256・ライセンス
+└── commonmark/
+    ├── commonmark_internal.h            # 非公開: 記述子の extern 宣言、共通部品の宣言、定義の値の型、名前空間
+    ├── commonmark_entity_data.c         # 生成物: 名前付き文字参照の表（名前の昇順）。先頭に出典・SHA-256・ライセンス
+    ├── commonmark_unicode_data.c        # 生成物: 大文字小文字の畳み込みの表だけ（commonmark 専用）。先頭に出典・版・SHA-256・ライセンス
+    ├── commonmark_chars.c               # ASCII 句読点の判定、前後の文字の復号（後方は amark_utf8_decode_previous）、畳み込み。Unicode の句読点・空白は unicode_class に委ねる
+    ├── commonmark_entity.c              # 文字参照の照合と復号（名前付き・10 進・16 進）、エスケープと文字参照の解決（unescape）
+    ├── commonmark_scan.c                # ラベルの走査と正規化、リンクの宛先・title の走査
+    ├── commonmark_html_scan.c           # HTML の開き・閉じタグ、コメント、処理命令、宣言、CDATA の走査、HTML ブロックの開始・終了条件
+    ├── commonmark_block_util.c          # 字下げの桁の先読み、指定桁までの空白の読み飛ばし、行の残りの取り出し
+    ├── commonmark_thematic_break.c      # 拡張: 区切り線
+    ├── commonmark_atx_heading.c         # 拡張: ATX 見出し
+    ├── commonmark_setext_heading.c      # 拡張: Setext 見出し
+    ├── commonmark_indented_code.c       # 拡張: インデントコードブロック
+    ├── commonmark_fenced_code.c         # 拡張: フェンスコードブロック
+    ├── commonmark_html_block.c          # 拡張: HTML ブロック
+    ├── commonmark_link_reference.c      # 拡張: リンク参照定義（段落の内容の処理器）
+    ├── commonmark_block_quote.c         # 拡張: ブロック引用
+    ├── commonmark_list.c                # 拡張: リストとリスト項目（解析状態に開いているリストの記録）
+    ├── commonmark_backslash_escape.c    # 拡張: バックスラッシュエスケープ
+    ├── commonmark_entity_inline.c       # 拡張: 文字参照（インライン）
+    ├── commonmark_code_span.c           # 拡張: コードスパン（解析状態に `` ` `` の位置の記憶）
+    ├── commonmark_emphasis.c            # 拡張: 強調・強い強調（デリミタ処理器）
+    ├── commonmark_link.c                # 拡張: リンクと画像（ブラケット、参照の解決、展開量の上限）
+    ├── commonmark_autolink.c            # 拡張: オートリンク
+    ├── commonmark_html_inline.c         # 拡張: 生 HTML（解析状態に閉じのない構造の記憶）
+    ├── commonmark_line_break.c          # 拡張: ハード改行・ソフト改行
+    ├── commonmark_dialect.c             # 単位と記述子の表、拡張の生成、名前、方言への追加・生成、簡易パース
+    └── commonmark_convert.c             # HTML への簡易変換（html.h を include する唯一の本体ソース）
 tools/
-├── generate_entity_table.py         # entities.json → src/commonmark_entity_data.c
-└── generate_unicode_tables.py       # UnicodeData.txt → src/unicode_class_data.c、CaseFolding.txt → src/commonmark_unicode_data.c
+├── generate_entity_table.py         # entities.json → src/commonmark/commonmark_entity_data.c
+└── generate_unicode_tables.py       # UnicodeData.txt → src/base/unicode_class_data.c、CaseFolding.txt → src/commonmark/commonmark_unicode_data.c
 tests/
 ├── data/commonmark/
 │   ├── spec-0.31.2.txt              # 改変しない spec.txt
@@ -181,14 +183,14 @@ tests/
 ├── commonmark_inline_test.c         # インライン構文の境界（数値参照の範囲、ラベル長、括弧 32 段、展開量）
 ├── commonmark_data_test.c           # 生成した表の件数と代表値、文字の分類、畳み込み
 └── commonmark_error_test.c          # 方言の生成・解析・簡易 API の失敗注入、資源の解放
-THIRD_PARTY_NOTICES.md               # エンティティ表 src/commonmark_entity_data.c（CC BY 4.0）、Unicode データ src/unicode_class_data.c と src/commonmark_unicode_data.c（Unicode License v3）、spec.txt（テストのみ、CC BY-SA 4.0）
+THIRD_PARTY_NOTICES.md               # エンティティ表 src/commonmark/commonmark_entity_data.c（CC BY 4.0）、Unicode データ src/base/unicode_class_data.c と src/commonmark/commonmark_unicode_data.c（Unicode License v3）、spec.txt（テストのみ、CC BY-SA 4.0）
 ```
 
 ### Modified Files
 実装時に本 spec のタスクとして変更する（本 spec の作成時には変更しない）。
 シェルのファイル（`amark.h`、`src/CMakeLists.txt`、`tests/CMakeLists.txt`、`tests/cxx_header_test.cpp`、`amark_test_support` のソース一覧）は foundation が所有し、本仕様は追記だけを行う。
 - `include/amark/amark.h` — `amark/commonmark.h` と `amark/commonmark_html.h` の include を追記
-- `src/CMakeLists.txt` — `src/commonmark_*.c`（生成物 2 つを含む 26 個）と `src/unicode_class.c`、`src/unicode_class_data.c`（生成物）をソース一覧に追記
+- `src/CMakeLists.txt` — `src/commonmark/commonmark_*.c`（生成物 2 つを含む 26 個）と `src/base/unicode_class.c`、`src/base/unicode_class_data.c`（生成物）をソース一覧に追記
 - `tests/CMakeLists.txt` — `support/test_spec_examples.c` を `amark_test_support` に追記、7 つのテスト実行ファイルを `naos_add_executable` で登録、spec.txt のパスをコンパイル定義 `AMARK_COMMONMARK_SPEC_PATH` で渡す、病的入力テストに CTest の `TIMEOUT 300` を設定
 - `tests/cxx_header_test.cpp` — C++ から `amark_commonmark_dialect_create`（`amark/commonmark.h`）、`amark_commonmark_convert_to_html`（`amark/commonmark_html.h`）を呼ぶ確認を追記
 - `CMakeLists.txt`（インストール規則）— `THIRD_PARTY_NOTICES.md` を `LICENSE` と同じ場所にインストール
@@ -435,11 +437,11 @@ AMARK_API amark_error_t amark_commonmark_convert_to_html(const char *data, size_
 
 ##### State Management
 ```c
-/* src/commonmark_internal.h（非公開。AMARK_API を付けない） */
+/* src/commonmark/commonmark_internal.h（非公開。AMARK_API を付けない） */
 #include <amark/extension.h>
 #include <amark/buffer.h>
 #include <amark/utf8.h>
-#include "unicode_class.h"
+#include "base/unicode_class.h"
 
 /* 各構文のソースが定義する記述子（CommonmarkDialect だけが参照する） */
 extern const amark_extension_desc_t amark_commonmark_thematic_break_desc;
@@ -473,7 +475,7 @@ typedef struct amark_commonmark_link_definition
 | Requirements | 10.1, 10.5 |
 
 **Contracts**: State [x]
-- `src/commonmark_entity_data.c` は生成物。`static const` の配列 `{名前（`&` と `;` を除く）, 名前の長さ, コードポイント 2 個（2 個目がなければ 0）}` を名前のバイト順の昇順に持ち、件数を定数で公開する（内部）。先頭は foundation の定型ヘッダ（MIT）、続いて「生成物、手で編集しない」「出典 URL、取得日、SHA-256、CC BY 4.0、WHATWG への帰属」を記したコメント
+- `src/commonmark/commonmark_entity_data.c` は生成物。`static const` の配列 `{名前（`&` と `;` を除く）, 名前の長さ, コードポイント 2 個（2 個目がなければ 0）}` を名前のバイト順の昇順に持ち、件数を定数で公開する（内部）。先頭は foundation の定型ヘッダ（MIT）、続いて「生成物、手で編集しない」「出典 URL、取得日、SHA-256、CC BY 4.0、WHATWG への帰属」を記したコメント
 - 内部 API: `extern const amark_commonmark_entity_t amark_commonmark_entities[]; extern const size_t amark_commonmark_entity_count;`
 
 #### UnicodeClass（共有の非公開モジュール）
@@ -487,16 +489,16 @@ typedef struct amark_commonmark_link_definition
 
 ##### Service Interface
 ```c
-/* src/unicode_class.h（非公開。include/ に置かず、AMARK_API を付けない） */
+/* src/base/unicode_class.h（非公開。include/ に置かず、AMARK_API を付けない） */
 #include <stdbool.h>
 #include <stdint.h>
 
 bool amark_unicode_is_punctuation(uint32_t c); /* ASCII 句読点、または一般カテゴリ P（Pc Pd Pe Pf Pi Po Ps）/ S（Sc Sk Sm So） */
 bool amark_unicode_is_whitespace(uint32_t c);  /* 一般カテゴリ Zs、タブ、LF、FF、CR */
 ```
-- `src/unicode_class.c`: ASCII は表を引かずに判定し、0x80 以上は `src/unicode_class_data.c` の昇順の表を二分探索する（対数時間）。可変の状態を持たない
-- `src/unicode_class_data.c` は生成物: 句読点のコードポイント範囲 `{first, last}` の昇順配列と、Zs のコードポイントの昇順配列（0x80 以上だけでもよい）。先頭に定型ヘッダ、生成物である旨、出典 URL（UnicodeData.txt）、版 16.0.0、SHA-256、Unicode License v3 の著作権表示
-- 所有と変更: 本仕様が所有する。markdown-renderer が消費側であり、関数・意味・表の変更は markdown-renderer の再検証を伴う。ほかの spec が使う場合も `src/unicode_class.h` だけを include する
+- `src/base/unicode_class.c`: ASCII は表を引かずに判定し、0x80 以上は `src/base/unicode_class_data.c` の昇順の表を二分探索する（対数時間）。可変の状態を持たない
+- `src/base/unicode_class_data.c` は生成物: 句読点のコードポイント範囲 `{first, last}` の昇順配列と、Zs のコードポイントの昇順配列（0x80 以上だけでもよい）。先頭に定型ヘッダ、生成物である旨、出典 URL（UnicodeData.txt）、版 16.0.0、SHA-256、Unicode License v3 の著作権表示
+- 所有と変更: 本仕様が所有する。markdown-renderer が消費側であり、関数・意味・表の変更は markdown-renderer の再検証を伴う。ほかの spec が使う場合も `src/base/unicode_class.h` だけを include する
 - Validation: `commonmark_data_test.c`
 
 #### UnicodeTables
@@ -507,7 +509,7 @@ bool amark_unicode_is_whitespace(uint32_t c);  /* 一般カテゴリ Zs、タブ
 | Requirements | 10.2, 10.5 |
 
 **Contracts**: State [x]
-- `src/commonmark_unicode_data.c` は生成物: 畳み込み `{元, 先の個数 1〜3, 先 3 個}` の元の昇順配列（CaseFolding の状態 C と F）だけを持つ。ラベルの正規化だけが使うため commonmark 専用とし、UnicodeClass には置かない。先頭に定型ヘッダ、出典 URL（CaseFolding.txt）、版 16.0.0、SHA-256、Unicode License v3 の著作権表示
+- `src/commonmark/commonmark_unicode_data.c` は生成物: 畳み込み `{元, 先の個数 1〜3, 先 3 個}` の元の昇順配列（CaseFolding の状態 C と F）だけを持つ。ラベルの正規化だけが使うため commonmark 専用とし、UnicodeClass には置かない。先頭に定型ヘッダ、出典 URL（CaseFolding.txt）、版 16.0.0、SHA-256、Unicode License v3 の著作権表示
 
 ### 文字
 
@@ -754,13 +756,13 @@ amark_slice_t amark_commonmark_rest_of_line(const amark_block_context_t *ctx);
 #### EntityGenerator / UnicodeGenerator
 
 **Contracts**: Batch [x]
-- Trigger: 保守者が手で実行する（`python3 tools/generate_entity_table.py <entities.json> > src/commonmark_entity_data.c`、`python3 tools/generate_unicode_tables.py <UnicodeData.txt> <CaseFolding.txt> --class-output src/unicode_class_data.c --fold-output src/commonmark_unicode_data.c`）
+- Trigger: 保守者が手で実行する（`python3 tools/generate_entity_table.py <entities.json> > src/commonmark/commonmark_entity_data.c`、`python3 tools/generate_unicode_tables.py <UnicodeData.txt> <CaseFolding.txt> --class-output src/base/unicode_class_data.c --fold-output src/commonmark/commonmark_unicode_data.c`）
 - Input / validation: 入力ファイルのパス。entities.json は JSON として読み、`;` で終わる名前だけを採る。UnicodeData.txt は範囲の行（`First>` / `Last>`）を展開してカテゴリを判定する。CaseFolding.txt は状態 C と F を採る。入力の SHA-256 を計算する
 - Output: UnicodeGenerator は 2 つのファイル（句読点・空白の表 `unicode_class_data.c`、畳み込みの表 `commonmark_unicode_data.c`）を出力する。各ファイルに foundation の定型ヘッダ、生成物である旨、出典の URL・版（Unicode 16.0.0 / entities.json の取得日）・SHA-256・ライセンスのコメント、`static const` の表、件数の定数。出力は入力だけで決まる（並び順を固定、10.3）
 - Idempotency: 同じ入力から同じバイト列を出力する。ビルドと CI は実行しない（10.4）
 
 #### ThirdPartyNotices / SpecFixture
-- `THIRD_PARTY_NOTICES.md`: WHATWG HTML Standard の名前付き文字参照（対象ファイル `src/commonmark_entity_data.c`、CC BY 4.0、変更: C の表へ変換）、Unicode Character Database 16.0.0（対象ファイル `src/unicode_class_data.c` と `src/commonmark_unicode_data.c`、Unicode License v3 の全文）、CommonMark Spec 0.31.2（CC BY-SA 4.0、テストデータとしてだけ同梱し、ライブラリには含まれない）（8.1、10.5）
+- `THIRD_PARTY_NOTICES.md`: WHATWG HTML Standard の名前付き文字参照（対象ファイル `src/commonmark/commonmark_entity_data.c`、CC BY 4.0、変更: C の表へ変換）、Unicode Character Database 16.0.0（対象ファイル `src/base/unicode_class_data.c` と `src/commonmark/commonmark_unicode_data.c`、Unicode License v3 の全文）、CommonMark Spec 0.31.2（CC BY-SA 4.0、テストデータとしてだけ同梱し、ライブラリには含まれない）（8.1、10.5）
 - `tests/data/commonmark/spec-0.31.2.txt`: 上流のタグ `0.31.2` の spec.txt をバイト単位で同一に保持。`LICENSE.txt` に著者 John MacFarlane、CC BY-SA 4.0、出典 URL、SHA-256、改変していない旨（8.1）
 
 ### テスト
@@ -898,5 +900,5 @@ parser-core の公開 API の追加・変更は不要である。本仕様が依
 
 - parser-core の簡易解析 API は `amark_parser_parse(dialect, data, length, options, &doc)`を使う
 - foundation への依存: `amark_utf8_decode_previous`（foundation の要件 10.8）を CharClass が使う。新しいエラーコード: なし（foundation の表のコード 0〜7 が唯一の正本）
-- markdown-renderer: UnicodeClass（`src/unicode_class.h`）と抽出器 `tests/support/test_spec_examples.h` の消費側。これらの変更は markdown-renderer の再検証を伴う
+- markdown-renderer: UnicodeClass（`src/base/unicode_class.h`）と抽出器 `tests/support/test_spec_examples.h` の消費側。これらの変更は markdown-renderer の再検証を伴う
 - 適合テストで不一致がレンダラ側の規則に起因すると判明した場合は、html-renderer の組み込み出力の表の修正として html-renderer の spec に戻す（brief の約束）

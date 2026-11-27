@@ -39,8 +39,8 @@
 
 - [ ] 2. データと文字
 - [ ] 2.1 Unicode の表の生成器、共有の文字分類モジュール、文字の分類を実装する
-  - Unicode 16.0.0 の UnicodeData.txt と CaseFolding.txt から、句読点（一般カテゴリ P と S）の範囲と Zs の表を `src/unicode_class_data.c` に、畳み込み（状態 C と F）の表を commonmark 専用の `src/commonmark_unicode_data.c` に、それぞれ定型ヘッダ・生成物である旨・出典の URL・版・SHA-256・Unicode License の表示付きで出力する生成器を開発用ツールとして置き、生成物をコミットする
-  - markdown-renderer と共有する非公開モジュール `src/unicode_class.{h,c}` に `amark_unicode_is_punctuation` / `amark_unicode_is_whitespace`（ASCII は表を引かず、0x80 以上は二分探索）を実装する。`include/` に置かず export しない
+  - Unicode 16.0.0 の UnicodeData.txt と CaseFolding.txt から、句読点（一般カテゴリ P と S）の範囲と Zs の表を `src/base/unicode_class_data.c` に、畳み込み（状態 C と F）の表を commonmark 専用の `src/commonmark/commonmark_unicode_data.c` に、それぞれ定型ヘッダ・生成物である旨・出典の URL・版・SHA-256・Unicode License の表示付きで出力する生成器を開発用ツールとして置き、生成物をコミットする
+  - markdown-renderer と共有する非公開モジュール `src/base/unicode_class.{h,c}` に `amark_unicode_is_punctuation` / `amark_unicode_is_whitespace`（ASCII は表を引かず、0x80 以上は二分探索）を実装する。`include/` に置かず export しない
   - CharClass に ASCII 句読点の判定、内容の位置の直前・直後の文字の復号（直後は foundation の `amark_utf8_decode`、直前は `amark_utf8_decode_previous` を使い独自の後方の復号を持たない。先頭と末尾は行末として扱う）、畳み込みの二分探索を実装し、Unicode の句読点・空白は共有モジュールを呼ぶ
   - データのテスト実行ファイルを登録する
   - 完了状態: データのテストで `!` と `£` と `、` が句読点で `a` が句読点でないこと、U+3000 が空白であること、多バイト文字の直後の位置で直前の文字が正しく復号されること、`ẞ` の畳み込みが `ss` であること、表が昇順で重複がないこと、両方の生成物の先頭に出典と SHA-256 があることが確認され、動的ライブラリが `amark_unicode_*` を export せず、ビルドが Python を必要としない。共有モジュールは markdown-renderer が使うため、その変更は markdown-renderer の再検証を伴う
@@ -49,7 +49,7 @@
 - [ ] 2.2 エンティティ表の生成器、文字参照の復号、エスケープの解決を実装する
   - entities.json から `;` で終わる名前だけを名前の昇順に並べた表を、出典・取得日・SHA-256・CC BY 4.0 の帰属付きで出力する生成器を置き、生成物をコミットする
   - 名前付き・10 進（1〜7 桁）・16 進（1〜6 桁）の文字参照の照合と復号（0、サロゲート、範囲外は U+FFFD）と、バックスラッシュエスケープと文字参照をまとめて解決する処理を実装する
-  - 第三者のライセンス表記の一覧に、エンティティ表（`src/commonmark_entity_data.c`）と Unicode データ（`src/unicode_class_data.c`、`src/commonmark_unicode_data.c`）の対象ファイル・出典・ライセンスを記し、インストール対象に加える
+  - 第三者のライセンス表記の一覧に、エンティティ表（`src/commonmark/commonmark_entity_data.c`）と Unicode データ（`src/base/unicode_class_data.c`、`src/commonmark/commonmark_unicode_data.c`）の対象ファイル・出典・ライセンスを記し、インストール対象に加える
   - インラインのテスト実行ファイルを登録する
   - 完了状態: データとインラインのテストで `amp`・`ngE`・最長の名前の照合、`;` なしの名前の不成立、`&#0;`・`&#xD800;`・`&#x110000;`・8 桁の 10 進の扱い、エスケープの解決結果が確認され、出力がすべて妥当な UTF-8 である
   - _Requirements: 6.2, 6.3, 10.1, 10.3, 10.5, 11.4_

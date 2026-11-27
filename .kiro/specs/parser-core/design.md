@@ -47,7 +47,7 @@
 - node-tree の公開ヘッダ: `node_kind.h`、`node.h`、`node_iter.h`
 - C 標準ライブラリ: `<stddef.h>`、`<stdint.h>`、`<stdbool.h>`、`<string.h>`
 - テスト: Naos、foundation の `tests/support/test_allocator`（テスト補助は `tests/support/test_<area>.{h,c}`、関数は `test_<area>_*` の命名に従う）
-- 依存方向（左ほど下位。右から左への include のみ）: `foundation → node-tree → parse_shared.h → block_syntax.h, inline_syntax.h → extension.h → dialect.h → parser.h`。`src/parser_internal.h` は本 spec の `.c` だけが include する。parser-core はレンダラのヘッダを include せず、node-tree の非公開ヘッダ `node_internal.h` を include しない
+- 依存方向（左ほど下位。右から左への include のみ）: `foundation → node-tree → parse_shared.h → block_syntax.h, inline_syntax.h → extension.h → dialect.h → parser.h`。`src/parser/parser_internal.h` は本 spec の `.c` だけが include する。parser-core はレンダラのヘッダを include せず、node-tree の非公開ヘッダ `node_internal.h` を include しない
 
 ### Revalidation Triggers
 - vtable（`amark_block_syntax_t`、`amark_inline_syntax_t`、`amark_delimiter_handler_t`、`amark_paragraph_processor_t`、`amark_postprocessor_t`）のフィールド・コールバックの型・結果の列挙の変更
@@ -76,7 +76,7 @@ html-renderer への期待: フックのキーを `const amark_node_kind_t *` �
 本仕様が使う追加コード `AMARK_ERROR_INVALID_STATE = 7`（`"invalid state"`）は、foundation design.md のエラー表（0〜7 と所有 spec の一覧。値・文字列・意味の唯一の定義元）に登録済みである。node-tree の `AMARK_ERROR_INVALID_CHILD = 5`、`AMARK_ERROR_ALREADY_EXISTS = 6` も同じ表に登録済みである。本書では再定義しない。
 
 - 本仕様での使い方: `INVALID_STATE` は、終了済み・失敗済みのパーサへの供給と終了、凍結された方言の変更、方言が所有する拡張の別の方言への追加
-- 実装時は parser-core のタスクとして `error.h`、`src/error.c`、`tests/error_test.c` に追記する（追記専用。既存の値は変えない）
+- 実装時は parser-core のタスクとして `error.h`、`src/base/error.c`、`tests/error_test.c` に追記する（追記専用。既存の値は変えない）
 - 既存コードの使い分け: 引数の形の違反は `AMARK_ERROR_INVALID_ARGUMENT`、名前の重複と定義の重複は `AMARK_ERROR_ALREADY_EXISTS`、ノードの親子規則違反は `AMARK_ERROR_INVALID_CHILD`
 
 node-tree との関係: node-tree の design.md は、本設計の決定（拡張ごとに 1 つのレジストリを拡張が所有し、parser-core の API には出さない。方言は拡張間の名前の重複を検査する）に合わせて更新済みである。
@@ -166,20 +166,21 @@ include/amark/
 ├── dialect.h             # amark_dialect_t、分類の列挙、追加・取り外し・検索・列挙・優先順位・凍結
 └── parser.h              # amark_parser_options_t、amark_parser_t、生成・供給・終了・リセット・一括パース
 src/
-├── parser_internal.h     # 非公開: 全構造体の定義、内部関数の宣言（export しない）
-├── parser_map.c          # 内部ハッシュ表（バイト列キーとポインタキー）。定義テーブルとブロック記録・インライン対象で共用
-├── definition_table.c    # 名前空間付き定義テーブル（公開 API）と後片付け
-├── extension.c           # 記述子の検証、レジストリの生成と種別登録、attachment
-├── dialect.c             # 所有、名前の衝突検査、優先順位、凍結、並び替えた呼び出し表の構築
-├── input_reader.c        # 分割入力の連結、行末の正規化、NUL・不正 UTF-8 の置換、BOM の除去、行の取り出し
-├── block_line.c          # 行カーソル（バイト位置、桁、タブの部分消費、字下げ、空行判定）
-├── block_context.c       # ブロック文脈の公開関数（行の問い合わせ・読み進め、open、内容、インライン対象、空行の問い合わせ）
-├── paragraph.c           # フォールバック段落の振る舞い、段落の内容の処理器の呼び出しとキャッシュ、行の引き取り
-├── block_engine.c        # 開いているブロックのスタック、1 行の処理手順、クローズ、ブロック記録、空行の記録
-├── inline_delimiter.c    # デリミタスタック、openers_bottom、デリミタ処理の手順、テキストの確定
-├── inline_bracket.c      # ブラケットスタック、水位線による無効化、閉じと取り除き
-├── inline_engine.c       # インライン文脈の公開関数、トリガー表による呼び出し、保留テキスト、インライン対象の処理
-└── parser.c              # オプション、パーサの寿命と状態、供給・終了・リセット・一括パース、解析状態、後処理、正規化
+└── parser/
+    ├── parser_internal.h     # 非公開: 全構造体の定義、内部関数の宣言（export しない）
+    ├── parser_map.c          # 内部ハッシュ表（バイト列キーとポインタキー）。定義テーブルとブロック記録・インライン対象で共用
+    ├── definition_table.c    # 名前空間付き定義テーブル（公開 API）と後片付け
+    ├── extension.c           # 記述子の検証、レジストリの生成と種別登録、attachment
+    ├── dialect.c             # 所有、名前の衝突検査、優先順位、凍結、並び替えた呼び出し表の構築
+    ├── input_reader.c        # 分割入力の連結、行末の正規化、NUL・不正 UTF-8 の置換、BOM の除去、行の取り出し
+    ├── block_line.c          # 行カーソル（バイト位置、桁、タブの部分消費、字下げ、空行判定）
+    ├── block_context.c       # ブロック文脈の公開関数（行の問い合わせ・読み進め、open、内容、インライン対象、空行の問い合わせ）
+    ├── paragraph.c           # フォールバック段落の振る舞い、段落の内容の処理器の呼び出しとキャッシュ、行の引き取り
+    ├── block_engine.c        # 開いているブロックのスタック、1 行の処理手順、クローズ、ブロック記録、空行の記録
+    ├── inline_delimiter.c    # デリミタスタック、openers_bottom、デリミタ処理の手順、テキストの確定
+    ├── inline_bracket.c      # ブラケットスタック、水位線による無効化、閉じと取り除き
+    ├── inline_engine.c       # インライン文脈の公開関数、トリガー表による呼び出し、保留テキスト、インライン対象の処理
+    └── parser.c              # オプション、パーサの寿命と状態、供給・終了・リセット・一括パース、解析状態、後処理、正規化
 tests/
 ├── support/
 │   ├── test_syntax.h     # テスト用の拡張を作る関数 test_syntax_* の宣言
@@ -202,9 +203,9 @@ tests/
 
 ### Modified Files
 実装時に本 spec のタスクとして変更する（本 spec の作成時には変更しない）。
-- `include/amark/error.h`、`src/error.c`、`tests/error_test.c` — `AMARK_ERROR_INVALID_STATE = 7` の追記（値は foundation design.md のエラー表で登録済み）
+- `include/amark/error.h`、`src/base/error.c`、`tests/error_test.c` — `AMARK_ERROR_INVALID_STATE = 7` の追記（値は foundation design.md のエラー表で登録済み）
 - `include/amark/amark.h` — 6 つの公開ヘッダの include を parser-core のブロックとして追記
-- `src/CMakeLists.txt` — 本 spec の 13 個の `.c` をソース一覧に追記
+- `src/CMakeLists.txt` — 本 spec の 13 個の `.c` を `parser/<file>.c` の形でソース一覧に追記
 - `tests/CMakeLists.txt` — 12 個のテスト実行ファイルを追記登録し、`test_syntax.c` と `test_tree_dump.c` をテスト補助ライブラリ `amark_test_support` のソースに追記する
 - `tests/cxx_header_test.cpp` — C++ から方言の生成、一括パース、文書と方言の破棄を呼ぶ確認を追記
 - 上の共有ファイル（包括ヘッダ、ビルド定義、C++ 検査、エラー列挙、`amark_test_support` のソース一覧）は foundation が所有する追記専用のファイルである。parser-core は自分のブロックを追記するだけで、既存の行を変更・並べ替えしない
@@ -384,7 +385,7 @@ stateDiagram-v2
 **Contracts**: State [x]
 
 ##### State Management
-主要な構造体（`src/parser_internal.h`、`AMARK_API` を付けず export しない）:
+主要な構造体（`src/parser/parser_internal.h`、`AMARK_API` を付けず export しない）:
 
 | 構造体 | 主なフィールド | 所有 |
 |---|---|---|
@@ -1014,7 +1015,7 @@ AMARK_API amark_error_t amark_parser_parse(amark_dialect_t *dialect, const char 
 ### foundation への追加・統合
 
 #### ErrorCodeAddition
-- foundation design.md のエラー表に登録済みの値（7）と文字列どおりに、`error.h`・`src/error.c`・`tests/error_test.c` へ同時に追記する（16.1）
+- foundation design.md のエラー表に登録済みの値（7）と文字列どおりに、`error.h`・`src/base/error.c`・`tests/error_test.c` へ同時に追記する（16.1）
 
 #### ParserIntegration
 
