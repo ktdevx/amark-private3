@@ -46,4 +46,5 @@ target_sources(amark PRIVATE
     base/error.c
     base/memory.c
     base/slice.c
+    base/utf8.c
 )

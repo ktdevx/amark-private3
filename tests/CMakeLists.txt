@@ -49,6 +49,9 @@ amark_target_warnings(amark_memory_test)
 naos_add_executable(amark_slice_test SOURCES slice_test.c LIBRARIES Amark::amark amark_test_support)
 amark_target_warnings(amark_slice_test)
 
+naos_add_executable(amark_utf8_test SOURCES utf8_test.c LIBRARIES Amark::amark amark_test_support)
+amark_target_warnings(amark_utf8_test)
+
 # C++ から包括ヘッダを include して公開 API を呼べることを確かめる（後続 spec は
 # cxx_header_test.cpp に自分のブロックを追記する。ここの登録は変えない）
 naos_add_executable(amark_cxx_header_test SOURCES cxx_header_test.cpp LIBRARIES Amark::amark amark_test_support)
