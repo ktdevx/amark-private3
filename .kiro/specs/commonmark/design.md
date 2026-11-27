@@ -340,37 +340,35 @@ graph TB
 
 #define AMARK_COMMONMARK_SPEC_VERSION "0.31.2"
 
-typedef enum amark_commonmark_construct
-{
-    AMARK_COMMONMARK_THEMATIC_BREAK = 0x00001,
-    AMARK_COMMONMARK_ATX_HEADING = 0x00002,
-    AMARK_COMMONMARK_SETEXT_HEADING = 0x00004,
-    AMARK_COMMONMARK_INDENTED_CODE = 0x00008,
-    AMARK_COMMONMARK_FENCED_CODE = 0x00010,
-    AMARK_COMMONMARK_HTML_BLOCK = 0x00020,
-    AMARK_COMMONMARK_LINK_REFERENCE_DEFINITION = 0x00040,
-    AMARK_COMMONMARK_BLOCK_QUOTE = 0x00080,
-    AMARK_COMMONMARK_LIST = 0x00100,             /* リストとリスト項目 */
-    AMARK_COMMONMARK_BACKSLASH_ESCAPE = 0x00200,
-    AMARK_COMMONMARK_ENTITY = 0x00400,           /* 名前付き・数値文字参照 */
-    AMARK_COMMONMARK_CODE_SPAN = 0x00800,
-    AMARK_COMMONMARK_EMPHASIS = 0x01000, /* 強調と強い強調 */
-    AMARK_COMMONMARK_LINK = 0x02000,     /* リンクと画像 */
-    AMARK_COMMONMARK_AUTOLINK = 0x04000,
-    AMARK_COMMONMARK_HTML_INLINE = 0x08000,
-    AMARK_COMMONMARK_LINE_BREAK = 0x10000        /* ハード改行とソフト改行 */
-} amark_commonmark_construct_t;
+/* 構文の選択（ビットフラグ。OR で組み合わせ、引数は uint32_t で受ける） */
+#define AMARK_COMMONMARK_THEMATIC_BREAK            ((uint32_t)0x00001u)
+#define AMARK_COMMONMARK_ATX_HEADING               ((uint32_t)0x00002u)
+#define AMARK_COMMONMARK_SETEXT_HEADING            ((uint32_t)0x00004u)
+#define AMARK_COMMONMARK_INDENTED_CODE             ((uint32_t)0x00008u)
+#define AMARK_COMMONMARK_FENCED_CODE               ((uint32_t)0x00010u)
+#define AMARK_COMMONMARK_HTML_BLOCK                ((uint32_t)0x00020u)
+#define AMARK_COMMONMARK_LINK_REFERENCE_DEFINITION ((uint32_t)0x00040u)
+#define AMARK_COMMONMARK_BLOCK_QUOTE               ((uint32_t)0x00080u)
+#define AMARK_COMMONMARK_LIST                      ((uint32_t)0x00100u) /* リストとリスト項目 */
+#define AMARK_COMMONMARK_BACKSLASH_ESCAPE          ((uint32_t)0x00200u)
+#define AMARK_COMMONMARK_ENTITY                    ((uint32_t)0x00400u) /* 名前付き・数値文字参照 */
+#define AMARK_COMMONMARK_CODE_SPAN                 ((uint32_t)0x00800u)
+#define AMARK_COMMONMARK_EMPHASIS                  ((uint32_t)0x01000u) /* 強調と強い強調 */
+#define AMARK_COMMONMARK_LINK                      ((uint32_t)0x02000u) /* リンクと画像 */
+#define AMARK_COMMONMARK_AUTOLINK                  ((uint32_t)0x04000u)
+#define AMARK_COMMONMARK_HTML_INLINE               ((uint32_t)0x08000u)
+#define AMARK_COMMONMARK_LINE_BREAK                ((uint32_t)0x10000u) /* ハード改行とソフト改行 */
 
 #define AMARK_COMMONMARK_ALL ((uint32_t)0x1FFFFu)
 #define AMARK_COMMONMARK_CONSTRUCT_COUNT 17
 
-AMARK_API amark_error_t amark_commonmark_extension_create(amark_commonmark_construct_t construct,
+AMARK_API amark_error_t amark_commonmark_extension_create(uint32_t construct,
                                                           amark_extension_t **extension);
-AMARK_API amark_slice_t amark_commonmark_get_extension_name(amark_commonmark_construct_t construct);
+AMARK_API amark_slice_t amark_commonmark_get_extension_name(uint32_t construct);
 AMARK_API amark_error_t amark_commonmark_add_extensions(amark_dialect_t *dialect, uint32_t constructs);
 AMARK_API amark_error_t amark_commonmark_dialect_create(uint32_t constructs, amark_dialect_t **dialect);
 AMARK_API amark_error_t amark_commonmark_parse(const char *data, size_t len, const amark_parser_options_t *opts,
-                                               amark_node_t **document);
+                                               amark_node_t **doc);
 ```
 - `amark/commonmark.h` は `amark/html.h` を include せず、html-renderer の型を使わない。HTML への簡易変換は `amark/commonmark_html.h`（下記）に分ける
 - ヘッダ冒頭のコメントに記す利用者向けの事項: 対象の仕様の版、単位の一覧と拡張名、プリセットは凍結されていないこと、繰り返し解析する場合は方言を作って `amark_parser_parse` で再利用すべきこと（簡易 API は呼び出しごとに方言を作る）、CommonMark の拡張だけからなる方言で作った文書は方言の破棄後も有効なこと（parser-core の C1）、HTML への簡易変換は `amark/commonmark_html.h` にあること
@@ -731,7 +729,7 @@ amark_slice_t amark_commonmark_rest_of_line(const amark_block_context_t *ctx);
 - `amark_commonmark_get_extension_name(construct)`: 定義済みの 1 ビットなら拡張名（静的、NUL 終端）、それ以外 `{NULL, 0}`（1.6）
 - `amark_commonmark_add_extensions(dialect, constructs)`（1.2、2.4、2.5）: `dialect == NULL`、`constructs == 0`、`constructs & ~AMARK_COMMONMARK_ALL`: `AMARK_ERROR_INVALID_ARGUMENT`。凍結済みなら `AMARK_ERROR_INVALID_STATE`（`amark_dialect_is_frozen` で先に確かめる）。表の順に、指定されたビットの拡張を生成して `amark_dialect_add_extension`。失敗したら、その拡張を破棄し、この呼び出しで追加した拡張を逆順に `amark_dialect_remove_extension` で取り外して、そのエラー（`ALREADY_EXISTS`、`NO_MEMORY` など）を返す。取り外しは凍結されていない方言では失敗しない
 - `amark_commonmark_dialect_create(constructs, dialect)`（2.1、2.2、2.6）: `dialect == NULL` と `constructs` の検査は同上。`amark_dialect_create` → `amark_commonmark_add_extensions` → 成功なら凍結せずに `*dialect` に書く。失敗なら方言を破棄して `*dialect` を変更しない
-- `amark_commonmark_parse(data, len, opts, document)`（3.1、3.3〜3.6）: `document == NULL`、`len > 0 && data == NULL`: `AMARK_ERROR_INVALID_ARGUMENT`。`amark_commonmark_dialect_create(AMARK_COMMONMARK_ALL)` → `amark_parser_parse(dialect, data, len, opts, &doc)` → 方言を破棄 → 成功なら `*document = doc`。`opts == NULL` は parser-core の既定値。同じ入力の通常のパースと同一の木（3.6）
+- `amark_commonmark_parse(data, len, opts, doc)`（3.1、3.3〜3.6）: `doc == NULL`、`len > 0 && data == NULL`: `AMARK_ERROR_INVALID_ARGUMENT`。`amark_commonmark_dialect_create(AMARK_COMMONMARK_ALL)` → `amark_parser_parse(dialect, data, len, opts, &tmp)` → 方言を破棄 → 成功なら `*doc = tmp`。`opts == NULL` は parser-core の既定値。同じ入力の通常のパースと同一の木（3.6）
 - 並行利用（12.1〜12.3）: 可変のグローバル状態を持たない。簡易 API は呼び出しごとに方言を作るため共有状態がない。プリセットを凍結した方言は parser-core の規則どおり複数のパーサから同時に使える（構文のコールバックは解析状態と文脈だけを書き換える）
 
 **Implementation Notes**

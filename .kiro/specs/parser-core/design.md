@@ -466,7 +466,7 @@ typedef amark_error_t (*amark_extension_state_create_fn_t)(void **state, void *u
 typedef void (*amark_extension_state_destroy_fn_t)(void *state, void *user_data);
 typedef void (*amark_extension_attachment_destroy_fn_t)(void *data, void *user_data);
 
-typedef amark_error_t (*amark_postprocess_fn_t)(amark_node_t *document, amark_definition_table_t *definitions,
+typedef amark_error_t (*amark_postprocess_fn_t)(amark_node_t *doc, amark_definition_table_t *definitions,
                                                 void *state, void *user_data);
 
 typedef struct amark_postprocessor
@@ -794,7 +794,7 @@ typedef struct amark_paragraph_processor
 
 **Contracts**: Service [x] / State [x]
 
-- 内部 API: `amark_block_engine_init(engine, dialect, opts, document)`、`_process_line(engine, line)`、`_finish(engine)`（開いているブロックを内側から閉じる、6.7）、`_deinit(engine)`（未完了のブロックの状態の後片付け）
+- 内部 API: `amark_block_engine_init(engine, dialect, opts, doc)`、`_process_line(engine, line)`、`_finish(engine)`（開いているブロックを内側から閉じる、6.7）、`_deinit(engine)`（未完了のブロックの状態の後片付け）
 - 1 行の処理は「1 行の処理」の図の順序に従う（5.1〜5.3、6.1、6.2、6.4、7.1）。具体的な規則:
   - 開いているブロックは配列のスタックに持ち、継続判定はスタックの下から上へ反復する（再帰なし、15.4）
   - `CONTINUE_YES` で構文が位置を進めなかった場合もそのまま内側へ進む。`CONTINUE_NO` でエンジンは継続判定の前の位置に戻す
@@ -875,7 +875,7 @@ AMARK_API const amark_extension_t *amark_inline_context_get_extension(const amar
 - `append_node(ctx, node)`: 保留テキストを確定してから現在の追加先（対象のノード）の末尾に `amark_node_append_child` で追加する。所有は成否にかかわらず移る。受け入れられなければ `AMARK_ERROR_INVALID_CHILD`（解析の失敗）
 - 構文が 1 つもない場合（4.4）: 内容全体が 1 つのテキストになる。内容が空なら子を作らない
 - 内容の終わりで、ブラケットの残り（11.6）とデリミタの処理（10.5）を行う
-- 隣接テキストのまとめ（9.6）: 全対象の解析後に ParserCore が `amark_node_normalize(document)` を呼ぶ。デリミタの残りのテキストと隣のテキストもここでまとまる
+- 隣接テキストのまとめ（9.6）: 全対象の解析後に ParserCore が `amark_node_normalize(doc)` を呼ぶ。デリミタの残りのテキストと隣のテキストもここでまとまる
 - 計算量（15.1、15.4）: 各バイトはトリガーでなければ 1 回、トリガーなら呼ばれる構文数の定数回。構文が読み進めた分は構文の責任（構文が処理した入力に比例すること）。再帰を使わない
 
 #### InlineDelimiter
@@ -991,19 +991,19 @@ AMARK_API amark_error_t amark_parser_create(amark_dialect_t *dialect, const amar
 AMARK_API void amark_parser_destroy(amark_parser_t *parser);
 AMARK_API amark_error_t amark_parser_reset(amark_parser_t *parser);
 AMARK_API amark_error_t amark_parser_feed(amark_parser_t *parser, const char *data, size_t len);
-AMARK_API amark_error_t amark_parser_finish(amark_parser_t *parser, amark_node_t **document);
+AMARK_API amark_error_t amark_parser_finish(amark_parser_t *parser, amark_node_t **doc);
 AMARK_API amark_error_t amark_parser_parse(amark_dialect_t *dialect, const char *data, size_t len,
-                                           const amark_parser_options_t *opts, amark_node_t **document);
+                                           const amark_parser_options_t *opts, amark_node_t **doc);
 ```
 - `options_init`: 両方を既定値 1000 にする。`NULL` は何もしない（1.4）
 - `create`（1.1〜1.3）: `dialect`・`parser` が `NULL`、`opts` のいずれかの項目が 0: `AMARK_ERROR_INVALID_ARGUMENT`。`opts == NULL` なら既定値（1.2）。`amark_dialect_freeze` を呼び（失敗はそのまま返す）、パーサを確保し、解析の開始（下の「解析の開始」）を行って `Ready` で返す。途中の失敗はすべて戻して `*parser` を変更しない
 - 解析の開始: 空の文書ノードを作り、定義テーブルを初期化し、方言の拡張の追加順に `state_create(&state, user_data)` を呼ぶ（8.3）。失敗時は作成済みの状態を逆順に `state_destroy` する
 - 解析の後片付け（完了・失敗・リセット・破棄で共通、8.3、8.6）: 開いているブロックの状態の `destroy_state`、ブロック記録とインライン対象、定義テーブルの値の `destroy`、拡張の状態の `state_destroy`（追加順の逆）を 1 回ずつ行う。未完成の文書は破棄する
 - `feed(parser, data, len)`（2.1、2.5〜2.7）: `parser` が `NULL`、`len > 0 && data == NULL`: `AMARK_ERROR_INVALID_ARGUMENT`。`Ready` でなければ `AMARK_ERROR_INVALID_STATE`。`len == 0` は何もせず `AMARK_OK`。入力を InputReader に渡し、完成した行をすべて BlockEngine で処理する。失敗したら後片付けをして `Failed` にし、そのエラーを返す（16.3）
-- `finish(parser, &document)`（2.3、2.8）: `Ready` でなければ `AMARK_ERROR_INVALID_STATE`（2.7）。残りの行の処理 → BlockEngine の終了 → インライン段階（InlineEngine）→ `amark_node_normalize(document)` → 後処理を凍結時の順に `process(document, definitions, 拡張の状態, user_data)`（12.1。エラーなら以降を呼ばず失敗、12.2）→ 解析の後片付け（文書は破棄しない）→ `*document` に書いて `Finished`。失敗時は後片付けして `Failed`、`*document` は変更しない（16.3）
+- `finish(parser, &doc)`（2.3、2.8）: `Ready` でなければ `AMARK_ERROR_INVALID_STATE`（2.7）。残りの行の処理 → BlockEngine の終了 → インライン段階（InlineEngine）→ `amark_node_normalize(doc)` → 後処理を凍結時の順に `process(doc, definitions, 拡張の状態, user_data)`（12.1。エラーなら以降を呼ばず失敗、12.2）→ 解析の後片付け（文書は破棄しない）→ `*doc` に書いて `Finished`。失敗時は後片付けして `Failed`、`*doc` は変更しない（16.3）
 - `reset`（1.7）: どの状態からでも後片付けをして解析の開始を行い `Ready` にする。解析の開始の失敗時は `Failed` のまま失敗を返す
 - `destroy`（1.5、1.6）: `NULL` は何もしない。後片付けをして解放する。既に返した文書には触れない
-- `amark_parser_parse(dialect, data, len, opts, document)`（2.4）: 引数の順序は「対象（方言）、入力（`data`, `len`）、オプション、出力」で、`feed` の `data, len` の並びに揃える。`create`・`feed`・`finish`・`destroy` を順に行う。途中の失敗では生成したものをすべて解放してそのエラーを返す。返した文書は（標準種別のノードだけなら）方言の破棄の後も有効（14.9）
+- `amark_parser_parse(dialect, data, len, opts, doc)`（2.4）: 引数の順序は「対象（方言）、入力（`data`, `len`）、オプション、出力」で、`feed` の `data, len` の並びに揃える。`create`・`feed`・`finish`・`destroy` を順に行う。途中の失敗では生成したものをすべて解放してそのエラーを返す。返した文書は（標準種別のノードだけなら）方言の破棄の後も有効（14.9）
 - 引数の並びの規約: 入力を受け取る関数は常に `data, len` の順で、対象のオブジェクトの直後に置く（`feed(parser, data, len)`、`parser_parse(dialect, data, len, ...)`）。入力を受け取らない `create(dialect, opts, &parser)` は「対象、オプション、出力」
 - 分割の同一性（2.2）: ブロック段階は完成した行だけを処理し、行の確定は InputReader が分割位置によらず同じに行うため、木は分割に依存しない
 

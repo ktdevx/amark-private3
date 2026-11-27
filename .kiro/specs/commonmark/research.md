@@ -68,7 +68,7 @@
 ### Decision: 拡張の粒度と名前
 - **Context**: 要件 1.1、1.4、1.6
 - **Alternatives Considered**: 上表
-- **Selected Approach**: 17 単位。拡張名と構文名は `commonmark_` で始める（例: `commonmark_html_block`）。単位はビット値の列挙で指定し、集合はビットの論理和
+- **Selected Approach**: 17 単位。拡張名と構文名は `commonmark_` で始める（例: `commonmark_html_block`）。単位はビットフラグの `#define` 定数（`uint32_t`）で指定し、集合はビットの論理和
 - **Rationale**: 取り外したい単位と仕様の構文が一致する。名前の接頭辞で将来の gfm や第三者の拡張と衝突しない
 - **Trade-offs**: リンクと画像は分けない（`]` の処理が共有で、画像だけを外す用途が乏しい）。リンク参照定義はリンクと別にする（定義を外すと参照リンクが成立しない方言を作れる）
 - **Follow-up**: GFM が優先順位を挟めるよう、ブロックの開始判定の優先順位を 10 刻みにする
