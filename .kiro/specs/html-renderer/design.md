@@ -165,7 +165,7 @@ graph TB
 - 子の省略後の EXIT の訪問（11.3）: node-tree の `amark_node_iter_reset(iter, node, EXIT)` は「次の `next` はその位置の続きを報告する」ため、リセットだけでは同じノードの EXIT が報告されない。node-tree の NodeWalk（駆動部）はリセットの直後に `walk->event = EXIT`、`skip_children = false` として同じノードの EXIT で訪問関数を自ら呼ぶ。続く `next` は EXIT の続き（次の兄弟の ENTER または親の EXIT）を報告するため、EXIT は二重に訪問されない（node-tree 要件 14.7。本仕様の 11.3 はこの手順で満たす）
 - EXIT の訪問はフックのある種別ではフックを（11.3 の「出るときの呼び出し」）、ない種別では組み込み出力を呼ぶ。組み込みで子を省略するのは image だけで、その EXIT は何も出さないため HTML の出力は変わらない
 - 組み込みの image は ENTER で子の省略を自ら要求する（「画像の alt 平坦化」）。フックが image の ENTER で `render_default` を呼んだ場合も同じ
-- エラー時は `amark_buffer_truncate(output, start)` で出力先を呼び出し前の長さに戻す（`start` は呼び出し時の `output->length`）
+- エラー時は `amark_buffer_truncate(output, start)` で出力先を呼び出し前の長さに戻す（`start` は呼び出し時の `output->len`）
 
 ### 画像の alt 平坦化
 
@@ -226,7 +226,7 @@ sequenceDiagram
 
 ### 共通の API 規約（本仕様の全公開関数）
 - foundation の共通 API 規約に従う。`amark_error_t` を返す関数は、必須のポインタ引数が `NULL` なら `AMARK_ERROR_INVALID_ARGUMENT` を返し何も変更しない
-- 出力先 `amark_buffer_t *` に書く関数は、失敗時に出力先の内容（`length` と `data[0..length]`）を呼び出し前に戻す（容量の増加は残ってよい）（12.3）
+- 出力先 `amark_buffer_t *` に書く関数は、失敗時に出力先の内容（`len` と `data[0..len]`）を呼び出し前に戻す（容量の増加は残ってよい）（12.3）
 - 木は `const amark_node_t *` で受け取り、変更しない（1.4）。node-tree のイテレータが非 const の根を取るため、内部でだけ const を外して走査する（イテレータは木を変更しない）
 - 確保は `amark_malloc` / `amark_realloc` / `amark_free` だけを使う（12.2）。表はすべて `static const`（13.4）
 - 確保するのはレンダラの構造体（固定長）、フック表（node-tree の NodeWalk。空の表は確保せず、最初の登録で確保する）、出力先の伸長（foundation のバッファ）だけで、いずれもサイズ 0 を要求しない（foundation の Memory のライブラリ内の規則）
@@ -260,9 +260,9 @@ typedef enum amark_html_softbreak
 
 typedef struct amark_html_options
 {
-    bool allow_raw_html;                /* 偽（既定）: HTML block / inline を "<!-- raw HTML omitted -->" に置き換える */
-    bool allow_dangerous_urls;          /* 偽（既定）: 危険な URL の href / src を空にする */
-    amark_html_softbreak_t softbreak;   /* 既定: AMARK_HTML_SOFTBREAK_NEWLINE */
+    bool allow_raw_html;              /* 偽（既定）: HTML block / inline を "<!-- raw HTML omitted -->" に置き換える */
+    bool allow_dangerous_urls;        /* 偽（既定）: 危険な URL の href / src を空にする */
+    amark_html_softbreak_t softbreak; /* 既定: AMARK_HTML_SOFTBREAK_NEWLINE */
 } amark_html_options_t;
 
 typedef struct amark_html_renderer amark_html_renderer_t; /* opaque: 設定とフック表 */
@@ -344,7 +344,7 @@ URL 符号化（6.2、6.3）:
 | `'` | `&#x27;` |
 | その他（0x00–0x20、`" < > [ \ ] ^` バッククォート `{ | }`、0x7F、0x80–0xFF） | `%` と大文字 16 進 2 桁 |
 
-- `amark_html_escape(output, text)` / `amark_html_escape_url(output, url)`: `output == NULL`、または `text.length > 0 && text.data == NULL` は `AMARK_ERROR_INVALID_ARGUMENT`。安全文字の連続は 1 回の `amark_buffer_append` でまとめて追記する。途中で失敗したら呼び出し時の長さへ `amark_buffer_truncate` して `AMARK_ERROR_NO_MEMORY` / `AMARK_ERROR_OVERFLOW` を返す。長さどおりに処理し NUL で止まらない（6.5）。空入力は何もせず `AMARK_OK`
+- `amark_html_escape(output, text)` / `amark_html_escape_url(output, url)`: `output == NULL`、または `text.len > 0 && text.data == NULL` は `AMARK_ERROR_INVALID_ARGUMENT`。安全文字の連続は 1 回の `amark_buffer_append` でまとめて追記する。途中で失敗したら呼び出し時の長さへ `amark_buffer_truncate` して `AMARK_ERROR_NO_MEMORY` / `AMARK_ERROR_OVERFLOW` を返す。長さどおりに処理し NUL で止まらない（6.5）。空入力は何もせず `AMARK_OK`
 - `amark_html_url_is_dangerous(url)`（7.5）: ASCII の大文字小文字を区別しない接頭辞一致で、`data:image/png`、`data:image/gif`、`data:image/jpeg`、`data:image/webp` のいずれかで始まれば偽。そうでなく `javascript:`、`vbscript:`、`file:`、`data:` のいずれかで始まれば真。それ以外（空、不正なスライスを含む）は偽。先頭の空白を除去しない（cmark と同一。空白・制御文字は符号化で `%XX` になる）
 - 公開することで、フックの作者と利用者が木の外の文字列にも使える（6.4）
 
@@ -375,8 +375,8 @@ struct amark_html_context
 {
     const amark_html_options_t *options;
     amark_buffer_t *output;
-    size_t start;                       /* 描画開始時の output->length（行頭保証と巻き戻しの基準） */
-    amark_node_walk_t *walk;            /* 現在のノード・イベント・子の省略 */
+    size_t start;            /* 描画開始時の output->len（行頭保証と巻き戻しの基準） */
+    amark_node_walk_t *walk; /* 現在のノード・イベント・子の省略 */
 };
 
 bool amark_html_options_valid(const amark_html_options_t *options);                    /* html_renderer.c */
@@ -396,7 +396,7 @@ amark_error_t amark_html_standard_write_url(amark_html_context_t *context, amark
 
 **Responsibilities & Constraints**
 - `amark_html_standard_render(context)` は `context->walk` の現在の (ノード, イベント) について下表の出力を行う。拡張種別（`AMARK_NODE_EXTENSION`）には何も出さず `AMARK_OK`（11.6 の透過）
-- 「cr」は行頭保証: `output->length > start` かつ `output->data[output->length - 1] != '\n'` のときだけ `\n` を追記する（1.7、2.11）。出力先に既にあった内容は見ない
+- 「cr」は行頭保証: `output->len > start` かつ `output->data[output->len - 1] != '\n'` のときだけ `\n` を追記する（1.7、2.11）。出力先に既にあった内容は見ない
 - 値は node-tree のアクセサで読む（見出しレベル、リスト種別・開始番号・tight、literal、info、url、title）。部分木を起点にしても親リンクから tight を判定するため、木の中と同じ出力になる（1.2、3.4）
 
 組み込み出力の表（ENTER / EXIT。葉は ENTER のみ。`esc(x)` はエスケープ、`url(x)` は安全性の設定を適用した URL 出力）:
@@ -468,7 +468,7 @@ amark_error_t amark_html_standard_write_url(amark_html_context_t *context, amark
 - `amark_html_renderer_destroy(renderer)`: フック表を deinit して解放する。`NULL` は何もしない（12.5）
 - `amark_html_renderer_set_hook(renderer, kind, render, user_data)`: `renderer` または `kind` が `NULL` なら `AMARK_ERROR_INVALID_ARGUMENT`。`amark_node_walk_table_set(&renderer->hooks, kind, (amark_node_walk_hook_fn_t)render, user_data)` の結果を返す。`render == NULL` は解除（10.1、10.2、10.4〜10.7）
 - `amark_html_renderer_render(renderer, root, output)`: `renderer`、`root`、`output` のいずれかが `NULL` なら `AMARK_ERROR_INVALID_ARGUMENT`（1.5）。描画の手順:
-  1. `start = output->length`、`amark_node_walk_t walk`、コンテキスト `{&renderer->options, output, start, &walk}` をスタック上に用意する（確保なし、12.6）
+  1. `start = output->len`、`amark_node_walk_t walk`、コンテキスト `{&renderer->options, output, start, &walk}` をスタック上に用意する（確保なし、12.6）
   2. `amark_node_walk_run(&walk, root, &renderer->hooks, visit, &context)`
   3. 結果が非 `AMARK_OK` なら `amark_buffer_truncate(output, start)` してその結果を返す（12.3）
 - `amark_html_render(root, options, output)`: `root`、`output` の `NULL` と設定の検証は同上。空のフック表を持つ一時的なレンダラ相当（スタック上、確保なし）で `amark_html_renderer_render` と同じ手順を行う（1.1）

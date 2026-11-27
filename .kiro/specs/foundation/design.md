@@ -570,7 +570,7 @@ AMARK_API void amark_allocator_get(amark_allocator_t *allocator);
 - 確保系の戻り値 `NULL` は、要求サイズ（`amark_calloc` では `count * size`）が 0 でないときに限り確保失敗を意味する。サイズ 0 の要求は常に `NULL` を返す
 - 利用者関数への事前条件: ラッパが上の表で 0 サイズと `NULL` を処理するため、`size`、`count` は常に 1 以上、`realloc_fn` と `free_fn` の `ptr` は常に非 `NULL` で届く。戻り値はあらゆるオブジェクト型に適切に整列していること。`calloc_fn` は確保領域をゼロで埋めること
 - **ライブラリ内の規則**（全 spec に適用）: ライブラリのコードは、戻り値の `NULL` を `AMARK_ERROR_NO_MEMORY` と解釈する箇所で、サイズ 0 の確保（`amark_malloc(0)`、要素数 0 の `amark_calloc`、`amark_realloc(p, 0)`）を要求しない。要素数が 0 になりうる配列・表・スタックは、確保の前に個数を確かめ、空は `NULL` と個数 0 で表す（確保は個数が 1 以上のときだけ行う）。縮めて空にするときは `amark_realloc(p, 0)` ではなく `amark_free` で解放し `NULL` と 0 に戻す
-- 本 spec の確保はこの規則に該当しない: `amark_slice_dup` は `length + 1`（1 以上）、`amark_buffer_reserve` は新容量 + 1（新容量は 16 以上）、`amark_buffer_detach` の空文字列は 1 バイトを要求する
+- 本 spec の確保はこの規則に該当しない: `amark_slice_dup` は `len + 1`（1 以上）、`amark_buffer_reserve` は新容量 + 1（新容量は 16 以上）、`amark_buffer_detach` の空文字列は 1 バイトを要求する
 - `amark_allocator_set(allocator)`:
   - `allocator == NULL`: 既定アロケータ（C 標準ライブラリ）に戻し `AMARK_OK`（6.5）
   - 4 つの関数のいずれかが `NULL`: 現在のアロケータを変えずに `AMARK_ERROR_INVALID_ARGUMENT`（6.4）
@@ -597,24 +597,24 @@ AMARK_API void amark_allocator_get(amark_allocator_t *allocator);
 typedef struct amark_slice
 {
     const char *data;
-    size_t length;
+    size_t len;
 } amark_slice_t;
 
-AMARK_API amark_slice_t amark_slice_make(const char *data, size_t length);
+AMARK_API amark_slice_t amark_slice_make(const char *data, size_t len);
 AMARK_API amark_slice_t amark_slice_from_cstr(const char *cstr);
 AMARK_API bool amark_slice_equal(amark_slice_t left, amark_slice_t right);
-AMARK_API amark_slice_t amark_slice_sub(amark_slice_t slice, size_t offset, size_t length);
+AMARK_API amark_slice_t amark_slice_sub(amark_slice_t slice, size_t offset, size_t len);
 AMARK_API char *amark_slice_dup(amark_slice_t slice);
 ```
-- Invariants: `length > 0` なら `data != NULL`。空スライスは `data` が `NULL` でもよい。`data` は NUL 終端を仮定せず、NUL を含みうる
+- Invariants: `len > 0` なら `data != NULL`。空スライスは `data` が `NULL` でもよい。`data` は NUL 終端を仮定せず、NUL を含みうる
 - `amark_slice_make(NULL, n)` は空スライスを返す。`amark_slice_from_cstr(NULL)` は空スライスを返す（8.2）
 - `amark_slice_equal`: 長さが等しく、全バイトが一致するときだけ `true`。空同士は `true`（8.3）
-- `amark_slice_sub`: `offset > slice.length` なら `offset = slice.length`。`length > slice.length - offset` なら `slice.length - offset` に切り詰める（8.4）
-- `amark_slice_dup`: `slice.length + 1` バイトを `amark_malloc` で確保し、内容と末尾の NUL を書く。空スライスでも 1 バイトの `""` を返す。`slice.length == SIZE_MAX` または確保失敗なら `NULL` を返し、何も確保したまま残さない（8.5、8.6）
+- `amark_slice_sub`: `offset > slice.len` なら `offset = slice.len`。`len > slice.len - offset` なら `slice.len - offset` に切り詰める（8.4）
+- `amark_slice_dup`: `slice.len + 1` バイトを `amark_malloc` で確保し、内容と末尾の NUL を書く。空スライスでも 1 バイトの `""` を返す。`slice.len == SIZE_MAX` または確保失敗なら `NULL` を返し、何も確保したまま残さない（8.5、8.6）
 
 **文字列の所有権規約**（ライブラリ全体の正本、8.7）
 - 借用: `amark_slice_t`。参照先の寿命は貸し手が保証する。借用した側は解放しない
-- 所有: `amark_malloc` 系で確保した `char *` と `size_t` の長さの組。常に `data[length] == '\0'`。所有者が `amark_free` で解放する
+- 所有: `amark_malloc` 系で確保した `char *` と `size_t` の長さの組。常に `data[len] == '\0'`。所有者が `amark_free` で解放する
 - 入力・内部表現の文字コードは UTF-8 のバイト列とする。妥当性の検査と不正バイトの扱いは、入力を受け取るモジュールが `amark/utf8.h` を用いて定める
 
 #### Utf8
@@ -640,11 +640,11 @@ AMARK_API amark_error_t amark_utf8_validate(amark_slice_t input, size_t *error_o
 ```
 - 妥当性の基準は Unicode 標準 Table 3-7（先頭バイト `00–7F`、`C2–DF`、`E0–EF`、`F0–F4`。2 バイト目は `E0` → `A0–BF`、`ED` → `80–9F`、`F0` → `90–BF`、`F4` → `80–8F`、その他 `80–BF`。3・4 バイト目は `80–BF`）。これにより過長表現、サロゲート、U+10FFFF 超、途切れ、不正な先頭・継続バイトを排除する。U+0000 は妥当な 1 バイト文字（10.7）
 - `amark_utf8_decode`:
-  - `codepoint` または `consumed` が `NULL`、あるいは `input.length == 0`: `AMARK_ERROR_INVALID_ARGUMENT`、出力は変更しない（10.3）
+  - `codepoint` または `consumed` が `NULL`、あるいは `input.len == 0`: `AMARK_ERROR_INVALID_ARGUMENT`、出力は変更しない（10.3）
   - 妥当: `AMARK_OK`、`*codepoint` にコードポイント、`*consumed` に 1〜4（10.1）
   - 不正: `AMARK_ERROR_INVALID_UTF8`、`*codepoint = AMARK_UTF8_REPLACEMENT_CHARACTER`、`*consumed` に最大部分列の長さ（妥当な並びの接頭辞として成立する最長のバイト数。成立しなければ 1）（10.2）
 - `amark_utf8_decode_previous`（10.8）: 位置 `offset` の直前で終わる 1 文字（不正単位）を逆方向に復号する
-  - `codepoint` または `consumed` が `NULL`、`offset == 0`、`offset > input.length`: `AMARK_ERROR_INVALID_ARGUMENT`、出力は変更しない
+  - `codepoint` または `consumed` が `NULL`、`offset == 0`、`offset > input.len`: `AMARK_ERROR_INVALID_ARGUMENT`、出力は変更しない
   - 結果の契約: `input` の先頭から `offset` までを `amark_utf8_decode` で前方へ順に復号したときの最後の単位と、戻り値・`*codepoint`・`*consumed` が一致する。したがって不正バイトの扱い（U+FFFD、最大部分列の長さ）は `amark_utf8_decode` と同じで、`*consumed` は 1〜4、その単位は `input.data[offset - *consumed]` から始まる
   - 手順: `[max(0, offset - 4), offset)` で継続バイト（`80–BF`）でない最後の位置 `p` を探す。見つからなければ不正（`*consumed = 1`）。見つかれば `input.data[p..offset)` に `amark_utf8_decode` を適用し、`consumed == offset - p` ならその結果を返す。そうでなければ（`p` の後ろに余った継続バイトがある）不正で `*consumed = 1`。継続バイトでないバイトは前方復号で必ず新しい単位を始めるため、この手順は上の契約を満たす
   - 読み取るのは `[offset - 4, offset)` の範囲（入力の先頭を下回らない）に限る
@@ -655,7 +655,7 @@ AMARK_API amark_error_t amark_utf8_validate(amark_slice_t input, size_t *error_o
 - `amark_utf8_validate`:
   - 全体が妥当（空を含む）: `AMARK_OK`
   - 不正: `AMARK_ERROR_INVALID_UTF8`、`error_offset` が非 `NULL` なら最初の不正単位の先頭バイト位置を書く（10.6）
-  - `input.length > 0` かつ `input.data == NULL` はスライスの不変条件違反として `AMARK_ERROR_INVALID_ARGUMENT`
+  - `input.len > 0` かつ `input.data == NULL` はスライスの不変条件違反として `AMARK_ERROR_INVALID_ARGUMENT`
 
 #### Buffer
 
@@ -671,36 +671,37 @@ AMARK_API amark_error_t amark_utf8_validate(amark_slice_t input, size_t *error_o
 /* include/amark/buffer.h */
 typedef struct amark_buffer
 {
-    char *data;      /* NULL または capacity + 1 バイトの領域 */
-    size_t length;   /* 内容のバイト数 */
-    size_t capacity; /* 再確保なしに保持できる内容の最大バイト数（NUL を除く） */
+    char *data; /* NULL または cap + 1 バイトの領域 */
+    size_t len; /* 内容のバイト数 */
+    size_t cap; /* 再確保なしに保持できる内容の最大バイト数（NUL を除く） */
 } amark_buffer_t;
 
 AMARK_API void amark_buffer_init(amark_buffer_t *buffer);
 AMARK_API void amark_buffer_deinit(amark_buffer_t *buffer);
 
 AMARK_API amark_error_t amark_buffer_reserve(amark_buffer_t *buffer, size_t additional);
-AMARK_API amark_error_t amark_buffer_append(amark_buffer_t *buffer, const char *data, size_t length);
+AMARK_API amark_error_t amark_buffer_append(amark_buffer_t *buffer, const char *data, size_t len);
 AMARK_API amark_error_t amark_buffer_append_char(amark_buffer_t *buffer, char c);
 AMARK_API amark_error_t amark_buffer_append_cstr(amark_buffer_t *buffer, const char *cstr);
 AMARK_API amark_error_t amark_buffer_append_slice(amark_buffer_t *buffer, amark_slice_t slice);
 AMARK_API amark_error_t amark_buffer_append_codepoint(amark_buffer_t *buffer, uint32_t codepoint);
 
 AMARK_API void amark_buffer_clear(amark_buffer_t *buffer);
-AMARK_API amark_error_t amark_buffer_truncate(amark_buffer_t *buffer, size_t length);
-AMARK_API amark_error_t amark_buffer_detach(amark_buffer_t *buffer, char **data, size_t *length);
+AMARK_API amark_error_t amark_buffer_truncate(amark_buffer_t *buffer, size_t len);
+AMARK_API amark_error_t amark_buffer_detach(amark_buffer_t *buffer, char **data, size_t *len);
 AMARK_API amark_slice_t amark_buffer_as_slice(const amark_buffer_t *buffer);
 ```
 
 ##### State Management
-- State model: 「空（`data == NULL`、`length == 0`、`capacity == 0`）」と「領域あり（`data != NULL`、`length <= capacity`、`data[length] == '\0'`）」の 2 状態（9.3）
+- 公開構造体の扱い: 呼び出し側の領域に置けるよう中身を公開する（`_init` / `_deinit`）。そのためフィールドの名前・型・並びは API かつ ABI の一部である。利用者は `data` と `len` を読んでよいが、フィールドを直接書き換えてはならず、変更は必ず関数を通す。`cap` は読めるが値は実装の伸長方針に依存し、契約ではない。1.0 までは互換性を約束しない
+- State model: 「空（`data == NULL`、`len == 0`、`cap == 0`）」と「領域あり（`data != NULL`、`len <= cap`、`data[len] == '\0'`）」の 2 状態（9.3）
 - `init`: 確保せず空にする（9.1）。`deinit`: 領域を `amark_free` で解放し空に戻す。`deinit` 後に再利用してよい（9.8）
-- `reserve(additional)`: `length + additional + 1` があふれるなら `AMARK_ERROR_OVERFLOW`。必要容量 `length + additional` が `capacity` 以下なら何もしない。超えるなら新容量を `max(必要容量, capacity * 2, 16)`（`capacity * 2 + 1` が `size_t` であふれる場合は `capacity * 2` の候補を除く）として `amark_realloc` する。失敗なら `AMARK_ERROR_NO_MEMORY` で、`data`・`length`・`capacity` は変更しない（9.4、9.9）
-- `append(data, length)`: `length > 0` かつ `data == NULL` は `AMARK_ERROR_INVALID_ARGUMENT`。`reserve` の後に内容をコピーし、NUL を書く（9.2）。`length == 0` は何もせず `AMARK_OK`
+- `reserve(additional)`: `len + additional + 1` があふれるなら `AMARK_ERROR_OVERFLOW`。必要容量 `len + additional` が `cap` 以下なら何もしない。超えるなら新容量を `max(必要容量, cap * 2, 16)`（`cap * 2 + 1` が `size_t` であふれる場合は `cap * 2` の候補を除く）として `amark_realloc` する。失敗なら `AMARK_ERROR_NO_MEMORY` で、`data`・`len`・`cap` は変更しない（9.4、9.9）
+- `append(data, len)`: `len > 0` かつ `data == NULL` は `AMARK_ERROR_INVALID_ARGUMENT`。`reserve` の後に内容をコピーし、NUL を書く（9.2）。`len == 0` は何もせず `AMARK_OK`
 - `append_char`、`append_cstr`（`NULL` は `AMARK_ERROR_INVALID_ARGUMENT`）、`append_slice` は `append` に委ねる。`append_codepoint` は `amark_utf8_encode` で符号化してから `append` に委ね、不正なコードポイントは `AMARK_ERROR_INVALID_UTF8` で内容を変更しない
-- `clear`: `length = 0`、領域があれば `data[0] = '\0'`。容量は保つ（9.5）
-- `truncate(length)`: 現在の長さを超えるなら `AMARK_ERROR_INVALID_ARGUMENT` で変更しない（9.6）。それ以外は長さを変え NUL を書く（9.5）
-- `detach(&data, &length)`: 領域があればその所有権を移す。空なら 1 バイトの `""` を `amark_malloc` で確保して渡す（失敗時 `AMARK_ERROR_NO_MEMORY`、バッファは変更しない）。成功後バッファは空。受け取った側は `amark_free` で解放する（9.7）
+- `clear`: `len = 0`、領域があれば `data[0] = '\0'`。容量は保つ（9.5）
+- `truncate(len)`: 現在の長さを超えるなら `AMARK_ERROR_INVALID_ARGUMENT` で変更しない（9.6）。それ以外は長さを変え NUL を書く（9.5）
+- `detach(&data, &len)`: 領域があればその所有権を移す。空なら 1 バイトの `""` を `amark_malloc` で確保して渡す（失敗時 `AMARK_ERROR_NO_MEMORY`、バッファは変更しない）。成功後バッファは空。受け取った側は `amark_free` で解放する（9.7）
 - `as_slice`: 現在の内容を借用するスライス。バッファを変更すると無効になる
 - Concurrency strategy: 1 つのバッファを複数スレッドから同時に変更しない（呼び出し側の責任）
 
@@ -874,8 +875,8 @@ test_allocator_stats_t test_allocator_stats(void);
 ### Unit Tests
 - `memory_test.c`: 既定アロケータでの確保・再確保・解放（6.2）。計測アロケータの `bytes_live`・`bytes_total`・`bytes_peak` が確保・再確保（拡大と縮小）・解放の列に対して期待どおりに変化すること（3.6）。計測アロケータへの差し替え後に `amark_malloc` などが指定した関数へ委ねられること（6.3）。関数欠落時に `AMARK_ERROR_INVALID_ARGUMENT` で現在のアロケータが変わらないこと（6.4）。`NULL` 指定で既定へ戻ること（6.5）。`amark_allocator_get` が差し替えた 4 関数、既定時は C 標準ライブラリの 4 関数を返すこと（6.6）。`amark_calloc(SIZE_MAX, 2)` がアロケータを呼ばず `NULL`（6.7）。`amark_malloc(0)`、`amark_calloc(0, n)`、`amark_calloc(n, 0)`、`amark_realloc(NULL, 0)` がアロケータを呼ばずに `NULL` を返すこと（計測アロケータの `allocations` と `failures` が増えない）、`amark_realloc(p, 0)` が `free_fn` で解放して `NULL` を返すこと（`deallocations` が増え `live` が減る）、`amark_free(NULL)` が何もしないこと（6.8）
 - `error_test.c`: テスト内のヘルパマクロで `AMARK_ERROR_LIST` を展開し、コードの配列とテスト内の個数（例: `enum { test_error_count = 0 AMARK_ERROR_LIST(TEST_ERROR_COUNT_ENTRY) };`、各項目を `+ 1` に展開）を作る。`AMARK_OK == 0`（7.1）、本 spec の 4 つのコードが存在すること（7.2）、一覧の i 番目のコードの値が i であること（並び順で連番、7.5）、各コードの文字列が一覧の文字列と一致し、非 `NULL`・非空・`"unknown error"` と異なり互いに異なること（7.3、7.6）、一覧の最後の次の値（`(amark_error_t)test_error_count`）で `"unknown error"`（7.4）。一覧を走査するため、コードを追加する spec はこのテストを変更しない
-- `slice_test.c`: 生成（`NULL` を含む）（8.2）、NUL を含む比較・長さ違いの比較（8.3）、部分範囲の切り詰め（offset 超過、length 超過）（8.4）、複製の内容と NUL 終端（8.5）、失敗注入で `NULL` かつ `live == 0`（8.6）
-- `utf8_test.c`: 1〜4 バイトの境界値（U+0000、U+007F、U+0080、U+07FF、U+0800、U+FFFF、U+10000、U+10FFFF）の復号と符号化の往復（10.1、10.4、10.7）、過長（`C0 80`、`E0 80 80`）、サロゲート（`ED A0 80`）、範囲外（`F4 90 80 80`、`F5`）、途切れ（`E3 81`）、孤立継続バイト（`80`）について `consumed` が Unicode 標準の例（Table 3-8）と一致すること（10.2）、空入力（10.3）、サロゲートと `0x110000` の符号化拒否（10.5）、検証の `error_offset`（10.6）。`amark_utf8_decode_previous` について、1〜4 バイトの各文字の直後からの逆方向復号、不正な並び（途切れ `E3 81`、孤立継続バイトの連続 `80 80`、継続バイトが 4 つ以上続く並び、過長 `C0 80`）を含む入力の各単位境界で、前方復号の最後の単位と戻り値・`codepoint`・`consumed` が一致すること、`offset == 0` と `offset > length` の拒否（10.8）
+- `slice_test.c`: 生成（`NULL` を含む）（8.2）、NUL を含む比較・長さ違いの比較（8.3）、部分範囲の切り詰め（offset 超過、len 超過）（8.4）、複製の内容と NUL 終端（8.5）、失敗注入で `NULL` かつ `live == 0`（8.6）
+- `utf8_test.c`: 1〜4 バイトの境界値（U+0000、U+007F、U+0080、U+07FF、U+0800、U+FFFF、U+10000、U+10FFFF）の復号と符号化の往復（10.1、10.4、10.7）、過長（`C0 80`、`E0 80 80`）、サロゲート（`ED A0 80`）、範囲外（`F4 90 80 80`、`F5`）、途切れ（`E3 81`）、孤立継続バイト（`80`）について `consumed` が Unicode 標準の例（Table 3-8）と一致すること（10.2）、空入力（10.3）、サロゲートと `0x110000` の符号化拒否（10.5）、検証の `error_offset`（10.6）。`amark_utf8_decode_previous` について、1〜4 バイトの各文字の直後からの逆方向復号、不正な並び（途切れ `E3 81`、孤立継続バイトの連続 `80 80`、継続バイトが 4 つ以上続く並び、過長 `C0 80`）を含む入力の各単位境界で、前方復号の最後の単位と戻り値・`codepoint`・`consumed` が一致すること、`offset == 0` と `offset > len` の拒否（10.8）
 - `buffer_test.c`: 初期化直後に確保がないこと（計測アロケータで `allocations == 0`、`bytes_live == 0`）（9.1）、各種追記と NUL 終端（9.2、9.3）、失敗注入の網羅パターンで内容不変（9.4）、`reserve(SIZE_MAX)` が `AMARK_ERROR_OVERFLOW`（9.4）、clear / truncate（9.5、9.6）、detach（空と非空）と `amark_free` による解放（9.7）、deinit 後の再利用（9.8）、10 万回の 1 バイト追記で再確保回数が対数オーダー（例: 64 回以下）に収まること（9.9）、不正コードポイントの追記拒否
 
 ### Integration Tests

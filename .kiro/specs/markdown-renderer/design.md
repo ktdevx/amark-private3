@@ -227,7 +227,7 @@ stateDiagram-v2
 | MarkdownIntegration | ビルド・テスト登録 | 包括ヘッダ、ビルド、テスト、C++ 検査 | 12.1, 12.2 | foundation BuildSystem (P0) | Batch |
 
 ### 共通の API 規約（本仕様の全公開関数）
-- foundation と html-renderer の共通 API 規約に従う。必須のポインタ引数が `NULL`、スライスの不変条件違反（`length > 0 && data == NULL`）は `AMARK_ERROR_INVALID_ARGUMENT` で何も変更しない
+- foundation と html-renderer の共通 API 規約に従う。必須のポインタ引数が `NULL`、スライスの不変条件違反（`len > 0 && data == NULL`）は `AMARK_ERROR_INVALID_ARGUMENT` で何も変更しない
 - 出力先に書く関数は、失敗時に出力先の内容を呼び出し前に戻す（容量の増加は残ってよい）（12.3）
 - 木は `const amark_node_t *` で受け取り変更しない（1.4）
 - 確保は `amark_malloc` / `amark_realloc` / `amark_free` だけ（12.2）。サイズ 0 は要求しない（foundation の Memory のライブラリ内の規則）: `frames` は番兵のフレームを置く時点で 1 以上の容量を確保し、`prefix_ends` は最初の `push_prefix` で確保する（段が 0 の間は `NULL` と容量 0）。伸長は 2 倍で、容量 0 からは 1 以上の初期容量にする。`prefix` と `scratch` は foundation のバッファ（予約は常に 1 以上）。描画中の作業領域（フレーム、プレフィックス、折り返し用の一時領域）は描画の終わりに成功・失敗とも解放する（12.6）。表はすべて `static const`（13.4）
@@ -267,13 +267,13 @@ typedef enum amark_markdown_line_break
 
 typedef struct amark_markdown_options
 {
-    size_t wrap_width;                        /* 0（既定）: 折り返さない */
-    char bullet_char;                         /* '-'（既定）、'*'、'+' */
-    char ordered_delimiter;                   /* '.'（既定）、')' */
-    char emphasis_char;                       /* '*'（既定）、'_' */
-    char strong_char;                         /* '*'（既定）、'_' */
-    char fence_char;                          /* '`'（既定）、'~' */
-    char thematic_break_char;                 /* '-'（既定）、'*'、'_' */
+    size_t wrap_width;        /* 0（既定）: 折り返さない */
+    char bullet_char;         /* '-'（既定）、'*'、'+' */
+    char ordered_delimiter;   /* '.'（既定）、')' */
+    char emphasis_char;       /* '*'（既定）、'_' */
+    char strong_char;         /* '*'（既定）、'_' */
+    char fence_char;          /* '`'（既定）、'~' */
+    char thematic_break_char; /* '-'（既定）、'*'、'_' */
     amark_markdown_heading_style_t heading_style;
     amark_markdown_line_break_t line_break;
     bool use_autolinks;                       /* 真（既定） */
@@ -352,11 +352,11 @@ typedef enum amark_md_class { AMARK_MD_CLASS_SPACE, AMARK_MD_CLASS_PUNCT, AMARK_
 typedef struct amark_md_frame
 {
     const amark_node_t *node;
-    size_t prefix_depth;          /* ENTER 時のプレフィックスの段数（EXIT でここへ戻す） */
-    size_t scope;                 /* 最も内側の強調スコープのフレーム番号（block / link / image のフレーム） */
-    uint32_t open_emphasis[4];    /* スコープのフレームだけ: (記号 * / _) × (長さ 1 / 2) の開いている数 */
-    char mark;                    /* 自分の記号: 強調の区切り文字、リストの箇条書き記号・区切り文字。未決定は 0 */
-    uint32_t next_number;         /* 番号付きリスト: 次の項目の番号 */
+    size_t prefix_depth;            /* ENTER 時のプレフィックスの段数（EXIT でここへ戻す） */
+    size_t scope;                   /* 最も内側の強調スコープのフレーム番号（block / link / image のフレーム） */
+    uint32_t open_emphasis[4];      /* スコープのフレームだけ: (記号 * / _) × (長さ 1 / 2) の開いている数 */
+    char mark;                      /* 自分の記号: 強調の区切り文字、リストの箇条書き記号・区切り文字。未決定は 0 */
+    uint32_t next_number;           /* 番号付きリスト: 次の項目の番号 */
     const amark_node_t *last_child; /* 最後に終えた強調 / リストの子と、その記号 */
     char last_child_mark;
 } amark_md_frame_t;
@@ -366,21 +366,21 @@ typedef enum amark_md_line_state { AMARK_MD_LINE_START, AMARK_MD_LINE_MARKERS, A
 typedef struct amark_md_writer
 {
     amark_buffer_t *output;
-    size_t start;                 /* 描画開始時の output->length（巻き戻しの基準） */
-    bool wrote_any;               /* この描画で内容を書いたか */
+    size_t start;   /* 描画開始時の output->len（巻き戻しの基準） */
+    bool wrote_any; /* この描画で内容を書いたか */
     amark_md_line_state_t line;
-    int pending;                  /* 0: なし、1: 行頭保証、2: 空行保証 */
-    size_t marker_tail;           /* 現在の行でプレフィックス・記号に由来する末尾の空白の開始位置 */
-    size_t column;                /* 現在の行の桁（コードポイント数） */
-    unsigned line_bullets;        /* 現在の行に書いた箇条書き記号の集合（ビット: - * +） */
-    bool begin_content;           /* 行の内容の先頭（数字の並びの間は真のまま） */
-    amark_buffer_t prefix;        /* 継続行のプレフィックスを連結したもの */
-    size_t *prefix_ends;          /* 段ごとの prefix の終わりの位置 */
-    size_t prefix_depth, prefix_capacity;
-    size_t break_at;              /* 現在の行の最後の折り返し候補の空白の位置（SIZE_MAX でなし） */
-    size_t last_text_char;        /* 組み込みの text が書いた最後の文字の位置（出力の末尾でなければ SIZE_MAX） */
-    bool entity_next_text_char;   /* 次に組み込みの text が書く最初の文字を数値文字参照にする */
-    amark_buffer_t scratch;       /* 折り返しの挿入用の一時領域 */
+    int pending;           /* 0: なし、1: 行頭保証、2: 空行保証 */
+    size_t marker_tail;    /* 現在の行でプレフィックス・記号に由来する末尾の空白の開始位置 */
+    size_t column;         /* 現在の行の桁（コードポイント数） */
+    unsigned line_bullets; /* 現在の行に書いた箇条書き記号の集合（ビット: - * +） */
+    bool begin_content;    /* 行の内容の先頭（数字の並びの間は真のまま） */
+    amark_buffer_t prefix; /* 継続行のプレフィックスを連結したもの */
+    size_t *prefix_ends;   /* 段ごとの prefix の終わりの位置 */
+    size_t prefix_depth, prefix_cap;
+    size_t break_at;            /* 現在の行の最後の折り返し候補の空白の位置（SIZE_MAX でなし） */
+    size_t last_text_char;      /* 組み込みの text が書いた最後の文字の位置（出力の末尾でなければ SIZE_MAX） */
+    bool entity_next_text_char; /* 次に組み込みの text が書く最初の文字を数値文字参照にする */
+    amark_buffer_t scratch;     /* 折り返しの挿入用の一時領域 */
 } amark_md_writer_t;
 
 struct amark_markdown_context
@@ -389,13 +389,13 @@ struct amark_markdown_context
     amark_md_writer_t writer;
     amark_node_walk_t *walk;
     amark_md_frame_t *frames;     /* 子を取りうる開いているノードのフレーム（深さ順） */
-    size_t frame_count, frame_capacity;
+    size_t frame_count, frame_cap;
     const amark_node_t *root;
-    bool in_atx_heading;          /* ATX 見出しの内容の中 */
-    bool wrap_enabled;            /* 段落の中で、かつ wrap_width > 0 */
+    bool in_atx_heading; /* ATX 見出しの内容の中 */
+    bool wrap_enabled;   /* 段落の中で、かつ wrap_width > 0 */
 };
 ```
-- 内部関数（定義するファイル）: Writer（`amark_md_writer_*`: init / deinit / content / marker / raw / newline / ensure / flush_end / push_prefix / pop_prefix / restore_prefix / entity / replace_last_text_char）、Escape（`amark_md_escape_text`、`_url`、`_title`、`_info`、`amark_md_code_ticks`、`amark_md_fence_length`、`amark_md_autolink_form`）、Emphasis（`amark_md_classify`、`amark_md_first_class`、`amark_md_next_class`、`amark_md_plan_open`、`amark_md_plan_close`）、Block / Inline（`amark_md_block_render`、`amark_md_inline_render`）、Renderer（`amark_md_standard_render`: 現在の (node, event) の組み込み出力）
+- 内部関数（定義するファイル）: Writer（`amark_md_writer_*`: init / deinit / content / marker / raw / newline / ensure / flush_end / push_prefix / pop_prefix / restore_prefix / entity / replace_last_text_char）、Escape（`amark_md_escape_text`、`_url`、`_title`、`_info`、`amark_md_code_ticks`、`amark_md_fence_len`、`amark_md_autolink_form`）、Emphasis（`amark_md_classify`、`amark_md_first_class`、`amark_md_next_class`、`amark_md_plan_open`、`amark_md_plan_close`）、Block / Inline（`amark_md_block_render`、`amark_md_inline_render`）、Renderer（`amark_md_standard_render`: 現在の (node, event) の組み込み出力）
 - 依存の向き: Writer は他の Markdown ファイルに依存しない。Escape は Writer、Emphasis は Escape と Writer、Block と Inline は Escape・Emphasis・Writer、Context は Block・Inline・Writer、Renderer は全部を使う（実装順もこの順）
 
 ### 行の管理
@@ -481,7 +481,7 @@ struct amark_markdown_context
 
 **分類**（`amark_md_classify(c)`）: `amark_unicode_is_whitespace` なら W、`amark_unicode_is_punctuation` なら P、それ以外 O。行頭・出力の先頭・行末・出力の終わりは W（6.5）
 
-**直前の文字の分類 B**: Writer が `MARKERS` / `START`、または `wrote_any` が偽なら W。それ以外は出力の最後の 1 文字を foundation の `amark_utf8_decode_previous(input, offset, &codepoint, &consumed)` で後方から復号して分類する。`input` はこの描画で書いた範囲 `output->data[start..length)` のスライス、`offset` はその長さ（4 バイトを超えて遡らない）。`AMARK_ERROR_INVALID_UTF8` のときは foundation の規則どおり U+FFFD として分類する（O）。置換可能なのは `last_text_char` がその文字を指し、分類が O のとき
+**直前の文字の分類 B**: Writer が `MARKERS` / `START`、または `wrote_any` が偽なら W。それ以外は出力の最後の 1 文字を foundation の `amark_utf8_decode_previous(input, offset, &codepoint, &consumed)` で後方から復号して分類する。`input` はこの描画で書いた範囲 `output->data[start..len)` のスライス、`offset` はその長さ（4 バイトを超えて遡らない）。`AMARK_ERROR_INVALID_UTF8` のときは foundation の規則どおり U+FFFD として分類する（O）。置換可能なのは `last_text_char` がその文字を指し、分類が O のとき
 
 **内容の最初の出力文字の分類**（`amark_md_first_class(node)`。反復で下りる）
 
@@ -636,7 +636,7 @@ struct amark_markdown_context
 - `amark_markdown_renderer_destroy`: フック表を deinit して解放。`NULL` は何もしない（12.5）
 - `amark_markdown_renderer_set_hook(renderer, kind, render, user_data)`: `renderer` / `kind` の `NULL` は `AMARK_ERROR_INVALID_ARGUMENT`（10.7）。`amark_node_walk_table_set` の結果を返す（置き換え・解除・追加の規則は html-renderer と同じ、10.1〜10.6）
 - `amark_markdown_renderer_render(renderer, root, output)`（1.5: いずれかの `NULL` は `AMARK_ERROR_INVALID_ARGUMENT`）:
-  1. コンテキストをスタック上に用意し、Writer を初期化（`start = output->length`）。起点のフレームの外側に、強調のスコープとなる番兵のフレームを 1 つ置く
+  1. コンテキストをスタック上に用意し、Writer を初期化（`start = output->len`）。起点のフレームの外側に、強調のスコープとなる番兵のフレームを 1 つ置く
   2. `amark_node_walk_run(&walk, root, &renderer->hooks, visit, &context)`
   3. 成功なら `flush_end`
   4. 作業領域（フレーム、プレフィックス、`scratch`）を解放する（12.6）

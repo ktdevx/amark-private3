@@ -289,20 +289,20 @@ graph TB
 /* src/tree/node_internal.h（公開ヘッダから include しない。宣言は AMARK_API を付けず export しない） */
 typedef struct amark_node_string
 {
-    char *data;    /* NULL（未設定 = 空文字列）または amark_malloc で確保した length + 1 バイト */
-    size_t length; /* data が NULL なら 0 */
+    char *data; /* NULL（未設定 = 空文字列）または amark_malloc で確保した len + 1 バイト */
+    size_t len; /* data が NULL なら 0 */
 } amark_node_string_t;
 
 struct amark_node_kind
 {
-    amark_node_type_t type;                    /* 標準種別の値、または AMARK_NODE_EXTENSION */
-    const char *name;                          /* 標準: 文字列リテラル。拡張: 所有（NUL 終端） */
-    size_t name_length;
+    amark_node_type_t type; /* 標準種別の値、または AMARK_NODE_EXTENSION */
+    const char *name;       /* 標準: 文字列リテラル。拡張: 所有（NUL 終端） */
+    size_t name_len;
     amark_node_category_t category;
     amark_node_content_t content;
     bool requires_explicit_parent;
-    bool root_only;                            /* document だけが真。どの親の子にもなれない */
-    amark_node_can_contain_fn_t can_contain;   /* content == CUSTOM のときだけ非 NULL */
+    bool root_only;                          /* document だけが真。どの親の子にもなれない */
+    amark_node_can_contain_fn_t can_contain; /* content == CUSTOM のときだけ非 NULL */
     amark_node_destroy_data_fn_t destroy_data;
     void *user_data;
 };
@@ -320,9 +320,9 @@ struct amark_node
         struct { int level; } heading;
         struct { amark_node_list_type_t type; uint32_t start; bool tight; } list;
         struct { amark_node_string_t info; amark_node_string_t literal; } code_block;
-        amark_node_string_t literal;           /* html_block、text、code、html_inline */
+        amark_node_string_t literal;                                         /* html_block、text、code、html_inline */
         struct { amark_node_string_t url; amark_node_string_t title; } link; /* link、image */
-        void *data;                            /* 拡張種別 */
+        void *data;                                                          /* 拡張種別 */
     } as;
 };
 
@@ -334,7 +334,7 @@ amark_slice_t amark_node_string_get(const amark_node_string_t *string);         
 ```
 - 依存の向き: `node.c` は `node_kind.c` だけに、`node_value.c` と `node_edit.c` は `node.c` と `node_kind.c` に、`node_normalize.c` は `node.c`・`node_value.c` に、`node_iter.c` は `node.c` と `node_kind.c` に依存する。`node.c` は `node_value.c` と `node_edit.c` に依存しない（実装順: node_kind → node_registry → node → node_value / node_edit → node_iter / node_normalize → node_walk。`node_walk.c` は公開 API だけを使い、この非公開ヘッダを include しない）
 - Invariants: `first_child == NULL` と `last_child == NULL` は同値。兄弟リストは双方向で、`first_child->previous == NULL`、`last_child->next == NULL`、各子の `parent` は親を指す。根は `parent`、`previous`、`next` がすべて `NULL`
-- `amark_node_string_set`: `value.length > 0 && value.data == NULL` は `AMARK_ERROR_INVALID_ARGUMENT`、`value.length == SIZE_MAX` は `AMARK_ERROR_OVERFLOW`、`amark_utf8_validate` が失敗なら `AMARK_ERROR_INVALID_UTF8`、空なら旧値を解放して未設定に戻す、それ以外は `amark_slice_dup` で複製（失敗で `AMARK_ERROR_NO_MEMORY`）してから旧値を解放する。いずれの失敗でも旧値は残る
+- `amark_node_string_set`: `value.len > 0 && value.data == NULL` は `AMARK_ERROR_INVALID_ARGUMENT`、`value.len == SIZE_MAX` は `AMARK_ERROR_OVERFLOW`、`amark_utf8_validate` が失敗なら `AMARK_ERROR_INVALID_UTF8`、空なら旧値を解放して未設定に戻す、それ以外は `amark_slice_dup` で複製（失敗で `AMARK_ERROR_NO_MEMORY`）してから旧値を解放する。いずれの失敗でも旧値は残る
 
 ### 種別
 
@@ -434,7 +434,7 @@ AMARK_API bool amark_node_kind_can_contain(const amark_node_kind_t *parent, cons
 
 - `amark_node_kind_get_standard(type)`: 1〜18 なら標準種別のハンドル、それ以外（`NONE`、`EXTENSION`、未定義値）は `NULL`（2.6）
 - `amark_node_kind_get_type`: 標準種別はその値、拡張種別は `AMARK_NODE_EXTENSION`、`NULL` は `AMARK_NODE_NONE`（2.4）
-- `amark_node_kind_get_name`: 名前を借用スライスで返す（`data[length] == '\0'`）。寿命は種別と同じ。`NULL` は `{NULL, 0}`（2.5）
+- `amark_node_kind_get_name`: 名前を借用スライスで返す（`data[len] == '\0'`）。寿命は種別と同じ。`NULL` は `{NULL, 0}`（2.5）
 - `amark_node_kind_is_leaf(kind)`: `content == AMARK_NODE_CONTENT_NONE`（子を取らない種別）なら真、それ以外は偽。`NULL` は偽（2.7）。標準・拡張で同じ方法で答える。イテレータが ENTER だけを報告する種別（9.1）はちょうどこの判定が真の種別であり、NodeIter と NodeWalk（レンダラの走査）は同じ関数を使って「葉か」を判定する
 - `amark_node_kind_can_contain(parent, child)` の判定（6.1〜6.6）:
   1. どちらかが `NULL`、または `child` が `root_only` なら偽
@@ -475,8 +475,8 @@ typedef void (*amark_node_destroy_data_fn_t)(void *data, void *user_data);
 
 typedef struct amark_node_kind_desc
 {
-    amark_slice_t name;                        /* 1〜64 バイト、[a-z][a-z0-9_]* */
-    amark_node_category_t category;            /* BLOCK または INLINE */
+    amark_slice_t name;             /* 1〜64 バイト、[a-z][a-z0-9_]* */
+    amark_node_category_t category; /* BLOCK または INLINE */
     amark_node_content_t content;
     bool requires_explicit_parent;             /* 真なら BLOCKS / INLINES の親には置けない */
     amark_node_can_contain_fn_t can_contain;   /* content == CUSTOM なら必須、それ以外は NULL */
@@ -496,7 +496,7 @@ AMARK_API const amark_node_kind_t *amark_node_registry_find(const amark_node_reg
 - `amark_node_registry_destroy`: 登録された拡張種別（名前を含む）をすべて解放する。`NULL` は何もしない（4.9）
 - `amark_node_registry_add` の検証順（すべて失敗時はレジストリと `*kind` を変更しない）:
   1. `registry`、`desc`、`kind` のいずれかが `NULL`: `AMARK_ERROR_INVALID_ARGUMENT`
-  2. 名前が空、64 バイト超、先頭が `a-z` でない、`a-z0-9_` 以外を含む（`desc->name.length > 0 && data == NULL` を含む）: `AMARK_ERROR_INVALID_ARGUMENT`（4.4）
+  2. 名前が空、64 バイト超、先頭が `a-z` でない、`a-z0-9_` 以外を含む（`desc->name.len > 0 && data == NULL` を含む）: `AMARK_ERROR_INVALID_ARGUMENT`（4.4）
   3. 記述子の矛盾: `category` が BLOCK / INLINE 以外、`content` が未定義値、`CUSTOM` で `can_contain == NULL`、`CUSTOM` 以外で `can_contain != NULL`、`INLINE` で `content == BLOCKS`: `AMARK_ERROR_INVALID_ARGUMENT`（4.5）
   4. 名前が標準種別の名前または登録済みの名前と一致: `AMARK_ERROR_ALREADY_EXISTS`（4.3）
   5. 種別・名前の複製・配列の伸長のいずれかの確保失敗: `AMARK_ERROR_NO_MEMORY`。途中で確保したものはすべて解放する
@@ -504,7 +504,7 @@ AMARK_API const amark_node_kind_t *amark_node_registry_find(const amark_node_reg
 - `amark_node_registry_find(registry, name)`: 名前がバイト単位で一致する標準種別、次に登録済みの拡張種別を返す。どれにも一致しない、または `registry` が `NULL` なら `NULL`（4.6）。種別数に対して線形時間
 
 ##### State Management
-- State model: 登録済み拡張種別のハンドル配列（`amark_node_kind_t **items`、`count`、`capacity`。容量は 2 倍で伸長し、最初の登録で初期容量 4 を確保する）。`amark_node_registry_create` は配列を確保せず、登録 0 件の間は `items == NULL`、`count == capacity == 0` とする（foundation の Memory のライブラリ内の規則: サイズ 0 を要求しない）
+- State model: 登録済み拡張種別のハンドル配列（`amark_node_kind_t **items`、`count`、`cap`。容量は 2 倍で伸長し、最初の登録で初期容量 4 を確保する）。`amark_node_registry_create` は配列を確保せず、登録 0 件の間は `items == NULL`、`count == cap == 0` とする（foundation の Memory のライブラリ内の規則: サイズ 0 を要求しない）
 - Persistence & consistency: ハンドルはレジストリの破棄まで有効で不変（4.7）
 - Concurrency strategy: `amark_node_registry_add` と他の操作を同時に行わない。登録が終わった後は、`find` と、そのレジストリの種別を使うノードの生成・操作（異なる木）を複数スレッドから同時に行ってよい（13.4）。種別は登録後に変更されない
 
@@ -630,7 +630,7 @@ AMARK_API amark_error_t amark_node_set_data(amark_node_t *node, void *data);
 
 - setter 共通: `node` が `NULL`、またはその値を持たない種別なら `AMARK_ERROR_INVALID_ARGUMENT` でノードを変更しない（3.7）。範囲外は `AMARK_ERROR_INVALID_ARGUMENT`（3.5）
 - 文字列 setter: `amark_node_string_set` の順序（スライス不変条件 → あふれ → UTF-8 → 複製 → 旧値解放）で強い保証を守る（3.2、3.6、12.3、12.5）。NUL バイトを含む値も長さどおり保持する（3.9）
-- 文字列 getter: 値を持つ種別では `data` は非 `NULL` で `data[length] == '\0'`（未設定時は静的な `""` で長さ 0）。値は次にその値を設定するか、ノードが破棄されるまで有効（3.3）。値を持たない種別と `NULL` は `{NULL, 0}`（3.8）
+- 文字列 getter: 値を持つ種別では `data` は非 `NULL` で `data[len] == '\0'`（未設定時は静的な `""` で長さ 0）。値は次にその値を設定するか、ノードが破棄されるまで有効（3.3）。値を持たない種別と `NULL` は `{NULL, 0}`（3.8）
 - 数値・真偽値 getter: 値を持たない種別と `NULL` では、heading_level と list_start は 0、list_type は `AMARK_NODE_LIST_NONE`、list_tight は偽（3.8）。list_start の 0 は有効値でもあるため、種別は `amark_node_get_type` で確認する
 - `amark_node_set_data(node, data)`（5.1〜5.5）:
   - `node` が `NULL` または標準種別: `AMARK_ERROR_INVALID_ARGUMENT`。`data` の所有権は移らない（5.5）
@@ -811,7 +811,7 @@ typedef struct amark_node_walk_table
 {
     amark_node_walk_hook_t *items;
     size_t count;
-    size_t capacity;
+    size_t cap;
 } amark_node_walk_table_t;
 
 void amark_node_walk_table_init(amark_node_walk_table_t *table);
@@ -824,9 +824,9 @@ const amark_node_walk_hook_t *amark_node_walk_table_find(const amark_node_walk_t
 typedef struct amark_node_walk
 {
     amark_node_iter_t iter;
-    const amark_node_t *node;        /* 現在のノード */
-    amark_node_iter_event_t event;   /* 現在のイベント（ENTER / EXIT） */
-    bool skip_children;              /* 現在のイベントで子の省略が要求されたか */
+    const amark_node_t *node;      /* 現在のノード */
+    amark_node_iter_event_t event; /* 現在のイベント（ENTER / EXIT） */
+    bool skip_children;            /* 現在のイベントで子の省略が要求されたか */
 } amark_node_walk_t;
 
 typedef amark_error_t (*amark_node_walk_visit_fn_t)(void *context, amark_node_walk_t *walk,
@@ -844,7 +844,7 @@ void amark_node_walk_skip_children(amark_node_walk_t *walk);
   - 既存の項目なし・`fn == NULL`: 何もせず `AMARK_OK`（14.2）
   - 既存の項目なし・`fn != NULL`: 必要なら容量を 2 倍（初期 4）に伸長して末尾に追加。容量計算のあふれは `AMARK_ERROR_OVERFLOW`、確保失敗は `AMARK_ERROR_NO_MEMORY` で表を変更しない（14.1、14.4）
 - `amark_node_walk_table_find`: `kind` とポインタが等しい項目を返す。なければ、`table` または `kind` が `NULL`、または `count == 0` なら `NULL`（14.3）。計算量は登録数 h に比例
-- `amark_node_walk_table_init` / `_deinit`: 空の表にする / `items` を解放して空に戻す（14.9）。`NULL` は何もしない。空の表は `items == NULL`、`count == capacity == 0` で、`init` は確保しない。項目の除去で `count` が 0 になっても縮小の再確保（サイズ 0 の `amark_realloc`）はしない（foundation の Memory のライブラリ内の規則）
+- `amark_node_walk_table_init` / `_deinit`: 空の表にする / `items` を解放して空に戻す（14.9）。`NULL` は何もしない。空の表は `items == NULL`、`count == cap == 0` で、`init` は確保しない。項目の除去で `count` が 0 になっても縮小の再確保（サイズ 0 の `amark_realloc`）はしない（foundation の Memory のライブラリ内の規則）
 - `amark_node_walk_run(walk, root, table, visit, context)`（`walk`、`root`、`table`、`visit` が `NULL` なら `AMARK_ERROR_INVALID_ARGUMENT`。引数の検査は各レンダラの入口でも行う）:
   1. `amark_node_iter_init(&walk->iter, (amark_node_t *)root)`（const を外すのはここだけ。イテレータは木を変更しない、14.5）
   2. `amark_node_iter_next` が `DONE` を返すまで: `walk->node`・`walk->event` を設定し `skip_children = false`、`hook = find(table, kind)`、`visit(context, walk, hook)` を呼ぶ。非 `AMARK_OK` ならその値を直ちに返す（14.5、14.8）

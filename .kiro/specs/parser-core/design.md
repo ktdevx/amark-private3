@@ -586,7 +586,7 @@ AMARK_API bool amark_dialect_is_frozen(const amark_dialect_t *dialect);
 
 **Contracts**: Service [x] / State [x]
 
-- 内部 API: `amark_input_reader_init`、`_deinit`、`_reset`、`_push(reader, data, length)`（断片を未処理バッファへ追記）、`_next_line(reader, at_end, amark_slice_t *line, bool *has_line)`（完成した行を 1 つ正規化して返す。`at_end` が真なら行末のない最後の行も返す）
+- 内部 API: `amark_input_reader_init`、`_deinit`、`_reset`、`_push(reader, data, len)`（断片を未処理バッファへ追記）、`_next_line(reader, at_end, amark_slice_t *line, bool *has_line)`（完成した行を 1 つ正規化して返す。`at_end` が真なら行末のない最後の行も返す）
 - 正規化（行ごとに 1 回、出力は内部の行バッファ）:
   - 行末: LF、CR LF、単独の CR を区切りとし、行末を含めない（3.1）。断片の末尾が CR のときは次の断片か終了まで行を確定しない（CR LF の分割に対する同一性、2.2）。行末のない最後の行は終了時に 1 行として返す（3.2）
   - NUL（`0x00`）は U+FFFD（`EF BF BD`）に置換（3.3）
@@ -667,15 +667,15 @@ typedef void (*amark_block_state_destroy_fn_t)(void *state, void *user_data);
 struct amark_block_syntax
 {
     amark_slice_t name;
-    int priority;                                /* 小さいほど先に試す */
-    const char *start_chars;                     /* NUL 終端。最初の空白でない文字の候補。NULL なら毎回呼ぶ */
+    int priority;            /* 小さいほど先に試す */
+    const char *start_chars; /* NUL 終端。最初の空白でない文字の候補。NULL なら毎回呼ぶ */
     amark_block_content_t content;
-    unsigned flags;                              /* AMARK_BLOCK_FLAG_* */
-    amark_block_start_fn_t start;                /* NULL: 他の構文から open されるだけ */
-    amark_block_continue_fn_t continue_line;     /* NULL: 次の行で常に継続しない */
-    amark_block_finalize_fn_t finalize;          /* NULL 可 */
-    amark_block_can_contain_fn_t can_contain;    /* NULL: amark_node_kind_can_contain に従う */
-    amark_block_record_blank_fn_t record_blank;  /* NULL: 空行なら記録する */
+    unsigned flags;                             /* AMARK_BLOCK_FLAG_* */
+    amark_block_start_fn_t start;               /* NULL: 他の構文から open されるだけ */
+    amark_block_continue_fn_t continue_line;    /* NULL: 次の行で常に継続しない */
+    amark_block_finalize_fn_t finalize;         /* NULL 可 */
+    amark_block_can_contain_fn_t can_contain;   /* NULL: amark_node_kind_can_contain に従う */
+    amark_block_record_blank_fn_t record_blank; /* NULL: 空行なら記録する */
     amark_block_state_destroy_fn_t destroy_state;/* NULL 可 */
     void *user_data;
 };
@@ -895,8 +895,8 @@ AMARK_API const amark_extension_t *amark_inline_context_get_extension(const amar
 typedef struct amark_delimiter_info
 {
     char character;
-    size_t length;          /* 残りの個数 */
-    size_t original_length; /* 積んだときの個数 */
+    size_t len;          /* 残りの個数 */
+    size_t original_len; /* 積んだときの個数 */
     bool can_open;
     bool can_close;
 } amark_delimiter_info_t;
@@ -910,18 +910,18 @@ typedef struct amark_delimiter_handler
 } amark_delimiter_handler_t;
 
 AMARK_API amark_error_t amark_inline_context_push_delimiter(amark_inline_context_t *ctx,
-                                                            const amark_delimiter_handler_t *handler, size_t length,
+                                                            const amark_delimiter_handler_t *handler, size_t len,
                                                             bool can_open, bool can_close);
 ```
-- `push_delimiter`（10.1）: 現在位置から `length` バイトが同じ 1 文字の並びでなければ、`handler` の関数が欠けていれば `AMARK_ERROR_INVALID_ARGUMENT`。保留テキストを確定し、その並びを 1 つの text ノードとして追加し、`{handler, character, length, original_length = length, can_open, can_close, text_node}` をスタックに積み、位置を `length` 進める。`can_open` も `can_close` も偽なら積まずにテキストだけを置く
+- `push_delimiter`（10.1）: 現在位置から `len` バイトが同じ 1 文字の並びでなければ、`handler` の関数が欠けていれば `AMARK_ERROR_INVALID_ARGUMENT`。保留テキストを確定し、その並びを 1 つの text ノードとして追加し、`{handler, character, len, original_len = len, can_open, can_close, text_node}` をスタックに積み、位置を `len` 進める。`can_open` も `can_close` も偽なら積まずにテキストだけを置く
 - 処理の手順（10.2〜10.5。範囲はスタックの下限 `bottom` より上。内容の終わりでは底、ブラケットの閉じではブラケットを積んだ時点のスタックの高さ）:
   1. `bottom` より上の最も古いデリミタから、`can_close` の閉じ側を順に調べる
   2. 閉じ側について、同じ `handler`・同じ `character` の `can_open` の開き側を、閉じ側の直前から下へ、`max(bottom, openers_bottom[handler, character, closer_class(closer)])` まで探し、最初に `match(opener, closer) > 0` となったものを採る（10.2）
-  3. 一致: `used = min(match の結果, opener.length, closer.length)`。`create(ctx, used, user_data, &node)` で空のノードを作り、開き側の text ノードと閉じ側の text ノードの間の兄弟を順に `node` の子へ移し、`node` を開き側の text ノードの直後に置く。両側の `length` を `used` 減らし、間のデリミタをスタックから除く。長さ 0 になった側はスタックから除き、その text ノードを取り外して破棄する。閉じ側が残っていれば同じ閉じ側で手順 2 を続ける（10.3）
+  3. 一致: `used = min(match の結果, opener.len, closer.len)`。`create(ctx, used, user_data, &node)` で空のノードを作り、開き側の text ノードと閉じ側の text ノードの間の兄弟を順に `node` の子へ移し、`node` を開き側の text ノードの直後に置く。両側の `len` を `used` 減らし、間のデリミタをスタックから除く。長さ 0 になった側はスタックから除き、その text ノードを取り外して破棄する。閉じ側が残っていれば同じ閉じ側で手順 2 を続ける（10.3）
   4. 不一致: `openers_bottom[handler, character, closer_class(closer)]` を閉じ側の直前の位置に更新し（10.4）、閉じ側が `can_open` でなければスタックから除く。次の閉じ側へ進む
   5. 終わりに `bottom` より上のデリミタをすべて除く。残った文字はテキストのまま（10.5）
-- テキストの確定（15.1）: デリミタの text ノードの literal は処理の間は書き換えず、デリミタを除くときに残りの `length` で 1 回だけ `amark_node_set_literal` する（並びの長さに比例する再設定の繰り返しを避ける）
-- 線形性の契約（10.4、`inline_syntax.h` に明記）: `match` は、ある分類の閉じ側と一致しなかった開き側が、同じ分類の後続の閉じ側とも一致しないように定めること。CommonMark の強調では `closer_class = (can_open ? 3 : 0) + (original_length % 3)`、`match` は rule of 3（どちらかが両用で、長さの和が 3 の倍数かつ両方が 3 の倍数でなければ 0、それ以外は両方 2 以上なら 2、そうでなければ 1）。GFM の取り消し線では分類 0、長さが等しく 1 か 2 なら長さ、それ以外 0
+- テキストの確定（15.1）: デリミタの text ノードの literal は処理の間は書き換えず、デリミタを除くときに残りの `len` で 1 回だけ `amark_node_set_literal` する（並びの長さに比例する再設定の繰り返しを避ける）
+- 線形性の契約（10.4、`inline_syntax.h` に明記）: `match` は、ある分類の閉じ側と一致しなかった開き側が、同じ分類の後続の閉じ側とも一致しないように定めること。CommonMark の強調では `closer_class = (can_open ? 3 : 0) + (original_len % 3)`、`match` は rule of 3（どちらかが両用で、長さの和が 3 の倍数かつ両方が 3 の倍数でなければ 0、それ以外は両方 2 以上なら 2、そうでなければ 1）。GFM の取り消し線では分類 0、長さが等しく 1 か 2 なら長さ、それ以外 0
 - `closer_class` の戻り値が `AMARK_DELIMITER_CLASS_COUNT` 以上なら `AMARK_DELIMITER_CLASS_COUNT - 1` に丸める
 - openers_bottom は (handler, character) の組ごとに 8 要素の配列を持つ。組は 1 回の内容の解析の中で出現順に小さな配列で管理する
 
@@ -939,7 +939,7 @@ AMARK_API amark_error_t amark_inline_context_push_delimiter(amark_inline_context
 /* include/amark/inline_syntax.h（続き） */
 #define AMARK_BRACKET_FLAG_BITS 8
 
-AMARK_API amark_error_t amark_inline_context_push_bracket(amark_inline_context_t *ctx, size_t length, unsigned flags,
+AMARK_API amark_error_t amark_inline_context_push_bracket(amark_inline_context_t *ctx, size_t len, unsigned flags,
                                                           bool *pushed);
 AMARK_API amark_inline_bracket_t *amark_inline_context_get_top_bracket(amark_inline_context_t *ctx);
 AMARK_API unsigned amark_inline_bracket_get_flags(const amark_inline_bracket_t *bracket);
@@ -950,7 +950,7 @@ AMARK_API amark_error_t amark_inline_context_close_bracket(amark_inline_context_
 AMARK_API void amark_inline_context_remove_bracket(amark_inline_context_t *ctx, amark_inline_bracket_t *bracket);
 AMARK_API void amark_inline_context_deactivate_brackets(amark_inline_context_t *ctx, unsigned flags);
 ```
-- `push_bracket(ctx, length, flags, &pushed)`（11.1、15.3）: `length` が 0 または残りを超える、`flags` が下位 8 ビットを超える: `AMARK_ERROR_INVALID_ARGUMENT`。保留テキストを確定し、現在位置から `length` バイト（`[` や `![`）を text ノードとして置き、位置を進める。スタックの深さが `max_bracket_depth` 未満なら `{text_node, flags, content_offset = 新しい位置, delimiter_height = デリミタスタックの高さ, index}` を積んで `*pushed = true`、上限なら積まずに `*pushed = false`（テキストとしてだけ残る）
+- `push_bracket(ctx, len, flags, &pushed)`（11.1、15.3）: `len` が 0 または残りを超える、`flags` が下位 8 ビットを超える: `AMARK_ERROR_INVALID_ARGUMENT`。保留テキストを確定し、現在位置から `len` バイト（`[` や `![`）を text ノードとして置き、位置を進める。スタックの深さが `max_bracket_depth` 未満なら `{text_node, flags, content_offset = 新しい位置, delimiter_height = デリミタスタックの高さ, index}` を積んで `*pushed = true`、上限なら積まずに `*pushed = false`（テキストとしてだけ残る）
 - `get_top_bracket`: 最も上の開き、なければ `NULL`。ハンドルはそのブラケットが除かれるまで有効
 - `get_flags` / `is_active` / `get_content_offset`（11.2）: 有効は「どのフラグのビット b についても `index >= watermark[b]` が成り立つ（そのビットを持つ場合）」。`content_offset` は開きの直後の内容中の位置（参照リンクのラベルの取り出し用）
 - `close_bracket(ctx, bracket, node)`（11.3）: `node` の所有は成否にかかわらず移る。`bracket` がスタックにない、`node` が親を持つ: `AMARK_ERROR_INVALID_ARGUMENT`。保留テキストを確定し、開きの text ノードの後ろの兄弟を順に `node` の子へ移し（受け入れなければ `AMARK_ERROR_INVALID_CHILD`）、`node` を開きの text ノードの位置に置いて text ノードを破棄し、`delimiter_height` より上のデリミタを `node` の子の範囲で処理し（InlineDelimiter の手順、`bottom = delimiter_height`）、開きとそれより上のブラケットをスタックから除く。閉じの文字（`]` や `](url)`）は構文が `advance` で読み飛ばしておく
@@ -990,21 +990,21 @@ AMARK_API amark_error_t amark_parser_create(amark_dialect_t *dialect, const amar
                                             amark_parser_t **parser);
 AMARK_API void amark_parser_destroy(amark_parser_t *parser);
 AMARK_API amark_error_t amark_parser_reset(amark_parser_t *parser);
-AMARK_API amark_error_t amark_parser_feed(amark_parser_t *parser, const char *data, size_t length);
+AMARK_API amark_error_t amark_parser_feed(amark_parser_t *parser, const char *data, size_t len);
 AMARK_API amark_error_t amark_parser_finish(amark_parser_t *parser, amark_node_t **document);
-AMARK_API amark_error_t amark_parser_parse(amark_dialect_t *dialect, const char *data, size_t length,
+AMARK_API amark_error_t amark_parser_parse(amark_dialect_t *dialect, const char *data, size_t len,
                                            const amark_parser_options_t *options, amark_node_t **document);
 ```
 - `options_init`: 両方を既定値 1000 にする。`NULL` は何もしない（1.4）
 - `create`（1.1〜1.3）: `dialect`・`parser` が `NULL`、`options` のいずれかの項目が 0: `AMARK_ERROR_INVALID_ARGUMENT`。`options == NULL` なら既定値（1.2）。`amark_dialect_freeze` を呼び（失敗はそのまま返す）、パーサを確保し、解析の開始（下の「解析の開始」）を行って `Ready` で返す。途中の失敗はすべて戻して `*parser` を変更しない
 - 解析の開始: 空の文書ノードを作り、定義テーブルを初期化し、方言の拡張の追加順に `state_create(&state, user_data)` を呼ぶ（8.3）。失敗時は作成済みの状態を逆順に `state_destroy` する
 - 解析の後片付け（完了・失敗・リセット・破棄で共通、8.3、8.6）: 開いているブロックの状態の `destroy_state`、ブロック記録とインライン対象、定義テーブルの値の `destroy`、拡張の状態の `state_destroy`（追加順の逆）を 1 回ずつ行う。未完成の文書は破棄する
-- `feed(parser, data, length)`（2.1、2.5〜2.7）: `parser` が `NULL`、`length > 0 && data == NULL`: `AMARK_ERROR_INVALID_ARGUMENT`。`Ready` でなければ `AMARK_ERROR_INVALID_STATE`。`length == 0` は何もせず `AMARK_OK`。入力を InputReader に渡し、完成した行をすべて BlockEngine で処理する。失敗したら後片付けをして `Failed` にし、そのエラーを返す（16.3）
+- `feed(parser, data, len)`（2.1、2.5〜2.7）: `parser` が `NULL`、`len > 0 && data == NULL`: `AMARK_ERROR_INVALID_ARGUMENT`。`Ready` でなければ `AMARK_ERROR_INVALID_STATE`。`len == 0` は何もせず `AMARK_OK`。入力を InputReader に渡し、完成した行をすべて BlockEngine で処理する。失敗したら後片付けをして `Failed` にし、そのエラーを返す（16.3）
 - `finish(parser, &document)`（2.3、2.8）: `Ready` でなければ `AMARK_ERROR_INVALID_STATE`（2.7）。残りの行の処理 → BlockEngine の終了 → インライン段階（InlineEngine）→ `amark_node_normalize(document)` → 後処理を凍結時の順に `process(document, definitions, 拡張の状態, user_data)`（12.1。エラーなら以降を呼ばず失敗、12.2）→ 解析の後片付け（文書は破棄しない）→ `*document` に書いて `Finished`。失敗時は後片付けして `Failed`、`*document` は変更しない（16.3）
 - `reset`（1.7）: どの状態からでも後片付けをして解析の開始を行い `Ready` にする。解析の開始の失敗時は `Failed` のまま失敗を返す
 - `destroy`（1.5、1.6）: `NULL` は何もしない。後片付けをして解放する。既に返した文書には触れない
-- `amark_parser_parse(dialect, data, length, options, document)`（2.4）: 引数の順序は「対象（方言）、入力（`data`, `length`）、オプション、出力」で、`feed` の `data, length` の並びに揃える。`create`・`feed`・`finish`・`destroy` を順に行う。途中の失敗では生成したものをすべて解放してそのエラーを返す。返した文書は（標準種別のノードだけなら）方言の破棄の後も有効（14.9）
-- 引数の並びの規約: 入力を受け取る関数は常に `data, length` の順で、対象のオブジェクトの直後に置く（`feed(parser, data, length)`、`parser_parse(dialect, data, length, ...)`）。入力を受け取らない `create(dialect, options, &parser)` は「対象、オプション、出力」
+- `amark_parser_parse(dialect, data, len, options, document)`（2.4）: 引数の順序は「対象（方言）、入力（`data`, `len`）、オプション、出力」で、`feed` の `data, len` の並びに揃える。`create`・`feed`・`finish`・`destroy` を順に行う。途中の失敗では生成したものをすべて解放してそのエラーを返す。返した文書は（標準種別のノードだけなら）方言の破棄の後も有効（14.9）
+- 引数の並びの規約: 入力を受け取る関数は常に `data, len` の順で、対象のオブジェクトの直後に置く（`feed(parser, data, len)`、`parser_parse(dialect, data, len, ...)`）。入力を受け取らない `create(dialect, options, &parser)` は「対象、オプション、出力」
 - 分割の同一性（2.2）: ブロック段階は完成した行だけを処理し、行の確定は InputReader が分割位置によらず同じに行うため、木は分割に依存しない
 
 ##### State Management

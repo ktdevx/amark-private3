@@ -315,7 +315,7 @@ graph TB
 | CommonmarkIntegration | ビルド・テスト登録 | 包括ヘッダ、ビルド、テスト、C++ 検査、インストール | 8.7, 10.4 | foundation BuildSystem (P0) | Batch |
 
 ### 共通の API 規約（本仕様の全公開関数）
-- foundation の共通 API 規約に従う。必須のポインタ引数が `NULL`、`length > 0 && data == NULL` は `AMARK_ERROR_INVALID_ARGUMENT` で何も変更しない（3.4）。失敗時は呼び出し前の状態を保つ（強い保証）
+- foundation の共通 API 規約に従う。必須のポインタ引数が `NULL`、`len > 0 && data == NULL` は `AMARK_ERROR_INVALID_ARGUMENT` で何も変更しない（3.4）。失敗時は呼び出し前の状態を保つ（強い保証）
 - 構文のコールバックは parser-core の契約に従う: 文脈は呼び出し中だけ使う、渡されたノードと文脈の操作以外で文書を変更しない、自分が読み進めた入力に比例する時間で動く（9.1）
 - 構文が木に置く文字列（literal、info、url、title、text）は入力（parser-core が妥当な UTF-8 に正規化済み）の部分列と、`amark_buffer_append_codepoint` で符号化した妥当なコードポイントだけから作る（11.4）
 
@@ -369,7 +369,7 @@ AMARK_API amark_error_t amark_commonmark_extension_create(amark_commonmark_const
 AMARK_API amark_slice_t amark_commonmark_get_extension_name(amark_commonmark_construct_t construct);
 AMARK_API amark_error_t amark_commonmark_add_extensions(amark_dialect_t *dialect, uint32_t constructs);
 AMARK_API amark_error_t amark_commonmark_dialect_create(uint32_t constructs, amark_dialect_t **dialect);
-AMARK_API amark_error_t amark_commonmark_parse(const char *data, size_t length, const amark_parser_options_t *options,
+AMARK_API amark_error_t amark_commonmark_parse(const char *data, size_t len, const amark_parser_options_t *options,
                                                amark_node_t **document);
 ```
 - `amark/commonmark.h` は `amark/html.h` を include せず、html-renderer の型を使わない。HTML への簡易変換は `amark/commonmark_html.h`（下記）に分ける
@@ -391,7 +391,7 @@ AMARK_API amark_error_t amark_commonmark_parse(const char *data, size_t length, 
 #include <amark/commonmark.h>
 #include <amark/html.h>
 
-AMARK_API amark_error_t amark_commonmark_convert_to_html(const char *data, size_t length,
+AMARK_API amark_error_t amark_commonmark_convert_to_html(const char *data, size_t len,
                                                          const amark_parser_options_t *parse_options,
                                                          const amark_html_options_t *html_options,
                                                          amark_buffer_t *output);
@@ -457,9 +457,9 @@ extern const amark_extension_desc_t amark_commonmark_thematic_break_desc;
 typedef struct amark_commonmark_link_definition
 {
     char *url;            /* 所有。エスケープと文字参照を解決済み。NUL 終端 */
-    size_t url_length;
+    size_t url_len;
     char *title;          /* 所有。なければ空文字列 */
-    size_t title_length;
+    size_t title_len;
 } amark_commonmark_link_definition_t;
 ```
 - リンク参照定義の約束（5.7）: 定義テーブルの名前空間 `commonmark.link`、鍵は `amark_commonmark_normalize_label` の結果、値は上の構造体（1 回の `amark_malloc` で構造体と 2 つの文字列を連続して確保し、後片付け関数 `amark_free` 相当で解放）。書くのは LinkReferenceExtension、読むのは LinkExtension だけ。第三者の拡張にとっては非公開（必要になれば公開 API の追加として扱う）
@@ -596,9 +596,9 @@ bool amark_commonmark_scan_link_title(amark_slice_t text, size_t offset, size_t 
 ```c
 typedef struct amark_commonmark_html_memo
 {
-    size_t no_comment_end_from;   /* この位置以降に "-->" がない（SIZE_MAX なら未調査） */
-    size_t no_pi_end_from;        /* "?>" */
-    size_t no_cdata_end_from;     /* "]]>" */
+    size_t no_comment_end_from;     /* この位置以降に "-->" がない（SIZE_MAX なら未調査） */
+    size_t no_pi_end_from;          /* "?>" */
+    size_t no_cdata_end_from;       /* "]]>" */
     size_t no_declaration_end_from; /* ">" */
 } amark_commonmark_html_memo_t;
 
@@ -695,8 +695,8 @@ amark_slice_t amark_commonmark_rest_of_line(const amark_block_context_t *ctx);
 - 並びの長さ `n`、直前の文字 `before = char_before`、直後の文字 `after = char_at(offset + n)` から left-flanking（`after` が空白でない、かつ（`after` が句読点でない、または `before` が空白か句読点））と right-flanking（対称）を決める。`*` は can_open = left、can_close = right。`_` は can_open = left かつ（right でない、または `before` が句読点）、can_close = right かつ（left でない、または `after` が句読点）（7.1）
 - `amark_inline_context_push_delimiter(ctx, &handler, n, can_open, can_close)`
 - デリミタ処理器（静的、7.2）:
-  - `match(opener, closer)`: 「どちらかが両用（`closer->can_open` または `opener->can_close`）で、`original_length` の和が 3 の倍数、かつ `closer->original_length` が 3 の倍数でない」なら 0。それ以外は両方の `length ≥ 2` なら 2、そうでなければ 1
-  - `closer_class(closer)`: `(closer->can_open ? 3 : 0) + (closer->original_length % 3)`
+  - `match(opener, closer)`: 「どちらかが両用（`closer->can_open` または `opener->can_close`）で、`original_len` の和が 3 の倍数、かつ `closer->original_len` が 3 の倍数でない」なら 0。それ以外は両方の `len ≥ 2` なら 2、そうでなければ 1
+  - `closer_class(closer)`: `(closer->can_open ? 3 : 0) + (closer->original_len % 3)`
   - `create(ctx, used)`: `used == 2` なら STRONG、1 なら EMPHASIS のノードを生成
 - 線形性の契約（parser-core 10.4）を満たす分類は parser-core の設計の CommonMark の例と同じ
 
@@ -707,7 +707,7 @@ amark_slice_t amark_commonmark_rest_of_line(const amark_block_context_t *ctx);
   2. 開きが無効なら `remove_bracket` して `]` を `append_text`、1 バイト進める
   3. インライン: 直後が `(` なら、空白（行末 1 つ可）、宛先（省略可）、空白、title（省略可）、空白、`)` を走査。成立すれば url と title を `unescape` する
   4. 参照: 3 が不成立なら、直後の `[label]` を `scan_link_label`。ラベルが空でなく有効なら完全参照、`[]` なら省略、続かなければショートカット。省略とショートカットでは開きの `get_content_offset` から `]` の直前までをラベルとし、`is_valid_label` でなければ不成立。正規化した鍵で `amark_definition_table_find(…, "commonmark.link", 鍵)`
-  5. 展開量の上限（9.4）: 参照が見つかったとき、`url_length + title_length` を解析状態の展開量に加え、`max(100000, それまでにインライン解析した内容の合計長)` を超えるなら不成立として扱う
+  5. 展開量の上限（9.4）: 参照が見つかったとき、`url_len + title_len` を解析状態の展開量に加え、`max(100000, それまでにインライン解析した内容の合計長)` を超えるなら不成立として扱う
   6. 成立: 位置を閉じの終わりまで `advance` し、LINK または IMAGE（開きのフラグで決める）を url・title 付きで作り `close_bracket`。リンクなら `deactivate_brackets(ctx, FLAG_LINK)`（7.5、画像では呼ばない）
   7. 不成立: `remove_bracket` し、`]` を `append_text` して 1 バイト進める（7.6）。完全参照の `[label]` は消費しない（後で別のリンクになりうる）
 - ラベルと宛先の走査は LinkScan の上限（999 文字、括弧 32 段）で打ち切られ、`]` ごとの仕事は消費した入力に比例する（`[` の大量の入れ子でも、ラベルが 999 文字を超えた時点で打ち切る）
@@ -731,7 +731,7 @@ amark_slice_t amark_commonmark_rest_of_line(const amark_block_context_t *ctx);
 - `amark_commonmark_get_extension_name(construct)`: 定義済みの 1 ビットなら拡張名（静的、NUL 終端）、それ以外 `{NULL, 0}`（1.6）
 - `amark_commonmark_add_extensions(dialect, constructs)`（1.2、2.4、2.5）: `dialect == NULL`、`constructs == 0`、`constructs & ~AMARK_COMMONMARK_ALL`: `AMARK_ERROR_INVALID_ARGUMENT`。凍結済みなら `AMARK_ERROR_INVALID_STATE`（`amark_dialect_is_frozen` で先に確かめる）。表の順に、指定されたビットの拡張を生成して `amark_dialect_add_extension`。失敗したら、その拡張を破棄し、この呼び出しで追加した拡張を逆順に `amark_dialect_remove_extension` で取り外して、そのエラー（`ALREADY_EXISTS`、`NO_MEMORY` など）を返す。取り外しは凍結されていない方言では失敗しない
 - `amark_commonmark_dialect_create(constructs, dialect)`（2.1、2.2、2.6）: `dialect == NULL` と `constructs` の検査は同上。`amark_dialect_create` → `amark_commonmark_add_extensions` → 成功なら凍結せずに `*dialect` に書く。失敗なら方言を破棄して `*dialect` を変更しない
-- `amark_commonmark_parse(data, length, options, document)`（3.1、3.3〜3.6）: `document == NULL`、`length > 0 && data == NULL`: `AMARK_ERROR_INVALID_ARGUMENT`。`amark_commonmark_dialect_create(AMARK_COMMONMARK_ALL)` → `amark_parser_parse(dialect, data, length, options, &doc)` → 方言を破棄 → 成功なら `*document = doc`。`options == NULL` は parser-core の既定値。同じ入力の通常のパースと同一の木（3.6）
+- `amark_commonmark_parse(data, len, options, document)`（3.1、3.3〜3.6）: `document == NULL`、`len > 0 && data == NULL`: `AMARK_ERROR_INVALID_ARGUMENT`。`amark_commonmark_dialect_create(AMARK_COMMONMARK_ALL)` → `amark_parser_parse(dialect, data, len, options, &doc)` → 方言を破棄 → 成功なら `*document = doc`。`options == NULL` は parser-core の既定値。同じ入力の通常のパースと同一の木（3.6）
 - 並行利用（12.1〜12.3）: 可変のグローバル状態を持たない。簡易 API は呼び出しごとに方言を作るため共有状態がない。プリセットを凍結した方言は parser-core の規則どおり複数のパーサから同時に使える（構文のコールバックは解析状態と文脈だけを書き換える）
 
 **Implementation Notes**
@@ -746,7 +746,7 @@ amark_slice_t amark_commonmark_rest_of_line(const amark_block_context_t *ctx);
 | Requirements | 3.2, 3.3, 3.4, 3.5 |
 
 **Contracts**: Service [x]
-- `amark_commonmark_convert_to_html(data, length, parse_options, html_options, output)`: `output == NULL`、`length > 0 && data == NULL`: `AMARK_ERROR_INVALID_ARGUMENT`。宣言は `amark/commonmark_html.h`。手順は 方言の生成（`AMARK_COMMONMARK_ALL`）→ `amark_parser_parse(dialect, data, length, parse_options, &doc)` → `amark_html_render(doc, html_options, output)` → 文書の破棄 → 方言の破棄。`html_options` の検証は `amark_html_render` に委ね、不正なら `AMARK_ERROR_INVALID_ARGUMENT` が返る（出力先は変わらない）
+- `amark_commonmark_convert_to_html(data, len, parse_options, html_options, output)`: `output == NULL`、`len > 0 && data == NULL`: `AMARK_ERROR_INVALID_ARGUMENT`。宣言は `amark/commonmark_html.h`。手順は 方言の生成（`AMARK_COMMONMARK_ALL`）→ `amark_parser_parse(dialect, data, len, parse_options, &doc)` → `amark_html_render(doc, html_options, output)` → 文書の破棄 → 方言の破棄。`html_options` の検証は `amark_html_render` に委ね、不正なら `AMARK_ERROR_INVALID_ARGUMENT` が返る（出力先は変わらない）
 - 出力先は html-renderer が失敗時に呼び出し前の長さへ戻す。解析の失敗では出力先に何も書かない（3.5）
 - `html_options == NULL` は html-renderer の既定値（生 HTML と危険な URL を出力しない、3.3）
 - 本体のソースで `amark/html.h`（`amark/commonmark_html.h` 経由を含む）を include するのはこのファイルだけ
@@ -774,12 +774,12 @@ amark_slice_t amark_commonmark_rest_of_line(const amark_block_context_t *ctx);
 /* tests/support/test_spec_examples.h（テスト補助の命名規約 test_<area>_*） */
 typedef struct test_spec_example
 {
-    int number;             /* 1 から */
-    char *section;          /* 直前の見出し */
-    char *markdown;         /* '→' をタブへ戻したもの */
-    size_t markdown_length;
+    int number;     /* 1 から */
+    char *section;  /* 直前の見出し */
+    char *markdown; /* '→' をタブへ戻したもの */
+    size_t markdown_len;
     char *html;
-    size_t html_length;
+    size_t html_len;
 } test_spec_examples_item_t;
 
 int test_spec_examples_load(const char *path, test_spec_examples_item_t **examples, size_t *count);
@@ -861,7 +861,7 @@ void test_spec_examples_free(test_spec_examples_item_t *examples, size_t count);
 
 | エラー | 返す操作と条件 |
 |---|---|
-| `AMARK_ERROR_INVALID_ARGUMENT` | 必須引数の `NULL`、未定義または複数のビット（`extension_create`）、`0` または未定義のビット（`add_extensions`、`dialect_create`）、`length > 0 && data == NULL`、html-renderer が拒否する出力設定 |
+| `AMARK_ERROR_INVALID_ARGUMENT` | 必須引数の `NULL`、未定義または複数のビット（`extension_create`）、`0` または未定義のビット（`add_extensions`、`dialect_create`）、`len > 0 && data == NULL`、html-renderer が拒否する出力設定 |
 | `AMARK_ERROR_INVALID_STATE`（parser-core） | 凍結済みの方言への追加 |
 | `AMARK_ERROR_ALREADY_EXISTS`（node-tree） | 方言内の拡張名・構文名の重複 |
 | `AMARK_ERROR_NO_MEMORY` | すべての確保失敗 |
@@ -898,7 +898,7 @@ parser-core の公開 API の追加・変更は不要である。本仕様が依
 | C2 | 意味の明確化 | 「行が空行」は継続判定と開始判定を終えた位置から行末までがスペースとタブだけであること | `> - a\n>\n> - b` の loose（4.5） |
 | C3 | 意味の明確化 | インライン対象は 1 つずつ最後まで解析され、対象ごとに `get_block` のノードが異なる | 内容ごとの記憶の初期化（9.1、9.4） |
 
-- parser-core の簡易解析 API は `amark_parser_parse(dialect, data, length, options, &doc)`を使う
+- parser-core の簡易解析 API は `amark_parser_parse(dialect, data, len, options, &doc)`を使う
 - foundation への依存: `amark_utf8_decode_previous`（foundation の要件 10.8）を CharClass が使う。新しいエラーコード: なし（foundation の `AMARK_ERROR_LIST` とエラーコード一覧表が正本）
 - markdown-renderer: UnicodeClass（`src/base/unicode_class.h`）と抽出器 `tests/support/test_spec_examples.h` の消費側。これらの変更は markdown-renderer の再検証を伴う
 - 適合テストで不一致がレンダラ側の規則に起因すると判明した場合は、html-renderer の組み込み出力の表の修正として html-renderer の spec に戻す（brief の約束）

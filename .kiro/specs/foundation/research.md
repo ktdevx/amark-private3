@@ -122,13 +122,13 @@
 
 ### Decision: 文字列の所有権規約
 - **Context**: 要件 8.7。node-tree と共有する seam
-- **Selected Approach**: 借用は `amark_slice_t`（NUL 終端を仮定しない、NUL を含みうる）。所有は `amark_malloc` 系で確保した `char *` と長さの組で、常に `data[length] == '\0'`。解放は `amark_free`
+- **Selected Approach**: 借用は `amark_slice_t`（NUL 終端を仮定しない、NUL を含みうる）。所有は `amark_malloc` 系で確保した `char *` と長さの組で、常に `data[len] == '\0'`。解放は `amark_free`
 - **Rationale**: 長さ付きで NUL を含むデータを扱え、C の文字列 API との相互運用も保てる
 - **Follow-up**: node-tree の設計でこの規約に従っているかを確認する
 
 ### Decision: バッファの取り出しはエラーコードで結果を返す
 - **Context**: 要件 9.7。空のバッファ（領域なし）からの取り出しでも所有権のある文字列を返す必要がある
-- **Selected Approach**: `amark_buffer_detach(buffer, &data, &length)`。領域がなければ 1 バイトの空文字列を確保する。確保に失敗したら `AMARK_ERROR_NO_MEMORY` を返しバッファは変更しない
+- **Selected Approach**: `amark_buffer_detach(buffer, &data, &len)`。領域がなければ 1 バイトの空文字列を確保する。確保に失敗したら `AMARK_ERROR_NO_MEMORY` を返しバッファは変更しない
 - **Rationale**: 呼び出し側は常に `amark_free` で解放でき、空と失敗を区別できる
 
 ### Decision: `amark_buffer_init` は値を返さない

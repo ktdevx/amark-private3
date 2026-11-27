@@ -37,7 +37,7 @@
 ### 文字列の所有権
 
 - 借用は `amark_slice_t`（先頭とバイト長。NUL 終端を仮定せず、NUL を含みうる）。参照先の寿命は貸し手が保証する
-- 所有は `amark_malloc` 系で確保した `char *` と長さの組で、常に `data[length] == '\0'`。所有者が `amark_free` で解放する
+- 所有は `amark_malloc` 系で確保した `char *` と長さの組で、常に `data[len] == '\0'`。所有者が `amark_free` で解放する
 - 正本は `foundation` spec の設計（Slice）
 
 ### エラー処理
@@ -77,35 +77,35 @@ void amark_node_destroy(amark_node_t *node);
 - 処理のまとまり（ステップ）が変わるところに空行を 1 つ入れる。1 つのステップの文は空行を挟まずに続ける
 
 ```c
-amark_error_t amark_buffer_append(amark_buffer_t *buffer, const char *data, size_t length)
+amark_error_t amark_buffer_append(amark_buffer_t *buffer, const char *data, size_t len)
 {
     amark_error_t error;
 
-    if (!buffer || ((length > 0) && !data))
+    if (!buffer || ((len > 0) && !data))
     {
         return AMARK_ERROR_INVALID_ARGUMENT;
     }
 
-    if (length == 0)
+    if (len == 0)
     {
         return AMARK_OK;
     }
 
-    error = amark_buffer_reserve(buffer, length);   /* あふれ・確保失敗ではバッファを変えない */
+    error = amark_buffer_reserve(buffer, len);   /* あふれ・確保失敗ではバッファを変えない */
     if (error)
     {
         return error;
     }
 
-    memcpy(buffer->data + buffer->length, data, length);
-    buffer->length += length;
-    buffer->data[buffer->length] = '\0';
+    memcpy(buffer->data + buffer->len, data, len);
+    buffer->len += len;
+    buffer->data[buffer->len] = '\0';
 
     return AMARK_OK;
 }
 ```
 
-比較の左右に算術式がある場合の例: `if (additional > (SIZE_MAX - buffer->length - 1))`
+比較の左右に算術式がある場合の例: `if (additional > (SIZE_MAX - buffer->len - 1))`
 
 ### 機械的に検査する規約と検査しない規約
 

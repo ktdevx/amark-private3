@@ -67,7 +67,7 @@
 
 ### Decision: rule of 3 と openers_bottom の一般化
 - **Context**: 強調の照合規則（rule of 3）は CommonMark 固有だが、openers_bottom による線形化はエンジンにしかできない
-- **Selected Approach**: デリミタの処理器（handler）が「照合（使う個数、0 なら不一致）」「閉じ側の分類（0〜7）」「ノードの生成」の 3 つを提供する。エンジンは openers_bottom を「処理器 × 文字 × 閉じ側の分類」で持つ。CommonMark の強調は分類を `(can_open ? 3 : 0) + original_length % 3` とする
+- **Selected Approach**: デリミタの処理器（handler）が「照合（使う個数、0 なら不一致）」「閉じ側の分類（0〜7）」「ノードの生成」の 3 つを提供する。エンジンは openers_bottom を「処理器 × 文字 × 閉じ側の分類」で持つ。CommonMark の強調は分類を `(can_open ? 3 : 0) + original_len % 3` とする
 - **Rationale**: 照合規則が分類の中で単調（ある分類の閉じ側が不一致だった開き側は、同じ分類の後続の閉じ側とも不一致）である限り線形になる。この条件を処理器の契約として文書化する
 
 ### Decision: ブラケットの無効化を水位線で行う
@@ -95,7 +95,7 @@
   - C2（空行の定義、7.1・8.4・8.5）: 空行は「継続判定と開始判定で読み進めた後の行の残りがスペースとタブだけ」の行。`> - a` / `>` / `> - b` を CommonMark どおり loose にするために必要
   - C3（インライン対象の逐次処理、9.1）: インライン対象は 1 つずつ完了まで解析し、1 つの対象の間 `amark_inline_context_get_block` は同じノードを返し、対象ごとに異なるノードである。構文が対象ごとの状態をノードで区別するために必要
 - **Rationale**: いずれも既存の設計の振る舞いを明文化・限定するもので、API の形は変えない
-- **Also applied**: 一括パースの名前と引数を `amark_parser_parse(dialect, data, length, options, &document)` に変更（`amark_parse` から改名、`data, length` の並びを `feed` に揃える）。テスト補助を `tests/support/test_syntax.{h,c}`（`test_syntax_*`）と `test_tree_dump.{h,c}`（`test_tree_dump_*`）に改名
+- **Also applied**: 一括パースの名前と引数を `amark_parser_parse(dialect, data, len, options, &document)` に変更（`amark_parse` から改名、`data, len` の並びを `feed` に揃える）。テスト補助を `tests/support/test_syntax.{h,c}`（`test_syntax_*`）と `test_tree_dump.{h,c}`（`test_tree_dump_*`）に改名
 
 ## Synthesis Outcomes
 - **Generalization**: 「ブロックの内容をインライン解析する」と「テーブルのセルをインライン解析する」を、インライン対象の登録という 1 つの機構にまとめた。リンク参照定義の表と GFM 脚注の定義表を、名前空間付きの定義テーブルにまとめた

@@ -74,7 +74,7 @@
 
 ### Decision: 値の取得は借用スライス、設定は複製＋UTF-8 検査
 - **Context**: 3.2、3.3、3.6、3.9、foundation の所有権規約
-- **Selected Approach**: getter は `amark_slice_t` を返す。値を持つ種別では `data` は常に非 `NULL` で `data[length] == '\0'`（未設定時は静的な `""`）。値を持たない種別では `{NULL, 0}`。setter は `amark_utf8_validate` → 複製 → 旧値の解放、の順で強い保証を守る
+- **Selected Approach**: getter は `amark_slice_t` を返す。値を持つ種別では `data` は常に非 `NULL` で `data[len] == '\0'`（未設定時は静的な `""`）。値を持たない種別では `{NULL, 0}`。setter は `amark_utf8_validate` → 複製 → 旧値の解放、の順で強い保証を守る
 - **Rationale**: 利用者は C 文字列としても長さ付きでも使える。値の有無を `data` の `NULL` で区別できる
 - **Trade-offs**: 設定ごとに O(n) の UTF-8 検査がかかる。木の値が常に妥当な UTF-8 であることをレンダラが前提にできる利点を優先する
 
