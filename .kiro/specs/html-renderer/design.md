@@ -612,7 +612,7 @@ markdown-renderer は次を同じ形で提供する。フック表と走査駆�
 
 ### 拡張・parser-core との結び付け
 - html-renderer は parser-core に依存しない（本仕様のコードは parser-core のヘッダを include せず、parser-core もレンダラに依存しない）。拡張の単位（構文＋ノード種別）からレンダラへの結び付けは、両方に依存する拡張パッケージの側が「種別ハンドルを得て `amark_html_renderer_set_hook` を呼ぶ」ことで行う
-- parser-core はノードのレジストリを拡張ごとに内部に持ち、公開しない。推奨形: 拡張パッケージは `<ext>_html_register(amark_html_renderer_t *renderer, const amark_extension_t *extension)` のような関数を提供し、`amark_extension_find_kind(extension, name)`（または `amark_extension_get_kind_at`）で得たハンドルに登録する。方言から得る場合は `amark_dialect_find_kind` を使う。種別ハンドルそのものを受け取る形でもよい（関数の所在と形は各拡張パッケージが決める）
+- parser-core はノードのレジストリを拡張ごとに内部に持ち、公開しない。推奨形: 拡張パッケージは `<ext>_html_register(amark_html_renderer_t *renderer, const amark_extension_t *ext)` のような関数を提供し、`amark_extension_find_kind(ext, name)`（または `amark_extension_get_kind_at`）で得たハンドルに登録する。方言から得る場合は `amark_dialect_find_kind` を使う。種別ハンドルそのものを受け取る形でもよい（関数の所在と形は各拡張パッケージが決める）
 - 寿命: フックを登録した種別ハンドルの出所の拡張（方言に追加済みなら、その拡張を所有する方言）は、その種別のフックを保持するレンダラより長く生きなければならない（parser-core の寿命の義務と同じ）。先にレンダラを破棄するか、フックを解除する
 - 1 つの拡張が HTML と Markdown の出力を提供する場合、同じ種別ハンドルに対してそれぞれのレンダラの `set_hook` を呼ぶ
 

@@ -365,7 +365,7 @@ graph TB
 #define AMARK_CMARK_CONSTRUCT_COUNT 17
 
 AMARK_API amark_error_t amark_cmark_extension_create(uint32_t construct,
-                                                          amark_extension_t **extension);
+                                                          amark_extension_t **ext);
 AMARK_API amark_slice_t amark_cmark_get_extension_name(uint32_t construct);
 AMARK_API amark_error_t amark_cmark_add_extensions(amark_dialect_t *dialect, uint32_t constructs);
 AMARK_API amark_error_t amark_cmark_dialect_create(uint32_t constructs, amark_dialect_t **dialect);
@@ -727,7 +727,7 @@ amark_slice_t amark_cmark_rest_of_line(const amark_block_context_t *ctx);
 **Contracts**: Service [x]
 
 - 単位の表: `static const` の 17 要素 `{ビット, 拡張名, 記述子へのポインタ}` を列挙の値の昇順に持つ
-- `amark_cmark_extension_create(construct, extension)`: `extension == NULL`、`construct` がちょうど 1 つの定義済みのビットでない: `AMARK_ERROR_INVALID_ARGUMENT`（1.3）。それ以外は `amark_extension_create(desc, extension)` の結果を返す
+- `amark_cmark_extension_create(construct, ext)`: `ext == NULL`、`construct` がちょうど 1 つの定義済みのビットでない: `AMARK_ERROR_INVALID_ARGUMENT`（1.3）。それ以外は `amark_extension_create(desc, ext)` の結果を返す
 - `amark_cmark_get_extension_name(construct)`: 定義済みの 1 ビットなら拡張名（静的、NUL 終端）、それ以外 `{NULL, 0}`（1.6）
 - `amark_cmark_add_extensions(dialect, constructs)`（1.2、2.4、2.5）: `dialect == NULL`、`constructs == 0`、`constructs & ~AMARK_CMARK_ALL`: `AMARK_ERROR_INVALID_ARGUMENT`。凍結済みなら `AMARK_ERROR_INVALID_STATE`（`amark_dialect_is_frozen` で先に確かめる）。表の順に、指定されたビットの拡張を生成して `amark_dialect_add_extension`。失敗したら、その拡張を破棄し、この呼び出しで追加した拡張を逆順に `amark_dialect_remove_extension` で取り外して、そのエラー（`ALREADY_EXISTS`、`NO_MEMORY` など）を返す。取り外しは凍結されていない方言では失敗しない
 - `amark_cmark_dialect_create(constructs, dialect)`（2.1、2.2、2.6）: `dialect == NULL` と `constructs` の検査は同上。`amark_dialect_create` → `amark_cmark_add_extensions` → 成功なら凍結せずに `*dialect` に書く。失敗なら方言を破棄して `*dialect` を変更しない

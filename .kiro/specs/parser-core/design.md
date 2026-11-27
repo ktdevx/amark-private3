@@ -495,23 +495,23 @@ typedef struct amark_extension_desc
     void *user_data;                                       /* 状態の関数へ渡す。所有しない */
 } amark_extension_desc_t;
 
-AMARK_API amark_error_t amark_extension_create(const amark_extension_desc_t *desc, amark_extension_t **extension);
-AMARK_API void amark_extension_destroy(amark_extension_t *extension);
-AMARK_API amark_slice_t amark_extension_get_name(const amark_extension_t *extension);
-AMARK_API size_t amark_extension_get_kind_count(const amark_extension_t *extension);
-AMARK_API const amark_node_kind_t *amark_extension_get_kind_at(const amark_extension_t *extension, size_t index);
-AMARK_API const amark_node_kind_t *amark_extension_find_kind(const amark_extension_t *extension, amark_slice_t name);
-AMARK_API amark_error_t amark_extension_set_attachment(amark_extension_t *extension, const void *key, void *data,
+AMARK_API amark_error_t amark_extension_create(const amark_extension_desc_t *desc, amark_extension_t **ext);
+AMARK_API void amark_extension_destroy(amark_extension_t *ext);
+AMARK_API amark_slice_t amark_extension_get_name(const amark_extension_t *ext);
+AMARK_API size_t amark_extension_get_kind_count(const amark_extension_t *ext);
+AMARK_API const amark_node_kind_t *amark_extension_get_kind_at(const amark_extension_t *ext, size_t index);
+AMARK_API const amark_node_kind_t *amark_extension_find_kind(const amark_extension_t *ext, amark_slice_t name);
+AMARK_API amark_error_t amark_extension_set_attachment(amark_extension_t *ext, const void *key, void *data,
                                                        amark_extension_attachment_destroy_fn_t destroy,
                                                        void *user_data);
-AMARK_API void *amark_extension_get_attachment(const amark_extension_t *extension, const void *key);
+AMARK_API void *amark_extension_get_attachment(const amark_extension_t *ext, const void *key);
 ```
-- `amark_extension_create` の検証順（失敗時は何も残さず `*extension` を変更しない）:
+- `amark_extension_create` の検証順（失敗時は何も残さず `*ext` を変更しない）:
   1. `desc`・`extension` が `NULL`、配列が `NULL` なのに個数が 1 以上、配列の要素が `NULL`: `AMARK_ERROR_INVALID_ARGUMENT`
   2. 拡張名・構文名・処理器名・後処理名の形式違反、同じ分類の中の名前の重複、必須の関数の欠落（インライン構文の `parse`、処理器の `process`、後処理の `process`。ブロック構文に必須の関数はない: `start == NULL` は他の構文から open されるだけの構文、`continue_line == NULL` は 1 行で終わる構文を表す）、`state_create` と `state_destroy` の片方だけ、`content` が未定義値、`start_chars` / `triggers` に許されない文字: `AMARK_ERROR_INVALID_ARGUMENT`（13.3）
   3. `triggers` は 1 文字以上で、各バイトが `0x20`〜`0x7E` または `\n`（9.7）。`start_chars` は `0x21`〜`0x7E`（空白でない印字可能 ASCII）
   4. レジストリを生成し、ノード種別を宣言順に `amark_node_registry_add`。node-tree が返す `AMARK_ERROR_INVALID_ARGUMENT`（記述子の矛盾）・`AMARK_ERROR_ALREADY_EXISTS`（拡張内または標準種別との名前の重複、13.4）・`AMARK_ERROR_NO_MEMORY` をそのまま返し、レジストリを破棄する
-  5. 成功: `*extension` に書き `AMARK_OK`（13.1）。種別は `get_kind_at(i)` で宣言順に得られる（13.2）
+  5. 成功: `*ext` に書き `AMARK_OK`（13.1）。種別は `get_kind_at(i)` で宣言順に得られる（13.2）
 - `amark_extension_destroy`: `NULL`、または方言が所有する拡張（`owner != NULL`）には何もしない（所有者が破棄する）。それ以外は attachment の `destroy` を設定順に 1 回ずつ呼び、レジストリ（種別）と自身を解放する（13.6）
 - `get_kind_at`: 範囲外は `NULL`。`find_kind`: この拡張の種別だけを名前で探す（標準種別は返さない）
 - `set_attachment(ext, key, data, destroy, user_data)`: `ext`・`key` が `NULL` は `AMARK_ERROR_INVALID_ARGUMENT`。同じ鍵があれば旧データの `destroy` を呼んで置き換える（同じ `data` なら何もしない）。`data == NULL` は鍵の削除（旧データの `destroy` を呼ぶ）。新しい鍵の確保失敗は `AMARK_ERROR_NO_MEMORY` でデータの所有は移らない（13.5）。凍結された方言の拡張にも設定できる（解析に影響しないため）。ただしその拡張を使う解析と同時に呼んではならない
@@ -547,7 +547,7 @@ typedef enum amark_syntax_category
 
 AMARK_API amark_error_t amark_dialect_create(amark_dialect_t **dialect);
 AMARK_API void amark_dialect_destroy(amark_dialect_t *dialect);
-AMARK_API amark_error_t amark_dialect_add_extension(amark_dialect_t *dialect, amark_extension_t *extension);
+AMARK_API amark_error_t amark_dialect_add_extension(amark_dialect_t *dialect, amark_extension_t *ext);
 AMARK_API amark_error_t amark_dialect_remove_extension(amark_dialect_t *dialect, amark_slice_t name);
 AMARK_API amark_extension_t *amark_dialect_find_extension(const amark_dialect_t *dialect, amark_slice_t name);
 AMARK_API size_t amark_dialect_get_extension_count(const amark_dialect_t *dialect);
