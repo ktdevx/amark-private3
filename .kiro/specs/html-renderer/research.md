@@ -65,12 +65,12 @@
 
 ### Decision: フックの形は揃え、型はレンダラごとに分ける
 - **Context**: markdown-renderer は同じ形のフック機構を持つ（steering）。GFM 拡張は 1 つの拡張で HTML と Markdown の出力を提供する
-- **Selected Approach**: フック関数は `amark_error_t (*)(context, const amark_node_t *node, amark_node_iter_event_t event, void *user_data)`。context はレンダラごとの opaque 型（`amark_html_context_t` / `amark_markdown_context_t`）。登録は `<renderer>_set_hook(renderer, kind, fn, user_data)`。内部のフック表と走査駆動部は両レンダラで共有する（node-tree の非公開モジュール `node_walk`。下の「走査駆動部を node-tree へ移す」）
+- **Selected Approach**: フック関数は `amark_error_t (*)(ctx, const amark_node_t *node, amark_node_iter_event_t event, void *user_data)`。context はレンダラごとの opaque 型（`amark_html_context_t` / `amark_markdown_context_t`）。登録は `<renderer>_set_hook(renderer, kind, fn, user_data)`。内部のフック表と走査駆動部は両レンダラで共有する（node-tree の非公開モジュール `node_walk`。下の「走査駆動部を node-tree へ移す」）
 - **Rationale**: 拡張の作者には同じ書き方を、型検査にはレンダラの取り違えの検出を与える。駆動部の共有で ENTER / EXIT、子の省略、エラー伝播の意味が構造的に一致する
 - **Trade-offs**: 拡張は HTML 用と Markdown 用で 2 つの関数を書く（出力内容が違うため本質的に必要）
 
 ### Decision: 組み込み出力への委譲は「現在のノードとイベント」に限る
-- **Selected Approach**: `amark_html_context_render_default(context)` は引数にノードを取らず、現在の (ノード, イベント) について組み込み出力を行う
+- **Selected Approach**: `amark_html_context_render_default(ctx)` は引数にノードを取らず、現在の (ノード, イベント) について組み込み出力を行う
 - **Rationale**: 任意ノードへの委譲を許すと、子の省略の対象や画像の平坦化の前提が崩れる。上書きフックの典型（条件によって組み込みに任せる、前後に属性やラッパを足す）はこれで足りる
 
 ### Decision: 画像は ENTER で完結させる

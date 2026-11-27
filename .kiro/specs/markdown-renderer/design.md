@@ -255,14 +255,14 @@ stateDiagram-v2
 
 typedef enum amark_markdown_heading_style
 {
-    AMARK_MARKDOWN_HEADING_ATX = 0,      /* 既定 */
-    AMARK_MARKDOWN_HEADING_SETEXT = 1    /* レベル 1・2 だけ。他は ATX */
+    AMARK_MARKDOWN_HEADING_ATX,   /* 既定 */
+    AMARK_MARKDOWN_HEADING_SETEXT /* レベル 1・2 だけ。他は ATX */
 } amark_markdown_heading_style_t;
 
 typedef enum amark_markdown_line_break
 {
-    AMARK_MARKDOWN_LINE_BREAK_BACKSLASH = 0, /* 既定: "\\\n" */
-    AMARK_MARKDOWN_LINE_BREAK_SPACES = 1     /* "  \n" */
+    AMARK_MARKDOWN_LINE_BREAK_BACKSLASH, /* 既定: "\\\n" */
+    AMARK_MARKDOWN_LINE_BREAK_SPACES     /* "  \n" */
 } amark_markdown_line_break_t;
 
 typedef struct amark_markdown_options
@@ -282,12 +282,12 @@ typedef struct amark_markdown_options
 typedef struct amark_markdown_renderer amark_markdown_renderer_t; /* opaque: 設定とフック表 */
 typedef struct amark_markdown_context amark_markdown_context_t;   /* opaque: 1 回の描画中だけ有効 */
 
-typedef amark_error_t (*amark_markdown_render_fn_t)(amark_markdown_context_t *context, const amark_node_t *node,
+typedef amark_error_t (*amark_markdown_render_fn_t)(amark_markdown_context_t *ctx, const amark_node_t *node,
                                                     amark_node_iter_event_t event, void *user_data);
 
-AMARK_API void amark_markdown_options_init(amark_markdown_options_t *options);
+AMARK_API void amark_markdown_options_init(amark_markdown_options_t *opts);
 
-AMARK_API amark_error_t amark_markdown_renderer_create(const amark_markdown_options_t *options,
+AMARK_API amark_error_t amark_markdown_renderer_create(const amark_markdown_options_t *opts,
                                                        amark_markdown_renderer_t **renderer);
 AMARK_API void amark_markdown_renderer_destroy(amark_markdown_renderer_t *renderer);
 AMARK_API amark_error_t amark_markdown_renderer_set_hook(amark_markdown_renderer_t *renderer,
@@ -296,23 +296,23 @@ AMARK_API amark_error_t amark_markdown_renderer_set_hook(amark_markdown_renderer
 AMARK_API amark_error_t amark_markdown_renderer_render(const amark_markdown_renderer_t *renderer,
                                                        const amark_node_t *root, amark_buffer_t *out);
 
-AMARK_API amark_error_t amark_markdown_render(const amark_node_t *root, const amark_markdown_options_t *options,
+AMARK_API amark_error_t amark_markdown_render(const amark_node_t *root, const amark_markdown_options_t *opts,
                                               amark_buffer_t *out);
 
 /* html-renderer と同じ意味の操作 */
-AMARK_API amark_error_t amark_markdown_context_write(amark_markdown_context_t *context, amark_slice_t raw);
-AMARK_API amark_error_t amark_markdown_context_write_escaped(amark_markdown_context_t *context, amark_slice_t text);
-AMARK_API amark_error_t amark_markdown_context_write_url(amark_markdown_context_t *context, amark_slice_t url);
-AMARK_API amark_error_t amark_markdown_context_ensure_newline(amark_markdown_context_t *context);
-AMARK_API void amark_markdown_context_skip_children(amark_markdown_context_t *context);
-AMARK_API amark_error_t amark_markdown_context_render_default(amark_markdown_context_t *context);
-AMARK_API const amark_markdown_options_t *amark_markdown_context_get_options(const amark_markdown_context_t *context);
+AMARK_API amark_error_t amark_markdown_context_write(amark_markdown_context_t *ctx, amark_slice_t raw);
+AMARK_API amark_error_t amark_markdown_context_write_escaped(amark_markdown_context_t *ctx, amark_slice_t text);
+AMARK_API amark_error_t amark_markdown_context_write_url(amark_markdown_context_t *ctx, amark_slice_t url);
+AMARK_API amark_error_t amark_markdown_context_ensure_newline(amark_markdown_context_t *ctx);
+AMARK_API void amark_markdown_context_skip_children(amark_markdown_context_t *ctx);
+AMARK_API amark_error_t amark_markdown_context_render_default(amark_markdown_context_t *ctx);
+AMARK_API const amark_markdown_options_t *amark_markdown_context_get_options(const amark_markdown_context_t *ctx);
 
 /* Markdown 固有の操作 */
-AMARK_API amark_error_t amark_markdown_context_write_title(amark_markdown_context_t *context, amark_slice_t title);
-AMARK_API amark_error_t amark_markdown_context_ensure_blank_line(amark_markdown_context_t *context);
-AMARK_API amark_error_t amark_markdown_context_push_prefix(amark_markdown_context_t *context, amark_slice_t prefix);
-AMARK_API amark_error_t amark_markdown_context_pop_prefix(amark_markdown_context_t *context);
+AMARK_API amark_error_t amark_markdown_context_write_title(amark_markdown_context_t *ctx, amark_slice_t title);
+AMARK_API amark_error_t amark_markdown_context_ensure_blank_line(amark_markdown_context_t *ctx);
+AMARK_API amark_error_t amark_markdown_context_push_prefix(amark_markdown_context_t *ctx, amark_slice_t prefix);
+AMARK_API amark_error_t amark_markdown_context_pop_prefix(amark_markdown_context_t *ctx);
 ```
 - ヘッダ冒頭のコメントに記す利用者の義務と注意（11.10）: フックとフックから呼ぶ処理は描画中の木を変更してはならない。`amark_markdown_context_t *` はフックの呼び出し中だけ有効。描画中に同じレンダラへ `set_hook` / `destroy` を行ってはならない。フックの種別ハンドルの出所（node-tree のレジストリ、または parser-core の拡張。方言に追加済みならその拡張を所有する方言）はレンダラより長く生きなければならない。登録が終わったレンダラは異なる出力先へ複数スレッドから同時に描画してよい（13.3）。フックが書いた内容と、フックを持つ種別に隣接する強調の区切りは、再パースの正しさ（要件 9）の保証の対象外である
 - フックの登録は種別ハンドルだけで行う（10.8）。標準は `amark_node_kind_get_standard(type)`、拡張は node-tree の `amark_node_registry_add` / `amark_node_registry_find` の結果、または parser-core の `amark_extension_find_kind` / `amark_extension_get_kind_at` / `amark_dialect_find_kind` の結果（後者は拡張パッケージの側が呼ぶ。本仕様のコードは parser-core のヘッダを include しない。html-renderer の Cross-Spec Contract と同じ結び付け方）
@@ -343,7 +343,7 @@ AMARK_API amark_error_t amark_markdown_context_pop_prefix(amark_markdown_context
 
 struct amark_markdown_renderer
 {
-    amark_markdown_options_t options;
+    amark_markdown_options_t opts;
     amark_node_walk_table_t hooks;
 };
 
@@ -617,7 +617,7 @@ struct amark_markdown_context
 - `skip_children(ctx)`: `amark_node_walk_skip_children`。ENTER で葉でないときだけ効果。`NULL` は何もしない（11.3）
 - `render_default(ctx)`: `amark_md_standard_render`。現在の (ノード, イベント) の組み込み出力（拡張種別は区切りだけ）（11.4）
 - `get_options(ctx)`: 描画に使っている設定。`NULL` は `NULL`
-- `context == NULL` は `AMARK_ERROR_INVALID_ARGUMENT`（`void` / ポインタを返すものを除く）。書き込みの失敗は戻り値で返し、フックがそれを返せば描画が中止され巻き戻される
+- `ctx == NULL` は `AMARK_ERROR_INVALID_ARGUMENT`（`void` / ポインタを返すものを除く）。書き込みの失敗は戻り値で返し、フックがそれを返せば描画が中止され巻き戻される
 
 ### 入口
 
@@ -630,18 +630,18 @@ struct amark_markdown_context
 
 **Contracts**: Service [x] / State [x]
 
-- `amark_markdown_options_init(options)`: 7.1 の既定値（`wrap_width = 0`、`'-'`、`'.'`、`'*'`、`'*'`、`` '`' ``、`'-'`、ATX、BACKSLASH、`use_autolinks = true`）。`NULL` は何もしない
+- `amark_markdown_options_init(opts)`: 7.1 の既定値（`wrap_width = 0`、`'-'`、`'.'`、`'*'`、`'*'`、`` '`' ``、`'-'`、ATX、BACKSLASH、`use_autolinks = true`）。`NULL` は何もしない
 - 設定の検証（7.3）: 各 `char` が定義された値のいずれか、列挙が定義済みの値なら有効。`wrap_width` は任意の値
-- `amark_markdown_renderer_create(options, renderer)`: `renderer == NULL`、非 `NULL` の `options` が無効なら `AMARK_ERROR_INVALID_ARGUMENT`。`options == NULL` は既定値。1 回の `amark_malloc`（失敗で `AMARK_ERROR_NO_MEMORY`、`*renderer` は変更しない、12.4）、設定の複製、フック表の初期化（7.4、10.9）
+- `amark_markdown_renderer_create(opts, renderer)`: `renderer == NULL`、非 `NULL` の `opts` が無効なら `AMARK_ERROR_INVALID_ARGUMENT`。`opts == NULL` は既定値。1 回の `amark_malloc`（失敗で `AMARK_ERROR_NO_MEMORY`、`*renderer` は変更しない、12.4）、設定の複製、フック表の初期化（7.4、10.9）
 - `amark_markdown_renderer_destroy`: フック表を deinit して解放。`NULL` は何もしない（12.5）
 - `amark_markdown_renderer_set_hook(renderer, kind, render, user_data)`: `renderer` / `kind` の `NULL` は `AMARK_ERROR_INVALID_ARGUMENT`（10.7）。`amark_node_walk_table_set` の結果を返す（置き換え・解除・追加の規則は html-renderer と同じ、10.1〜10.6）
 - `amark_markdown_renderer_render(renderer, root, out)`（1.5: いずれかの `NULL` は `AMARK_ERROR_INVALID_ARGUMENT`）:
   1. コンテキストをスタック上に用意し、Writer を初期化（`start = output->len`）。起点のフレームの外側に、強調のスコープとなる番兵のフレームを 1 つ置く
-  2. `amark_node_walk_run(&walk, root, &renderer->hooks, visit, &context)`
+  2. `amark_node_walk_run(&walk, root, &renderer->hooks, visit, &ctx)`
   3. 成功なら `flush_end`
   4. 作業領域（フレーム、プレフィックス、`scratch`）を解放する（12.6）
   5. 2・3 が失敗なら `amark_buffer_truncate(out, start)` してその結果を返す（12.3）
-- `amark_markdown_render(root, options, out)`: 引数と設定の検証は同上。空のフック表を持つスタック上の一時レンダラで同じ手順（1.1）
+- `amark_markdown_render(root, opts, out)`: 引数と設定の検証は同上。空のフック表を持つスタック上の一時レンダラで同じ手順（1.1）
 - 訪問関数 `visit(ctx, walk, hook)`（`static`）: 「1 イベントの処理」の図どおり。フレームの積み増しの確保失敗は `AMARK_ERROR_NO_MEMORY`。フックがあれば `((amark_markdown_render_fn_t)hook->fn)(ctx, walk->node, walk->event, hook->user_data)`、なければ `amark_md_standard_render(ctx)`。フックのない拡張種別は、ブロックなら区切りだけを行い、インラインなら何もしない（11.8）。エラーは直ちに返す（11.9）
 - 決定性（1.6）: 出力は木・設定・フックだけで決まる
 

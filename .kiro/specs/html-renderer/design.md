@@ -253,9 +253,9 @@ sequenceDiagram
 
 typedef enum amark_html_softbreak
 {
-    AMARK_HTML_SOFTBREAK_NEWLINE = 0,   /* 既定: "\n" */
-    AMARK_HTML_SOFTBREAK_SPACE = 1,     /* " " */
-    AMARK_HTML_SOFTBREAK_HARDBREAK = 2  /* "<br />\n" */
+    AMARK_HTML_SOFTBREAK_NEWLINE,  /* 既定: "\n" */
+    AMARK_HTML_SOFTBREAK_SPACE,    /* " " */
+    AMARK_HTML_SOFTBREAK_HARDBREAK /* "<br />\n" */
 } amark_html_softbreak_t;
 
 typedef struct amark_html_options
@@ -268,12 +268,12 @@ typedef struct amark_html_options
 typedef struct amark_html_renderer amark_html_renderer_t; /* opaque: 設定とフック表 */
 typedef struct amark_html_context amark_html_context_t;   /* opaque: 1 回の描画中だけ有効 */
 
-typedef amark_error_t (*amark_html_render_fn_t)(amark_html_context_t *context, const amark_node_t *node,
+typedef amark_error_t (*amark_html_render_fn_t)(amark_html_context_t *ctx, const amark_node_t *node,
                                                 amark_node_iter_event_t event, void *user_data);
 
-AMARK_API void amark_html_options_init(amark_html_options_t *options);
+AMARK_API void amark_html_options_init(amark_html_options_t *opts);
 
-AMARK_API amark_error_t amark_html_renderer_create(const amark_html_options_t *options,
+AMARK_API amark_error_t amark_html_renderer_create(const amark_html_options_t *opts,
                                                    amark_html_renderer_t **renderer);
 AMARK_API void amark_html_renderer_destroy(amark_html_renderer_t *renderer);
 AMARK_API amark_error_t amark_html_renderer_set_hook(amark_html_renderer_t *renderer, const amark_node_kind_t *kind,
@@ -281,16 +281,16 @@ AMARK_API amark_error_t amark_html_renderer_set_hook(amark_html_renderer_t *rend
 AMARK_API amark_error_t amark_html_renderer_render(const amark_html_renderer_t *renderer, const amark_node_t *root,
                                                    amark_buffer_t *out);
 
-AMARK_API amark_error_t amark_html_render(const amark_node_t *root, const amark_html_options_t *options,
+AMARK_API amark_error_t amark_html_render(const amark_node_t *root, const amark_html_options_t *opts,
                                           amark_buffer_t *out);
 
-AMARK_API amark_error_t amark_html_context_write(amark_html_context_t *context, amark_slice_t raw);
-AMARK_API amark_error_t amark_html_context_write_escaped(amark_html_context_t *context, amark_slice_t text);
-AMARK_API amark_error_t amark_html_context_write_url(amark_html_context_t *context, amark_slice_t url);
-AMARK_API amark_error_t amark_html_context_ensure_newline(amark_html_context_t *context);
-AMARK_API void amark_html_context_skip_children(amark_html_context_t *context);
-AMARK_API amark_error_t amark_html_context_render_default(amark_html_context_t *context);
-AMARK_API const amark_html_options_t *amark_html_context_get_options(const amark_html_context_t *context);
+AMARK_API amark_error_t amark_html_context_write(amark_html_context_t *ctx, amark_slice_t raw);
+AMARK_API amark_error_t amark_html_context_write_escaped(amark_html_context_t *ctx, amark_slice_t text);
+AMARK_API amark_error_t amark_html_context_write_url(amark_html_context_t *ctx, amark_slice_t url);
+AMARK_API amark_error_t amark_html_context_ensure_newline(amark_html_context_t *ctx);
+AMARK_API void amark_html_context_skip_children(amark_html_context_t *ctx);
+AMARK_API amark_error_t amark_html_context_render_default(amark_html_context_t *ctx);
+AMARK_API const amark_html_options_t *amark_html_context_get_options(const amark_html_context_t *ctx);
 
 AMARK_API amark_error_t amark_html_escape(amark_buffer_t *out, amark_slice_t text);
 AMARK_API amark_error_t amark_html_escape_url(amark_buffer_t *out, amark_slice_t url);
@@ -367,22 +367,22 @@ URL 符号化（6.2、6.3）:
 
 struct amark_html_renderer
 {
-    amark_html_options_t options;
+    amark_html_options_t opts;
     amark_node_walk_table_t hooks;
 };
 
 struct amark_html_context
 {
-    const amark_html_options_t *options;
+    const amark_html_options_t *opts;
     amark_buffer_t *out;
     size_t start;            /* 描画開始時の output->len（行頭保証と巻き戻しの基準） */
     amark_node_walk_t *walk; /* 現在のノード・イベント・子の省略 */
 };
 
-bool amark_html_options_valid(const amark_html_options_t *options);                    /* html_renderer.c */
-amark_error_t amark_html_standard_render(amark_html_context_t *context);               /* html_standard.c: 現在の (node, event) の組み込み出力 */
-amark_error_t amark_html_standard_newline(amark_html_context_t *context);              /* html_standard.c: 行頭保証（cr）の本体 */
-amark_error_t amark_html_standard_write_url(amark_html_context_t *context, amark_slice_t url); /* html_standard.c: 安全性の設定を適用した URL 出力 */
+bool amark_html_options_valid(const amark_html_options_t *opts);                    /* html_renderer.c */
+amark_error_t amark_html_standard_render(amark_html_context_t *ctx);               /* html_standard.c: 現在の (node, event) の組み込み出力 */
+amark_error_t amark_html_standard_newline(amark_html_context_t *ctx);              /* html_standard.c: 行頭保証（cr）の本体 */
+amark_error_t amark_html_standard_write_url(amark_html_context_t *ctx, amark_slice_t url); /* html_standard.c: 安全性の設定を適用した URL 出力 */
 ```
 - 依存の向き: `html_standard.c` は `html_context.c` に依存しない。`html_context.c` は `html_standard.c` の内部関数を呼ぶ。`html_renderer.c` は両方を呼ぶ（実装順: html_escape → html_standard → html_context → html_renderer。node-tree の node_walk は実装済みの前提）。`amark_html_options_valid` は `html_renderer.c` だけが使う
 - `amark_html_options_valid`: `softbreak` が定義済みの 3 値のいずれかなら真（8.4）
@@ -395,7 +395,7 @@ amark_error_t amark_html_standard_write_url(amark_html_context_t *context, amark
 | Requirements | 1.2, 1.7, 2.1–2.12, 3.1–3.4, 4.1–4.8, 5.1–5.5, 7.1–7.4, 8.1–8.3, 9.1–9.3, 13.2 |
 
 **Responsibilities & Constraints**
-- `amark_html_standard_render(context)` は `context->walk` の現在の (ノード, イベント) について下表の出力を行う。拡張種別（`AMARK_NODE_EXTENSION`）には何も出さず `AMARK_OK`（11.6 の透過）
+- `amark_html_standard_render(ctx)` は `context->walk` の現在の (ノード, イベント) について下表の出力を行う。拡張種別（`AMARK_NODE_EXTENSION`）には何も出さず `AMARK_OK`（11.6 の透過）
 - 「cr」は行頭保証: `output->len > start` かつ `output->data[output->len - 1] != '\n'` のときだけ `\n` を追記する（1.7、2.11）。出力先に既にあった内容は見ない
 - 値は node-tree のアクセサで読む（見出しレベル、リスト種別・開始番号・tight、literal、info、url、title）。部分木を起点にしても親リンクから tight を判定するため、木の中と同じ出力になる（1.2、3.4）
 
@@ -445,13 +445,13 @@ amark_error_t amark_html_standard_write_url(amark_html_context_t *context, amark
 
 **Contracts**: Service [x]
 
-- `amark_html_context_write(context, raw)`: `raw` をそのまま追記（`context == NULL`、`raw` の不変条件違反は `AMARK_ERROR_INVALID_ARGUMENT`）
-- `amark_html_context_write_escaped(context, text)`: `amark_html_escape(context->out, text)`
-- `amark_html_context_write_url(context, url)`: `amark_html_standard_write_url`（組み込みの `url(x)` と同じ。安全性の設定を適用）
-- `amark_html_context_ensure_newline(context)`: `amark_html_standard_newline`（組み込みの cr と同じ、1.7）
-- `amark_html_context_skip_children(context)`: `amark_node_walk_skip_children(context->walk)`。現在のイベントが ENTER で葉でないときだけ効果を持つ。`NULL` は何もしない（11.3）
-- `amark_html_context_render_default(context)`: `amark_html_standard_render(context)`。現在の (ノード, イベント) の組み込み出力（拡張種別は何もしない）。同じフック内で複数回呼べば複数回出力する（11.4）
-- `amark_html_context_get_options(context)`: 描画に使っている設定。`NULL` は `NULL`（11.5）
+- `amark_html_context_write(ctx, raw)`: `raw` をそのまま追記（`ctx == NULL`、`raw` の不変条件違反は `AMARK_ERROR_INVALID_ARGUMENT`）
+- `amark_html_context_write_escaped(ctx, text)`: `amark_html_escape(context->out, text)`
+- `amark_html_context_write_url(ctx, url)`: `amark_html_standard_write_url`（組み込みの `url(x)` と同じ。安全性の設定を適用）
+- `amark_html_context_ensure_newline(ctx)`: `amark_html_standard_newline`（組み込みの cr と同じ、1.7）
+- `amark_html_context_skip_children(ctx)`: `amark_node_walk_skip_children(context->walk)`。現在のイベントが ENTER で葉でないときだけ効果を持つ。`NULL` は何もしない（11.3）
+- `amark_html_context_render_default(ctx)`: `amark_html_standard_render(ctx)`。現在の (ノード, イベント) の組み込み出力（拡張種別は何もしない）。同じフック内で複数回呼べば複数回出力する（11.4）
+- `amark_html_context_get_options(ctx)`: 描画に使っている設定。`NULL` は `NULL`（11.5）
 - 書き込みの失敗は戻り値で返す。フックがそれを返せば描画が中止され、出力先が巻き戻される
 
 #### HtmlRenderer
@@ -463,16 +463,16 @@ amark_error_t amark_html_standard_write_url(amark_html_context_t *context, amark
 
 **Contracts**: Service [x] / State [x]
 
-- `amark_html_options_init(options)`: `{allow_raw_html = false, allow_dangerous_urls = false, softbreak = NEWLINE}`。`NULL` は何もしない（7.1、7.3、7.6、8.1）
-- `amark_html_renderer_create(options, renderer)`: `renderer == NULL` は `AMARK_ERROR_INVALID_ARGUMENT`。`options` が `NULL` なら既定値、非 `NULL` で `!amark_html_options_valid` なら `AMARK_ERROR_INVALID_ARGUMENT`（8.4）。1 回の `amark_malloc` で確保し（失敗で `AMARK_ERROR_NO_MEMORY`、`*renderer` は変更しない、12.4）、設定を複製し、フック表を初期化して `*renderer` に書く（10.9）
+- `amark_html_options_init(opts)`: `{allow_raw_html = false, allow_dangerous_urls = false, softbreak = NEWLINE}`。`NULL` は何もしない（7.1、7.3、7.6、8.1）
+- `amark_html_renderer_create(opts, renderer)`: `renderer == NULL` は `AMARK_ERROR_INVALID_ARGUMENT`。`opts` が `NULL` なら既定値、非 `NULL` で `!amark_html_options_valid` なら `AMARK_ERROR_INVALID_ARGUMENT`（8.4）。1 回の `amark_malloc` で確保し（失敗で `AMARK_ERROR_NO_MEMORY`、`*renderer` は変更しない、12.4）、設定を複製し、フック表を初期化して `*renderer` に書く（10.9）
 - `amark_html_renderer_destroy(renderer)`: フック表を deinit して解放する。`NULL` は何もしない（12.5）
 - `amark_html_renderer_set_hook(renderer, kind, render, user_data)`: `renderer` または `kind` が `NULL` なら `AMARK_ERROR_INVALID_ARGUMENT`。`amark_node_walk_table_set(&renderer->hooks, kind, (amark_node_walk_hook_fn_t)render, user_data)` の結果を返す。`render == NULL` は解除（10.1、10.2、10.4〜10.7）
 - `amark_html_renderer_render(renderer, root, out)`: `renderer`、`root`、`out` のいずれかが `NULL` なら `AMARK_ERROR_INVALID_ARGUMENT`（1.5）。描画の手順:
-  1. `start = output->len`、`amark_node_walk_t walk`、コンテキスト `{&renderer->options, out, start, &walk}` をスタック上に用意する（確保なし、12.6）
-  2. `amark_node_walk_run(&walk, root, &renderer->hooks, visit, &context)`
+  1. `start = output->len`、`amark_node_walk_t walk`、コンテキスト `{&renderer->opts, out, start, &walk}` をスタック上に用意する（確保なし、12.6）
+  2. `amark_node_walk_run(&walk, root, &renderer->hooks, visit, &ctx)`
   3. 結果が非 `AMARK_OK` なら `amark_buffer_truncate(out, start)` してその結果を返す（12.3）
-- `amark_html_render(root, options, out)`: `root`、`out` の `NULL` と設定の検証は同上。空のフック表を持つ一時的なレンダラ相当（スタック上、確保なし）で `amark_html_renderer_render` と同じ手順を行う（1.1）
-- 訪問関数 `visit(context, walk, hook)`（`static`）: `hook` があれば `((amark_html_render_fn_t)hook->fn)(context, walk->node, walk->event, hook->user_data)`、なければ `amark_html_standard_render(context)` を呼び、結果を返す（10.1、10.2、10.6、11.6、11.7）
+- `amark_html_render(root, opts, out)`: `root`、`out` の `NULL` と設定の検証は同上。空のフック表を持つ一時的なレンダラ相当（スタック上、確保なし）で `amark_html_renderer_render` と同じ手順を行う（1.1）
+- 訪問関数 `visit(ctx, walk, hook)`（`static`）: `hook` があれば `((amark_html_render_fn_t)hook->fn)(ctx, walk->node, walk->event, hook->user_data)`、なければ `amark_html_standard_render(ctx)` を呼び、結果を返す（10.1、10.2、10.6、11.6、11.7）
 - 決定性（1.6）: 出力は木・設定・フックだけで決まり、時刻・アドレス・グローバル状態に依存しない
 
 ##### State Management
@@ -604,8 +604,8 @@ graph TB
 ### markdown-renderer が揃えるもの
 markdown-renderer は次を同じ形で提供する。フック表と走査駆動部は本仕様と同じく node-tree の `src/tree/node_walk.h`（NodeWalk）を使い（複製しない）、本仕様の非公開ファイルには依存しない。
 - 型: `amark_markdown_options_t`（`_init` で既定値）、opaque な `amark_markdown_renderer_t`、opaque な `amark_markdown_context_t`
-- フック型: `typedef amark_error_t (*amark_markdown_render_fn_t)(amark_markdown_context_t *context, const amark_node_t *node, amark_node_iter_event_t event, void *user_data);`
-- 関数: `amark_markdown_renderer_create(const amark_markdown_options_t *options, amark_markdown_renderer_t **renderer)`、`amark_markdown_renderer_destroy`、`amark_markdown_renderer_set_hook(renderer, kind, render, user_data)`、`amark_markdown_renderer_render(renderer, root, out)`、単発の `amark_markdown_render(root, options, out)`
+- フック型: `typedef amark_error_t (*amark_markdown_render_fn_t)(amark_markdown_context_t *ctx, const amark_node_t *node, amark_node_iter_event_t event, void *user_data);`
+- 関数: `amark_markdown_renderer_create(const amark_markdown_options_t *opts, amark_markdown_renderer_t **renderer)`、`amark_markdown_renderer_destroy`、`amark_markdown_renderer_set_hook(renderer, kind, render, user_data)`、`amark_markdown_renderer_render(renderer, root, out)`、単発の `amark_markdown_render(root, opts, out)`
 - コンテキスト操作（意味を同じにする）: `_write`、`_ensure_newline`、`_skip_children`、`_render_default`、`_get_options`。Markdown 固有の操作（行頭プレフィックス、文脈依存のエスケープ）はこれらに加えて定義してよい
 - 規則: 種別ハンドルをキーにする（標準種別は `amark_node_kind_get_standard`）、同じ種別の再登録は置き換え、`render == NULL` は解除、ENTER / EXIT の 2 回（葉は ENTER のみ）、子の省略は ENTER でだけ有効、`render_default` は現在の (ノード, イベント) に限る、未登録の拡張種別は自身を出さず子を出す、フックのエラーで中止し出力先を呼び出し前の長さに戻す、`const` の木を変更しない、新しいエラーコードを作らない
 - NodeWalk に Markdown 固有の処理は入れない。Markdown の行の書き出し（プレフィックス、折り返し）は markdown-renderer に置く。NodeWalk の変更が必要になった場合は node-tree の改訂として扱い、node-tree の Revalidation Trigger により本仕様と markdown-renderer を再検証する

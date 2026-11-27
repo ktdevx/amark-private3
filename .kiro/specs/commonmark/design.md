@@ -354,8 +354,8 @@ typedef enum amark_commonmark_construct
     AMARK_COMMONMARK_BACKSLASH_ESCAPE = 0x00200,
     AMARK_COMMONMARK_ENTITY = 0x00400,           /* 名前付き・数値文字参照 */
     AMARK_COMMONMARK_CODE_SPAN = 0x00800,
-    AMARK_COMMONMARK_EMPHASIS = 0x01000,         /* 強調と強い強調 */
-    AMARK_COMMONMARK_LINK = 0x02000,             /* リンクと画像 */
+    AMARK_COMMONMARK_EMPHASIS = 0x01000, /* 強調と強い強調 */
+    AMARK_COMMONMARK_LINK = 0x02000,     /* リンクと画像 */
     AMARK_COMMONMARK_AUTOLINK = 0x04000,
     AMARK_COMMONMARK_HTML_INLINE = 0x08000,
     AMARK_COMMONMARK_LINE_BREAK = 0x10000        /* ハード改行とソフト改行 */
@@ -369,7 +369,7 @@ AMARK_API amark_error_t amark_commonmark_extension_create(amark_commonmark_const
 AMARK_API amark_slice_t amark_commonmark_get_extension_name(amark_commonmark_construct_t construct);
 AMARK_API amark_error_t amark_commonmark_add_extensions(amark_dialect_t *dialect, uint32_t constructs);
 AMARK_API amark_error_t amark_commonmark_dialect_create(uint32_t constructs, amark_dialect_t **dialect);
-AMARK_API amark_error_t amark_commonmark_parse(const char *data, size_t len, const amark_parser_options_t *options,
+AMARK_API amark_error_t amark_commonmark_parse(const char *data, size_t len, const amark_parser_options_t *opts,
                                                amark_node_t **document);
 ```
 - `amark/commonmark.h` は `amark/html.h` を include せず、html-renderer の型を使わない。HTML への簡易変換は `amark/commonmark_html.h`（下記）に分ける
@@ -392,8 +392,8 @@ AMARK_API amark_error_t amark_commonmark_parse(const char *data, size_t len, con
 #include <amark/html.h>
 
 AMARK_API amark_error_t amark_commonmark_convert_to_html(const char *data, size_t len,
-                                                         const amark_parser_options_t *parse_options,
-                                                         const amark_html_options_t *html_options,
+                                                         const amark_parser_options_t *parse_opts,
+                                                         const amark_html_options_t *html_opts,
                                                          amark_buffer_t *out);
 ```
 - ヘッダ冒頭のコメント: HTML の既定値は生 HTML と危険な URL を出力しないこと、繰り返し変換する場合は方言を再利用し `amark_parser_parse` と `amark_html_render` を使うべきこと
@@ -731,7 +731,7 @@ amark_slice_t amark_commonmark_rest_of_line(const amark_block_context_t *ctx);
 - `amark_commonmark_get_extension_name(construct)`: 定義済みの 1 ビットなら拡張名（静的、NUL 終端）、それ以外 `{NULL, 0}`（1.6）
 - `amark_commonmark_add_extensions(dialect, constructs)`（1.2、2.4、2.5）: `dialect == NULL`、`constructs == 0`、`constructs & ~AMARK_COMMONMARK_ALL`: `AMARK_ERROR_INVALID_ARGUMENT`。凍結済みなら `AMARK_ERROR_INVALID_STATE`（`amark_dialect_is_frozen` で先に確かめる）。表の順に、指定されたビットの拡張を生成して `amark_dialect_add_extension`。失敗したら、その拡張を破棄し、この呼び出しで追加した拡張を逆順に `amark_dialect_remove_extension` で取り外して、そのエラー（`ALREADY_EXISTS`、`NO_MEMORY` など）を返す。取り外しは凍結されていない方言では失敗しない
 - `amark_commonmark_dialect_create(constructs, dialect)`（2.1、2.2、2.6）: `dialect == NULL` と `constructs` の検査は同上。`amark_dialect_create` → `amark_commonmark_add_extensions` → 成功なら凍結せずに `*dialect` に書く。失敗なら方言を破棄して `*dialect` を変更しない
-- `amark_commonmark_parse(data, len, options, document)`（3.1、3.3〜3.6）: `document == NULL`、`len > 0 && data == NULL`: `AMARK_ERROR_INVALID_ARGUMENT`。`amark_commonmark_dialect_create(AMARK_COMMONMARK_ALL)` → `amark_parser_parse(dialect, data, len, options, &doc)` → 方言を破棄 → 成功なら `*document = doc`。`options == NULL` は parser-core の既定値。同じ入力の通常のパースと同一の木（3.6）
+- `amark_commonmark_parse(data, len, opts, document)`（3.1、3.3〜3.6）: `document == NULL`、`len > 0 && data == NULL`: `AMARK_ERROR_INVALID_ARGUMENT`。`amark_commonmark_dialect_create(AMARK_COMMONMARK_ALL)` → `amark_parser_parse(dialect, data, len, opts, &doc)` → 方言を破棄 → 成功なら `*document = doc`。`opts == NULL` は parser-core の既定値。同じ入力の通常のパースと同一の木（3.6）
 - 並行利用（12.1〜12.3）: 可変のグローバル状態を持たない。簡易 API は呼び出しごとに方言を作るため共有状態がない。プリセットを凍結した方言は parser-core の規則どおり複数のパーサから同時に使える（構文のコールバックは解析状態と文脈だけを書き換える）
 
 **Implementation Notes**
@@ -746,9 +746,9 @@ amark_slice_t amark_commonmark_rest_of_line(const amark_block_context_t *ctx);
 | Requirements | 3.2, 3.3, 3.4, 3.5 |
 
 **Contracts**: Service [x]
-- `amark_commonmark_convert_to_html(data, len, parse_options, html_options, out)`: `out == NULL`、`len > 0 && data == NULL`: `AMARK_ERROR_INVALID_ARGUMENT`。宣言は `amark/commonmark_html.h`。手順は 方言の生成（`AMARK_COMMONMARK_ALL`）→ `amark_parser_parse(dialect, data, len, parse_options, &doc)` → `amark_html_render(doc, html_options, out)` → 文書の破棄 → 方言の破棄。`html_options` の検証は `amark_html_render` に委ね、不正なら `AMARK_ERROR_INVALID_ARGUMENT` が返る（出力先は変わらない）
+- `amark_commonmark_convert_to_html(data, len, parse_opts, html_opts, out)`: `out == NULL`、`len > 0 && data == NULL`: `AMARK_ERROR_INVALID_ARGUMENT`。宣言は `amark/commonmark_html.h`。手順は 方言の生成（`AMARK_COMMONMARK_ALL`）→ `amark_parser_parse(dialect, data, len, parse_opts, &doc)` → `amark_html_render(doc, html_opts, out)` → 文書の破棄 → 方言の破棄。`html_opts` の検証は `amark_html_render` に委ね、不正なら `AMARK_ERROR_INVALID_ARGUMENT` が返る（出力先は変わらない）
 - 出力先は html-renderer が失敗時に呼び出し前の長さへ戻す。解析の失敗では出力先に何も書かない（3.5）
-- `html_options == NULL` は html-renderer の既定値（生 HTML と危険な URL を出力しない、3.3）
+- `html_opts == NULL` は html-renderer の既定値（生 HTML と危険な URL を出力しない、3.3）
 - 本体のソースで `amark/html.h`（`amark/commonmark_html.h` 経由を含む）を include するのはこのファイルだけ
 
 ### ツールとデータの出典
@@ -898,7 +898,7 @@ parser-core の公開 API の追加・変更は不要である。本仕様が依
 | C2 | 意味の明確化 | 「行が空行」は継続判定と開始判定を終えた位置から行末までがスペースとタブだけであること | `> - a\n>\n> - b` の loose（4.5） |
 | C3 | 意味の明確化 | インライン対象は 1 つずつ最後まで解析され、対象ごとに `get_block` のノードが異なる | 内容ごとの記憶の初期化（9.1、9.4） |
 
-- parser-core の簡易解析 API は `amark_parser_parse(dialect, data, len, options, &doc)`を使う
+- parser-core の簡易解析 API は `amark_parser_parse(dialect, data, len, opts, &doc)`を使う
 - foundation への依存: `amark_utf8_decode_previous`（foundation の要件 10.8）を CharClass が使う。新しいエラーコード: なし（foundation の `AMARK_ERROR_LIST` とエラーコード一覧表が正本）
 - markdown-renderer: UnicodeClass（`src/base/unicode_class.h`）と抽出器 `tests/support/test_spec_examples.h` の消費側。これらの変更は markdown-renderer の再検証を伴う
 - 適合テストで不一致がレンダラ側の規則に起因すると判明した場合は、html-renderer の組み込み出力の表の修正として html-renderer の spec に戻す（brief の約束）

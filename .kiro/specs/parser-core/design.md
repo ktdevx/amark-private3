@@ -539,10 +539,10 @@ typedef struct amark_dialect amark_dialect_t;
 
 typedef enum amark_syntax_category
 {
-    AMARK_SYNTAX_CATEGORY_BLOCK = 1,
-    AMARK_SYNTAX_CATEGORY_INLINE = 2,
-    AMARK_SYNTAX_CATEGORY_PARAGRAPH_PROCESSOR = 3,
-    AMARK_SYNTAX_CATEGORY_POSTPROCESSOR = 4
+    AMARK_SYNTAX_CATEGORY_BLOCK,
+    AMARK_SYNTAX_CATEGORY_INLINE,
+    AMARK_SYNTAX_CATEGORY_PARAGRAPH_PROCESSOR,
+    AMARK_SYNTAX_CATEGORY_POSTPROCESSOR
 } amark_syntax_category_t;
 
 AMARK_API amark_error_t amark_dialect_create(amark_dialect_t **dialect);
@@ -563,7 +563,7 @@ AMARK_API bool amark_dialect_is_frozen(const amark_dialect_t *dialect);
 - `set_priority`（14.4）: 凍結済みなら `AMARK_ERROR_INVALID_STATE`。未定義の分類、名前が方言内に見つからなければ `AMARK_ERROR_INVALID_ARGUMENT`。上書きは拡張の取り外し後も名前に対して残る（同じ名前の構文を差し替えた場合に同じ順位を引き継ぐ）
 - `remove_extension`（14.5）: 凍結済みなら `AMARK_ERROR_INVALID_STATE`。見つからなければ `AMARK_ERROR_INVALID_ARGUMENT`。見つかれば配列から除き、`owner` を外してから破棄する
 - `find_extension` / `get_extension_at` / `get_extension_count`: 一致・範囲内の拡張、なければ `NULL` / 0（14.6）
-- `find_kind(name)`: 標準種別（`amark_node_kind_get_standard` の 1〜18 の名前）、次に追加順に各拡張の `amark_extension_find_kind`。なければ `NULL`（14.6）
+- `find_kind(name)`: 標準種別（`amark_node_kind_get_standard` で得られる 18 の標準種別の名前）、次に追加順に各拡張の `amark_extension_find_kind`。なければ `NULL`（14.6）
 - `freeze`: 呼び出し表を構築して凍結する。既に凍結済みなら何もせず `AMARK_OK`。確保失敗は `AMARK_ERROR_NO_MEMORY` で凍結しない。`amark_parser_create` は内部で `freeze` を呼ぶ（14.7）。凍結は解除できない
 - `destroy`: 拡張を追加順に破棄し（`owner` を外して `amark_extension_destroy`）、自身を解放する（14.8）
 - 寿命の義務（14.9、`dialect.h` に明記）: 方言は、それを使うすべてのパーサと、それらが返した文書のうち方言の拡張の種別のノードを含むものより後に破棄すること。返した文書はパーサと方言を参照しないため、標準種別のノードだけからなる文書は方言とパーサの破棄の後も有効である（commonmark の `amark_commonmark_parse` は、内部で作った方言とパーサを破棄してから文書を返すことにこの保証を使う）
@@ -629,25 +629,25 @@ typedef struct amark_block_syntax amark_block_syntax_t;
 
 typedef enum amark_block_content
 {
-    AMARK_BLOCK_CONTENT_NONE = 0,   /* 内容を持たない（区切り線） */
-    AMARK_BLOCK_CONTENT_BLOCKS = 1, /* 子のブロックを持つ（引用、リスト、項目） */
-    AMARK_BLOCK_CONTENT_RAW = 2,    /* 行をそのまま蓄える（コードブロック、HTML ブロック） */
-    AMARK_BLOCK_CONTENT_INLINE = 3  /* インライン内容として蓄える（見出し、段落相当） */
+    AMARK_BLOCK_CONTENT_NONE,   /* 内容を持たない（区切り線） */
+    AMARK_BLOCK_CONTENT_BLOCKS, /* 子のブロックを持つ（引用、リスト、項目） */
+    AMARK_BLOCK_CONTENT_RAW,    /* 行をそのまま蓄える（コードブロック、HTML ブロック） */
+    AMARK_BLOCK_CONTENT_INLINE  /* インライン内容として蓄える（見出し、段落相当） */
 } amark_block_content_t;
 
 typedef enum amark_block_start_result
 {
-    AMARK_BLOCK_START_NONE = 0,      /* 開かなかった。位置は戻される */
-    AMARK_BLOCK_START_CONTAINER = 1, /* コンテナを開いた。同じ行で開始判定を続ける */
-    AMARK_BLOCK_START_LEAF = 2,      /* 葉を開いた。行の残りを内容の扱いに従って渡す */
-    AMARK_BLOCK_START_LINE_DONE = 3  /* 葉を開き、行全体を処理した。内容を渡さない */
+    AMARK_BLOCK_START_NONE,      /* 開かなかった。位置は戻される */
+    AMARK_BLOCK_START_CONTAINER, /* コンテナを開いた。同じ行で開始判定を続ける */
+    AMARK_BLOCK_START_LEAF,      /* 葉を開いた。行の残りを内容の扱いに従って渡す */
+    AMARK_BLOCK_START_LINE_DONE  /* 葉を開き、行全体を処理した。内容を渡さない */
 } amark_block_start_result_t;
 
 typedef enum amark_block_continue_result
 {
-    AMARK_BLOCK_CONTINUE_NO = 0,    /* この行で継続しない */
-    AMARK_BLOCK_CONTINUE_YES = 1,   /* 継続する。読み進めた位置から内側を調べる */
-    AMARK_BLOCK_CONTINUE_CLOSE = 2  /* 行を消費し、このブロックを閉じる（フェンスの閉じ） */
+    AMARK_BLOCK_CONTINUE_NO,   /* この行で継続しない */
+    AMARK_BLOCK_CONTINUE_YES,  /* 継続する。読み進めた位置から内側を調べる */
+    AMARK_BLOCK_CONTINUE_CLOSE /* 行を消費し、このブロックを閉じる（フェンスの閉じ） */
 } amark_block_continue_result_t;
 
 #define AMARK_BLOCK_FLAG_LAZY 0x1u  /* INLINE のブロックが遅延継続行を受け付ける（7.6） */
@@ -670,13 +670,13 @@ struct amark_block_syntax
     int priority;            /* 小さいほど先に試す */
     const char *start_chars; /* NUL 終端。最初の空白でない文字の候補。NULL なら毎回呼ぶ */
     amark_block_content_t content;
-    unsigned flags;                             /* AMARK_BLOCK_FLAG_* */
-    amark_block_start_fn_t start;               /* NULL: 他の構文から open されるだけ */
-    amark_block_continue_fn_t continue_line;    /* NULL: 次の行で常に継続しない */
-    amark_block_finalize_fn_t finalize;         /* NULL 可 */
-    amark_block_can_contain_fn_t can_contain;   /* NULL: amark_node_kind_can_contain に従う */
-    amark_block_record_blank_fn_t record_blank; /* NULL: 空行なら記録する */
-    amark_block_state_destroy_fn_t destroy_state;/* NULL 可 */
+    unsigned flags;                               /* AMARK_BLOCK_FLAG_* */
+    amark_block_start_fn_t start;                 /* NULL: 他の構文から open されるだけ */
+    amark_block_continue_fn_t continue_line;      /* NULL: 次の行で常に継続しない */
+    amark_block_finalize_fn_t finalize;           /* NULL 可 */
+    amark_block_can_contain_fn_t can_contain;     /* NULL: amark_node_kind_can_contain に従う */
+    amark_block_record_blank_fn_t record_blank;   /* NULL: 空行なら記録する */
+    amark_block_state_destroy_fn_t destroy_state; /* NULL 可 */
     void *user_data;
 };
 
@@ -794,7 +794,7 @@ typedef struct amark_paragraph_processor
 
 **Contracts**: Service [x] / State [x]
 
-- 内部 API: `amark_block_engine_init(engine, dialect, options, document)`、`_process_line(engine, line)`、`_finish(engine)`（開いているブロックを内側から閉じる、6.7）、`_deinit(engine)`（未完了のブロックの状態の後片付け）
+- 内部 API: `amark_block_engine_init(engine, dialect, opts, document)`、`_process_line(engine, line)`、`_finish(engine)`（開いているブロックを内側から閉じる、6.7）、`_deinit(engine)`（未完了のブロックの状態の後片付け）
 - 1 行の処理は「1 行の処理」の図の順序に従う（5.1〜5.3、6.1、6.2、6.4、7.1）。具体的な規則:
   - 開いているブロックは配列のスタックに持ち、継続判定はスタックの下から上へ反復する（再帰なし、15.4）
   - `CONTINUE_YES` で構文が位置を進めなかった場合もそのまま内側へ進む。`CONTINUE_NO` でエンジンは継続判定の前の位置に戻す
@@ -985,26 +985,26 @@ typedef struct amark_parser_options
     size_t max_bracket_depth; /* ブラケットスタックの深さの上限。1 以上 */
 } amark_parser_options_t;
 
-AMARK_API void amark_parser_options_init(amark_parser_options_t *options);
-AMARK_API amark_error_t amark_parser_create(amark_dialect_t *dialect, const amark_parser_options_t *options,
+AMARK_API void amark_parser_options_init(amark_parser_options_t *opts);
+AMARK_API amark_error_t amark_parser_create(amark_dialect_t *dialect, const amark_parser_options_t *opts,
                                             amark_parser_t **parser);
 AMARK_API void amark_parser_destroy(amark_parser_t *parser);
 AMARK_API amark_error_t amark_parser_reset(amark_parser_t *parser);
 AMARK_API amark_error_t amark_parser_feed(amark_parser_t *parser, const char *data, size_t len);
 AMARK_API amark_error_t amark_parser_finish(amark_parser_t *parser, amark_node_t **document);
 AMARK_API amark_error_t amark_parser_parse(amark_dialect_t *dialect, const char *data, size_t len,
-                                           const amark_parser_options_t *options, amark_node_t **document);
+                                           const amark_parser_options_t *opts, amark_node_t **document);
 ```
 - `options_init`: 両方を既定値 1000 にする。`NULL` は何もしない（1.4）
-- `create`（1.1〜1.3）: `dialect`・`parser` が `NULL`、`options` のいずれかの項目が 0: `AMARK_ERROR_INVALID_ARGUMENT`。`options == NULL` なら既定値（1.2）。`amark_dialect_freeze` を呼び（失敗はそのまま返す）、パーサを確保し、解析の開始（下の「解析の開始」）を行って `Ready` で返す。途中の失敗はすべて戻して `*parser` を変更しない
+- `create`（1.1〜1.3）: `dialect`・`parser` が `NULL`、`opts` のいずれかの項目が 0: `AMARK_ERROR_INVALID_ARGUMENT`。`opts == NULL` なら既定値（1.2）。`amark_dialect_freeze` を呼び（失敗はそのまま返す）、パーサを確保し、解析の開始（下の「解析の開始」）を行って `Ready` で返す。途中の失敗はすべて戻して `*parser` を変更しない
 - 解析の開始: 空の文書ノードを作り、定義テーブルを初期化し、方言の拡張の追加順に `state_create(&state, user_data)` を呼ぶ（8.3）。失敗時は作成済みの状態を逆順に `state_destroy` する
 - 解析の後片付け（完了・失敗・リセット・破棄で共通、8.3、8.6）: 開いているブロックの状態の `destroy_state`、ブロック記録とインライン対象、定義テーブルの値の `destroy`、拡張の状態の `state_destroy`（追加順の逆）を 1 回ずつ行う。未完成の文書は破棄する
 - `feed(parser, data, len)`（2.1、2.5〜2.7）: `parser` が `NULL`、`len > 0 && data == NULL`: `AMARK_ERROR_INVALID_ARGUMENT`。`Ready` でなければ `AMARK_ERROR_INVALID_STATE`。`len == 0` は何もせず `AMARK_OK`。入力を InputReader に渡し、完成した行をすべて BlockEngine で処理する。失敗したら後片付けをして `Failed` にし、そのエラーを返す（16.3）
 - `finish(parser, &document)`（2.3、2.8）: `Ready` でなければ `AMARK_ERROR_INVALID_STATE`（2.7）。残りの行の処理 → BlockEngine の終了 → インライン段階（InlineEngine）→ `amark_node_normalize(document)` → 後処理を凍結時の順に `process(document, definitions, 拡張の状態, user_data)`（12.1。エラーなら以降を呼ばず失敗、12.2）→ 解析の後片付け（文書は破棄しない）→ `*document` に書いて `Finished`。失敗時は後片付けして `Failed`、`*document` は変更しない（16.3）
 - `reset`（1.7）: どの状態からでも後片付けをして解析の開始を行い `Ready` にする。解析の開始の失敗時は `Failed` のまま失敗を返す
 - `destroy`（1.5、1.6）: `NULL` は何もしない。後片付けをして解放する。既に返した文書には触れない
-- `amark_parser_parse(dialect, data, len, options, document)`（2.4）: 引数の順序は「対象（方言）、入力（`data`, `len`）、オプション、出力」で、`feed` の `data, len` の並びに揃える。`create`・`feed`・`finish`・`destroy` を順に行う。途中の失敗では生成したものをすべて解放してそのエラーを返す。返した文書は（標準種別のノードだけなら）方言の破棄の後も有効（14.9）
-- 引数の並びの規約: 入力を受け取る関数は常に `data, len` の順で、対象のオブジェクトの直後に置く（`feed(parser, data, len)`、`parser_parse(dialect, data, len, ...)`）。入力を受け取らない `create(dialect, options, &parser)` は「対象、オプション、出力」
+- `amark_parser_parse(dialect, data, len, opts, document)`（2.4）: 引数の順序は「対象（方言）、入力（`data`, `len`）、オプション、出力」で、`feed` の `data, len` の並びに揃える。`create`・`feed`・`finish`・`destroy` を順に行う。途中の失敗では生成したものをすべて解放してそのエラーを返す。返した文書は（標準種別のノードだけなら）方言の破棄の後も有効（14.9）
+- 引数の並びの規約: 入力を受け取る関数は常に `data, len` の順で、対象のオブジェクトの直後に置く（`feed(parser, data, len)`、`parser_parse(dialect, data, len, ...)`）。入力を受け取らない `create(dialect, opts, &parser)` は「対象、オプション、出力」
 - 分割の同一性（2.2）: ブロック段階は完成した行だけを処理し、行の確定は InputReader が分割位置によらず同じに行うため、木は分割に依存しない
 
 ##### State Management

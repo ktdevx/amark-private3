@@ -360,42 +360,42 @@ amark_slice_t amark_node_string_get(const amark_node_string_t *string);         
 
 typedef enum amark_node_type
 {
-    AMARK_NODE_NONE = 0,            /* 種別なし（NULL の問い合わせ結果） */
-    AMARK_NODE_DOCUMENT = 1,
-    AMARK_NODE_BLOCK_QUOTE = 2,
-    AMARK_NODE_LIST = 3,
-    AMARK_NODE_ITEM = 4,
-    AMARK_NODE_CODE_BLOCK = 5,
-    AMARK_NODE_HTML_BLOCK = 6,
-    AMARK_NODE_PARAGRAPH = 7,
-    AMARK_NODE_HEADING = 8,
-    AMARK_NODE_THEMATIC_BREAK = 9,
-    AMARK_NODE_TEXT = 10,
-    AMARK_NODE_SOFT_BREAK = 11,
-    AMARK_NODE_LINE_BREAK = 12,
-    AMARK_NODE_CODE = 13,           /* code span */
-    AMARK_NODE_HTML_INLINE = 14,
-    AMARK_NODE_EMPHASIS = 15,
-    AMARK_NODE_STRONG = 16,
-    AMARK_NODE_LINK = 17,
-    AMARK_NODE_IMAGE = 18,
-    /* 標準種別の追加は 19〜254 に末尾追加。既存値の変更・再利用は禁止 */
-    AMARK_NODE_EXTENSION = 255      /* すべての拡張種別に共通の値 */
+    AMARK_NODE_NONE,            /* 種別なし（NULL の問い合わせ結果） */
+    AMARK_NODE_DOCUMENT,
+    AMARK_NODE_BLOCK_QUOTE,
+    AMARK_NODE_LIST,
+    AMARK_NODE_ITEM,
+    AMARK_NODE_CODE_BLOCK,
+    AMARK_NODE_HTML_BLOCK,
+    AMARK_NODE_PARAGRAPH,
+    AMARK_NODE_HEADING,
+    AMARK_NODE_THEMATIC_BREAK,
+    AMARK_NODE_TEXT,
+    AMARK_NODE_SOFT_BREAK,
+    AMARK_NODE_LINE_BREAK,
+    AMARK_NODE_CODE,           /* code span */
+    AMARK_NODE_HTML_INLINE,
+    AMARK_NODE_EMPHASIS,
+    AMARK_NODE_STRONG,
+    AMARK_NODE_LINK,
+    AMARK_NODE_IMAGE,
+    AMARK_NODE_EXTENSION        /* すべての拡張種別に共通の値 */
+    /* 値は並び順で決まる。標準種別は CommonMark の 18 種で閉じており、並べ替え・削除・挿入はしない。新しい種別は拡張として EXTENSION で表す */
 } amark_node_type_t;
 
 typedef enum amark_node_category
 {
-    AMARK_NODE_CATEGORY_NONE = 0,
-    AMARK_NODE_CATEGORY_BLOCK = 1,
-    AMARK_NODE_CATEGORY_INLINE = 2
+    AMARK_NODE_CATEGORY_NONE,
+    AMARK_NODE_CATEGORY_BLOCK,
+    AMARK_NODE_CATEGORY_INLINE
 } amark_node_category_t;
 
 typedef enum amark_node_content
 {
-    AMARK_NODE_CONTENT_NONE = 0,    /* 子を取らない（葉） */
-    AMARK_NODE_CONTENT_BLOCKS = 1,  /* 明示親限定でない任意のブロック */
-    AMARK_NODE_CONTENT_INLINES = 2, /* 明示親限定でない任意のインライン */
-    AMARK_NODE_CONTENT_CUSTOM = 3   /* 種別の判定関数で決める */
+    AMARK_NODE_CONTENT_NONE,    /* 子を取らない（葉） */
+    AMARK_NODE_CONTENT_BLOCKS,  /* 明示親限定でない任意のブロック */
+    AMARK_NODE_CONTENT_INLINES, /* 明示親限定でない任意のインライン */
+    AMARK_NODE_CONTENT_CUSTOM   /* 種別の判定関数で決める */
 } amark_node_content_t;
 
 typedef struct amark_node_kind amark_node_kind_t;
@@ -432,7 +432,7 @@ AMARK_API bool amark_node_kind_can_contain(const amark_node_kind_t *parent, cons
 | LINK | `link` | INLINE | INLINES | — | リンクの入れ子は木の規則では拒否しない |
 | IMAGE | `image` | INLINE | INLINES | — | 子は alt テキストの元 |
 
-- `amark_node_kind_get_standard(type)`: 1〜18 なら標準種別のハンドル、それ以外（`NONE`、`EXTENSION`、未定義値）は `NULL`（2.6）
+- `amark_node_kind_get_standard(type)`: `DOCUMENT`〜`IMAGE` なら標準種別のハンドル、それ以外（`NONE`、`EXTENSION`、未定義値）は `NULL`（2.6）
 - `amark_node_kind_get_type`: 標準種別はその値、拡張種別は `AMARK_NODE_EXTENSION`、`NULL` は `AMARK_NODE_NONE`（2.4）
 - `amark_node_kind_get_name`: 名前を借用スライスで返す（`data[len] == '\0'`）。寿命は種別と同じ。`NULL` は `{NULL, 0}`（2.5）
 - `amark_node_kind_is_leaf(kind)`: `content == AMARK_NODE_CONTENT_NONE`（子を取らない種別）なら真、それ以外は偽。`NULL` は偽（2.7）。標準・拡張で同じ方法で答える。イテレータが ENTER だけを報告する種別（9.1）はちょうどこの判定が真の種別であり、NodeIter と NodeWalk（レンダラの走査）は同じ関数を使って「葉か」を判定する
@@ -583,9 +583,9 @@ AMARK_API amark_node_t *amark_node_get_previous(const amark_node_t *node);
 /* include/amark/node.h（続き） */
 typedef enum amark_node_list_type
 {
-    AMARK_NODE_LIST_NONE = 0,    /* list 以外への問い合わせ結果 */
-    AMARK_NODE_LIST_BULLET = 1,
-    AMARK_NODE_LIST_ORDERED = 2
+    AMARK_NODE_LIST_NONE,    /* list 以外への問い合わせ結果 */
+    AMARK_NODE_LIST_BULLET,
+    AMARK_NODE_LIST_ORDERED
 } amark_node_list_type_t;
 
 #define AMARK_NODE_HEADING_LEVEL_MIN 1
@@ -724,10 +724,10 @@ AMARK_API amark_error_t amark_node_normalize(amark_node_t *root);
 
 typedef enum amark_node_iter_event
 {
-    AMARK_NODE_ITER_NONE = 0,  /* まだ next を呼んでいない */
-    AMARK_NODE_ITER_ENTER = 1,
-    AMARK_NODE_ITER_EXIT = 2,
-    AMARK_NODE_ITER_DONE = 3
+    AMARK_NODE_ITER_NONE,  /* まだ next を呼んでいない */
+    AMARK_NODE_ITER_ENTER,
+    AMARK_NODE_ITER_EXIT,
+    AMARK_NODE_ITER_DONE
 } amark_node_iter_event_t;
 
 typedef struct amark_node_iter
@@ -829,12 +829,12 @@ typedef struct amark_node_walk
     bool skip_children;            /* 現在のイベントで子の省略が要求されたか */
 } amark_node_walk_t;
 
-typedef amark_error_t (*amark_node_walk_visit_fn_t)(void *context, amark_node_walk_t *walk,
+typedef amark_error_t (*amark_node_walk_visit_fn_t)(void *ctx, amark_node_walk_t *walk,
                                                     const amark_node_walk_hook_t *hook);
 
 amark_error_t amark_node_walk_run(amark_node_walk_t *walk, const amark_node_t *root,
                                   const amark_node_walk_table_t *table, amark_node_walk_visit_fn_t visit,
-                                  void *context);
+                                  void *ctx);
 void amark_node_walk_skip_children(amark_node_walk_t *walk);
 ```
 - `amark_node_walk_table_set(table, kind, fn, user_data)`:
@@ -845,10 +845,10 @@ void amark_node_walk_skip_children(amark_node_walk_t *walk);
   - 既存の項目なし・`fn != NULL`: 必要なら容量を 2 倍（初期 4）に伸長して末尾に追加。容量計算のあふれは `AMARK_ERROR_OVERFLOW`、確保失敗は `AMARK_ERROR_NO_MEMORY` で表を変更しない（14.1、14.4）
 - `amark_node_walk_table_find`: `kind` とポインタが等しい項目を返す。なければ、`table` または `kind` が `NULL`、または `count == 0` なら `NULL`（14.3）。計算量は登録数 h に比例
 - `amark_node_walk_table_init` / `_deinit`: 空の表にする / `items` を解放して空に戻す（14.9）。`NULL` は何もしない。空の表は `items == NULL`、`count == cap == 0` で、`init` は確保しない。項目の除去で `count` が 0 になっても縮小の再確保（サイズ 0 の `amark_realloc`）はしない（foundation の Memory のライブラリ内の規則）
-- `amark_node_walk_run(walk, root, table, visit, context)`（`walk`、`root`、`table`、`visit` が `NULL` なら `AMARK_ERROR_INVALID_ARGUMENT`。引数の検査は各レンダラの入口でも行う）:
+- `amark_node_walk_run(walk, root, table, visit, ctx)`（`walk`、`root`、`table`、`visit` が `NULL` なら `AMARK_ERROR_INVALID_ARGUMENT`。引数の検査は各レンダラの入口でも行う）:
   1. `amark_node_iter_init(&walk->iter, (amark_node_t *)root)`（const を外すのはここだけ。イテレータは木を変更しない、14.5）
-  2. `amark_node_iter_next` が `DONE` を返すまで: `walk->node`・`walk->event` を設定し `skip_children = false`、`hook = find(table, kind)`、`visit(context, walk, hook)` を呼ぶ。非 `AMARK_OK` ならその値を直ちに返す（14.5、14.8）
-  3. `event == ENTER` かつ `skip_children` かつ `!amark_node_kind_is_leaf(kind)` なら、`amark_node_iter_reset(&walk->iter, node, EXIT)` の後、`walk->event = EXIT`、`walk->skip_children = false` として同じノードについて `visit(context, walk, hook)` を呼ぶ（`hook` は ENTER で引いたものと同じ項目）。非 `AMARK_OK` ならその値を直ちに返す。続く `amark_node_iter_next` は EXIT の続きを報告する（14.7）
+  2. `amark_node_iter_next` が `DONE` を返すまで: `walk->node`・`walk->event` を設定し `skip_children = false`、`hook = find(table, kind)`、`visit(ctx, walk, hook)` を呼ぶ。非 `AMARK_OK` ならその値を直ちに返す（14.5、14.8）
+  3. `event == ENTER` かつ `skip_children` かつ `!amark_node_kind_is_leaf(kind)` なら、`amark_node_iter_reset(&walk->iter, node, EXIT)` の後、`walk->event = EXIT`、`walk->skip_children = false` として同じノードについて `visit(ctx, walk, hook)` を呼ぶ（`hook` は ENTER で引いたものと同じ項目）。非 `AMARK_OK` ならその値を直ちに返す。続く `amark_node_iter_next` は EXIT の続きを報告する（14.7）
   4. 終われば `AMARK_OK`
 - `amark_node_walk_skip_children(walk)`: `walk->skip_children = true`。`NULL` は何もしない。効果は手順 3 の条件（ENTER かつ葉でない）を満たすときだけ（14.7）
 - イベント列は NodeIter のとおりで、葉は ENTER のみ（14.6）。子を省略したノードでも ENTER と EXIT はちょうど 1 回ずつ訪問され、子孫は訪問されない（14.7）。反復で動き深さに比例するスタックを使わない。走査の実行は確保しない（14.5、14.9）
@@ -927,7 +927,7 @@ graph TB
 すべて公開 API だけを使い、確保失敗はテスト側の差し替えアロケータ（foundation の `test_allocator_*`）で注入する。例外は非公開の NodeWalk を検証する `node_walk_test.c` で、`src/tree/node_walk.c` を直接コンパイルする（NodeWalk の Validation）。
 
 ### Unit Tests
-- `node_kind_test.c`: 18 標準種別の識別値（1〜18）・名前・分類・内容モデル（2.1〜2.3）、`amark_node_kind_is_leaf` が葉の 8 種別だけで真・`NULL` で偽（2.7）、`get_standard` が `NONE`・`EXTENSION`・未定義値で `NULL` を返し同じ値で常に同じハンドルを返すこと（2.6）、18 × 18 の受け入れ判定表が設計の表どおりであること（6.1、6.2、6.6）
+- `node_kind_test.c`: 18 標準種別の識別値（`DOCUMENT`〜`IMAGE` の並び順）・名前・分類・内容モデル（2.1〜2.3）、`amark_node_kind_is_leaf` が葉の 8 種別だけで真・`NULL` で偽（2.7）、`get_standard` が `NONE`・`EXTENSION`・未定義値で `NULL` を返し同じ値で常に同じハンドルを返すこと（2.6）、18 × 18 の受け入れ判定表が設計の表どおりであること（6.1、6.2、6.6）
 - `node_registry_test.c`: 登録とハンドル・名前・分類の問い合わせ（2.5、4.2）、名前の境界（64 バイト可・65 バイト不可・先頭数字・大文字・ハイフン・空）（4.4）、標準名・既登録名の重複（4.3）、記述子の矛盾 5 パターン（4.5）、名前による検索（標準・拡張・該当なし）（4.6）、多数登録後も先に得たハンドルが同じで検索結果と一致（4.7）、登録に渡した名前バッファを書き換えても名前が変わらない（4.8）、拡張の内容モデル・明示親限定・独自判定の受け入れ判定（6.3〜6.5）、拡張種別の `amark_node_kind_is_leaf`（内容モデル NONE だけ真、2.7）、失敗注入の網羅パターンと破棄後の `live == 0`（4.9、12.3、12.6）
 - `node_test.c`: 標準・拡張の生成と初期リンク（1.1、1.2）、未知種別（1.3）、根の破棄と `live == 0`（1.4、12.6）、`NULL` の破棄（1.7）、根の参照がすべて `NULL`（8.1、8.2）、根の取り外しが何もしない（7.5）、生成の失敗注入（12.3）
 - `node_value_test.c`: 既定値（3.4）、各値の往復と借用スライスの NUL 終端（3.1〜3.3）、範囲の境界と未定義のリスト種別（3.5）、UTF-8 不正（3.6）、種別不一致（3.7、3.8）、NUL を含む値（3.9）、長さ `SIZE_MAX` のスライスで `OVERFLOW`（12.5）、失敗注入で旧値が残る（12.3）、付随データの所有・後片付け回数・同一値・`destroy_data == NULL`・標準種別の拒否・未設定時 `NULL`（5.1〜5.6）

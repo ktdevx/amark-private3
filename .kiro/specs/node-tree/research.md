@@ -58,7 +58,7 @@
 - **Alternatives Considered**:
   1. 列挙だけ（拡張は整数を払い出す）
   2. ハンドルだけ（標準もハンドルで比較）
-- **Selected Approach**: `amark_node_type_t` は標準種別の固定値と、拡張種別を表す共通値 `AMARK_NODE_EXTENSION` を持つ。すべての種別（標準を含む）は `const amark_node_kind_t *` のハンドルを持ち、標準種別のハンドルはライブラリ内の定数データ（可変状態ではない）として常に同一
+- **Selected Approach**: `amark_node_type_t` は標準種別（並び順で値が決まり、変えない）と、拡張種別を表す共通値 `AMARK_NODE_EXTENSION` を持つ。すべての種別（標準を含む）は `const amark_node_kind_t *` のハンドルを持ち、標準種別のハンドルはライブラリ内の定数データ（可変状態ではない）として常に同一
 - **Rationale**: レンダラは標準種別を列挙で分岐し、拡張種別や上書きはハンドルで引ける。グローバル可変状態を作らない
 - **Trade-offs**: API が 2 つの表現を持つ。変換関数（`amark_node_kind_get_standard`、`amark_node_kind_get_type`）で補う
 - **Follow-up**: レンダラ spec でフックのキーをハンドルに統一することを確認する

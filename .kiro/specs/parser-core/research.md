@@ -95,7 +95,7 @@
   - C2（空行の定義、7.1・8.4・8.5）: 空行は「継続判定と開始判定で読み進めた後の行の残りがスペースとタブだけ」の行。`> - a` / `>` / `> - b` を CommonMark どおり loose にするために必要
   - C3（インライン対象の逐次処理、9.1）: インライン対象は 1 つずつ完了まで解析し、1 つの対象の間 `amark_inline_context_get_block` は同じノードを返し、対象ごとに異なるノードである。構文が対象ごとの状態をノードで区別するために必要
 - **Rationale**: いずれも既存の設計の振る舞いを明文化・限定するもので、API の形は変えない
-- **Also applied**: 一括パースの名前と引数を `amark_parser_parse(dialect, data, len, options, &document)` に変更（`amark_parse` から改名、`data, len` の並びを `feed` に揃える）。テスト補助を `tests/support/test_syntax.{h,c}`（`test_syntax_*`）と `test_tree_dump.{h,c}`（`test_tree_dump_*`）に改名
+- **Also applied**: 一括パースの名前と引数を `amark_parser_parse(dialect, data, len, opts, &document)` に変更（`amark_parse` から改名、`data, len` の並びを `feed` に揃える）。テスト補助を `tests/support/test_syntax.{h,c}`（`test_syntax_*`）と `test_tree_dump.{h,c}`（`test_tree_dump_*`）に改名
 
 ## Synthesis Outcomes
 - **Generalization**: 「ブロックの内容をインライン解析する」と「テーブルのセルをインライン解析する」を、インライン対象の登録という 1 つの機構にまとめた。リンク参照定義の表と GFM 脚注の定義表を、名前空間付きの定義テーブルにまとめた
