@@ -58,7 +58,7 @@
 - **Selected Approach**: `amark_extension_create` が自分のレジストリを作り、宣言された種別をすべて登録する。失敗時はレジストリごと破棄する。方言は拡張の追加時に、他の拡張の種別名との重複を `amark_node_registry_find` で検査する
 - **Rationale**: 強い保証を node-tree の変更なしで守れる。種別ハンドルが方言の組み立て前から得られ、レンダラのフックを拡張単位で結び付けられる
 - **Trade-offs**: 名前の一意性は方言単位での検査になる（レジストリ単位ではない）。`amark_dialect_find_kind` は拡張数に対して線形
-- **Follow-up**: node-tree の Downstream Integration Guidance の記述（「方言またはパーサが 1 つ所有」）を、実装時に本決定へ合わせて更新するよう依頼する（文書のみ、API 変更なし）
+- **Follow-up**: node-tree の Downstream Integration Guidance と NodeRegistry の記述は、横断レビューで本決定（拡張ごとのレジストリ、parser-core の API には出さない、方言が拡張間の名前の重複を検査、拡張または方言がその種別のノードとフックを保持するレンダラより長く生きる）に合わせて更新済み（文書のみ、API 変更なし）
 
 ### Decision: flanking はエンジンでなく構文が計算する
 - **Context**: left/right flanking の判定には Unicode の空白・句読点の分類が必要で、brief はそれを「特定構文のためのデータ」として範囲外にしている
@@ -81,12 +81,21 @@
 - **Trade-offs**: 段落の規則を差し替えたい方言はない前提。必要になれば段落の振る舞いを構文として差し替える API を追加する（Revalidation Trigger）
 
 ### Decision: エラーコードは 1 つだけ追加する
-- **Selected Approach**: `AMARK_ERROR_INVALID_STATE`（7）。終了後の供給、失敗後の供給、凍結後の方言の変更に使う。上限の超過はエラーにせず、テキストとして扱う（CommonMark の結果を壊さず、悪意ある入力でも文書を返すため）
+- **Selected Approach**: `AMARK_ERROR_INVALID_STATE`（7。値・文字列は foundation design.md のエラー表が唯一の定義元）。終了後の供給、失敗後の供給、凍結後の方言の変更に使う。上限の超過はエラーにせず、テキストとして扱う（CommonMark の結果を壊さず、悪意ある入力でも文書を返すため）
 - **Alternatives**: `AMARK_ERROR_LIMIT_EXCEEDED` を追加して上限超過で失敗させる — 信頼できない入力で文書が得られなくなるため却下
 
 ### Decision: 開始判定の結果の 4 分類と継続判定の 3 分類
 - **Selected Approach**: 開始は「開かない／コンテナ／葉（行の残りを内容へ）／葉（行を処理済み）」、継続は「継続しない／継続する／行を消費して閉じる」。行の内容を蓄えた後で閉じる必要（HTML ブロックの終了条件）は、文脈への「この行の後で閉じる」指示で表す
 - **Rationale**: cmark の戻り値 0 / 1 / 2 と、`add_line` 後の終了判定をそのまま一般化したもの
+
+### Decision: commonmark からの変更要求 C1〜C3 の取り込み
+- **Context**: commonmark spec の設計で、parser-core の契約の曖昧さが 3 点見つかり、変更要求として上流へ戻された（横断レビューで適用済み）
+- **Selected Approach**:
+  - C1（寿命の義務の限定、13.8・14.9）: 拡張・方言が文書より長く生きる義務は、拡張が登録した種別のノードを含む文書に限る。標準種別だけの文書は方言とパーサの破棄後も有効。`amark_commonmark_parse` が内部の方言とパーサを破棄してから文書を返すために必要
+  - C2（空行の定義、7.1・8.4・8.5）: 空行は「継続判定と開始判定で読み進めた後の行の残りがスペースとタブだけ」の行。`> - a` / `>` / `> - b` を CommonMark どおり loose にするために必要
+  - C3（インライン対象の逐次処理、9.1）: インライン対象は 1 つずつ完了まで解析し、1 つの対象の間 `amark_inline_context_get_block` は同じノードを返し、対象ごとに異なるノードである。構文が対象ごとの状態をノードで区別するために必要
+- **Rationale**: いずれも既存の設計の振る舞いを明文化・限定するもので、API の形は変えない
+- **Also applied**: 一括パースの名前と引数を `amark_parser_parse(dialect, data, length, options, &document)` に変更（`amark_parse` から改名、`data, length` の並びを `feed` に揃える）。テスト補助を `tests/support/test_syntax.{h,c}`（`test_syntax_*`）と `test_tree_dump.{h,c}`（`test_tree_dump_*`）に改名
 
 ## Synthesis Outcomes
 - **Generalization**: 「ブロックの内容をインライン解析する」と「テーブルのセルをインライン解析する」を、インライン対象の登録という 1 つの機構にまとめた。リンク参照定義の表と GFM 脚注の定義表を、名前空間付きの定義テーブルにまとめた

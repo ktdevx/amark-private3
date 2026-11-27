@@ -83,6 +83,16 @@
 - **Rationale**: 登録は通常数件（GFM でも 10 件未満）。標準種別の値の範囲（19〜254 への追加）に依存しない。Simplification
 - **Trade-offs**: 1 ノードあたりの探索がフック数 h に比例。要件 13.2 は h を定数とみなす前提で設計に明記する
 
+### Decision: 子の省略後は駆動部が EXIT を自ら訪問する
+- **Context**: node-tree の `amark_node_iter_reset(iter, node, EXIT)` は「次の `next` はその位置の続きを報告する」。リセットだけでは同じノードの EXIT が報告されず、要件 11.3（子を省略しても出るときの呼び出しを行う）と markdown-renderer のフレームの釣り合いを満たさない
+- **Selected Approach**: `render_core` はリセットの直後に、イベントを EXIT にして同じノードの EXIT で訪問関数を呼ぶ。以後の `next` は EXIT の続きを報告する
+- **Rationale**: イテレータの意味を変えずに、ENTER / EXIT がちょうど 1 回ずつ訪問される。HTML の組み込みで子を省略するのは image だけで、その EXIT は何も出さないため出力は変わらない
+
+### Decision: 線形性は決定的な計数で検査する
+- **Context**: 要件 13.2（ノード数と出力長に線形な時間）。壁時計の時間の比は CI の負荷・環境で揺れ、誤検出と見逃しが起こる
+- **Selected Approach**: parser-core と同じく、訪問回数、出力のバイト数、計測アロケータの確保回数を n と 10n の入力で数え、期待値との一致と上限を検査する
+- **Rationale**: 走査は反復で各イベントを定数回処理し、alt 平坦化も 1 回の走査であるため、計数が線形なら時間も線形になる（フック数 h は定数とみなす）
+
 ### Decision: 新しいエラーコードを追加しない
 - **Selected Approach**: 引数・設定の不正は `AMARK_ERROR_INVALID_ARGUMENT`、確保は `AMARK_ERROR_NO_MEMORY`、サイズは `AMARK_ERROR_OVERFLOW`。フックのエラーはそのまま伝播
 - **Rationale**: 既存コードで表現できる。foundation の規則（再利用を優先）に従う
@@ -95,7 +105,7 @@
 ## Risks & Mitigations
 - 既定を安全側にしたことを commonmark が見落とし、生 HTML の例が失敗する — Cross-Spec Contract と要件 9.1 で設定を明記する
 - フック内で木を変更して走査が壊れる — 公開ヘッダで義務として文書化（要件 11.8）。根は `const` で受け取り、フックにも `const` のノードを渡す
-- レジストリ破棄後にフック表がぶら下がったハンドルを持つ — 「レンダラはフックの種別を登録したレジストリより先に破棄する」ことを義務として文書化する
+- 種別ハンドルの出所の破棄後にフック表がぶら下がったハンドルを持つ — 「フックを登録した種別の出所（node-tree のレジストリ、または parser-core の拡張とそれを所有する方言）はレンダラより長く生きる」ことを義務として文書化する
 - 仕様の版の差（CommonMark 0.31.2 以降の期待出力の変更） — 対象版は commonmark が固定する。本設計の出力規則が変わる場合は Revalidation Trigger とする
 
 ## References

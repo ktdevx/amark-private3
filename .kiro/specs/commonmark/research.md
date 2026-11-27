@@ -5,7 +5,7 @@
 - **Discovery Scope**: New Feature（greenfield。上流 4 spec の設計のみ存在し、ソースコードはない）
 - **Key Findings**:
   - CommonMark 仕様の最新版は 0.31.2（2024-01-28）。spec.txt は CC BY-SA 4.0、例は 32 個の `` ` `` と ` example` の行で始まり、`.` で入力と期待 HTML を分け、32 個の `` ` `` だけの行で終わる。タブは `→` で表記される
-  - parser-core の公開 API（ブロック文脈、段落の処理器、デリミタ処理器、ブラケット、定義テーブル、拡張ごとの解析状態）で CommonMark の全構文を表現できる。API の追加は不要で、文書の寿命の義務の緩和と 2 つの意味の明確化（空行の判定位置、インライン対象の同一性）を parser-core に依頼する
+  - parser-core の公開 API（ブロック文脈、段落の処理器、デリミタ処理器、ブラケット、定義テーブル、拡張ごとの解析状態）で CommonMark の全構文を表現できる。API の追加は不要で、文書の寿命の義務の緩和と 2 つの意味の明確化（空行の判定位置、インライン対象の同一性）が必要（C1〜C3。parser-core の文書に適用済み）
   - cmark の病的入力テストは 25 類型（`test/pathological_tests.py`、1 件 5 秒の制限）。ブロックの入れ子の上限（既定 1000）を超える 3 類型は、Amark では文書化された上限の挙動を期待値とし、上限を上げた設定で cmark と同じ構造になることを別に確かめる
 
 ## Research Log
@@ -47,7 +47,7 @@
   - 空行の記録・段落の継続・遅延継続で「行が空行」が「継続と開始の後の位置から行末まで空白」を意味することが必要（`> - a\n>\n> - b` を loose にするため）。parser-core の設計は BlockLine の `blank`（現在位置からの判定）を使っており整合するが、要件の文言は「行が空行」なので意味の明確化を依頼する
   - コードスパンの `` ` `` の位置の記憶、生 HTML の閉じのない構造の記憶、参照展開の量は「インライン対象ごと」にやり直す必要がある。インライン対象の切り替わりは `amark_inline_context_get_block` のノードの変化で検出できる（対象は順に 1 つずつ最後まで処理される）。この保証を `inline_syntax.h` の契約として明記するよう依頼する
   - 簡易パース `amark_commonmark_parse` は内部で方言を作って破棄し、文書だけを返す。parser-core の要件 13.8・14.9 は「方言は文書より後に破棄」と定めるが、CommonMark の拡張はノード種別を定義せず、文書は方言を参照しない。拡張種別のノードを含まない文書には寿命の義務が及ばないことを契約として明記するよう依頼する
-- **Implications**: parser-core への API の追加・変更は不要。Cross-Spec Change Note に 3 件（契約の緩和 1、意味の明確化 2）を記す
+- **Implications**: parser-core への API の追加・変更は不要。3 件（契約の緩和 1、意味の明確化 2）は parser-core の要件・設計に適用済みで、本仕様は依存する振る舞いを確かめるだけ
 
 ### 参照展開の量の上限
 - **Context**: `[a]: <長い URL>` と大量の `[a]` で、出力と木のメモリが入力長の二乗になる
@@ -81,7 +81,7 @@
 - **Selected Approach**: 2。`amark_commonmark_parse` と `amark_commonmark_convert_to_html`。繰り返し使う利用者には方言の再利用を案内する
 - **Rationale**: 要件 12 の並行利用とスレッド安全を単純に満たす
 - **Trade-offs**: 呼び出しごとに 17 拡張の生成と凍結が起きる
-- **Follow-up**: parser-core の寿命の義務の緩和（Cross-Spec Change Note）
+- **Follow-up**: parser-core の寿命の義務の緩和（C1、適用済み）。HTML への簡易変換は `amark/commonmark_html.h` に分け、`amark/commonmark.h` をレンダラに依存させない
 
 ### Decision: データの生成方式
 - **Context**: 要件 10
@@ -96,13 +96,18 @@
 ### Decision: 適合テストの抽出器を C で書く
 - **Context**: 要件 8.2、8.7
 - **Alternatives Considered**: cmark の `spec_tests.py` 相当を Python で書く / C で書く
-- **Selected Approach**: `tests/support/spec_examples.c` が実行時に spec.txt を読み、例の配列を作る
+- **Selected Approach**: `tests/support/test_spec_examples.c`（関数 `test_spec_examples_*`、テスト補助の命名規約）が実行時に spec.txt を読み、例の配列を作る
 - **Rationale**: テストの実行に C コンパイラと CMake 以外を要求しない（3 OS の CI で Python の有無に依存しない）
 
 ### Decision: 病的入力の期待値と時間の検査
 - **Context**: 要件 9.2、9.3
 - **Selected Approach**: 類型ごとに入力を生成する関数と、出力を検査する関数（完全一致、または接頭辞・接尾辞・タグの個数）をテストに持つ。各類型の解析と変換に `clock()` で 5 秒（CPU 時間）の上限を設け、CTest の TIMEOUT を実行ファイル全体の上限とする
 - **Rationale**: 二乗の実装はこの規模で数十秒以上かかり、線形の実装は 1 秒未満で終わる。呼び出し回数の線形性は parser-core が確かめ済みで、ここでは構文側の走査を対象にする
+
+### Decision: 句読点・空白の分類を共有の非公開モジュールにする
+- **Context**: 要件 7.1、10.2。markdown-renderer も出力側の flanking で同じ分類を必要とする
+- **Selected Approach**: 最初から `src/unicode_class.{h,c}` と生成物 `src/unicode_class_data.c` に `amark_unicode_is_punctuation` / `amark_unicode_is_whitespace` を置く（非公開、export しない）。畳み込みの表はラベルの正規化だけが使うため `src/commonmark_unicode_data.c` に commonmark 専用として残す。生成器は 2 つのファイルを出力する。直前の文字の復号は foundation の `amark_utf8_decode_previous` を使う
+- **Rationale**: レンダラがパーサの非公開ヘッダに依存せず、同一の表と判定を共有できる
 
 ## Risks & Mitigations
 - 仕様の例とレンダラの規則のずれ — 失敗した例の差分を報告し、レンダラ起因なら html-renderer の組み込み出力の表を修正する（brief の約束）

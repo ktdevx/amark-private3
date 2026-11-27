@@ -40,19 +40,20 @@
 ### 上流設計との整合
 - **Sources Consulted**: `.kiro/specs/html-renderer/design.md`（Cross-Spec Contract）、`.kiro/specs/node-tree/design.md`、`.kiro/specs/commonmark/design.md`、`.kiro/specs/parser-core/design.md`、`.kiro/specs/foundation/design.md`
 - **Findings**:
-  - html-renderer は `amark_markdown_*` の型・関数・コンテキスト操作の名前と規則を指定し、`src/render_core.h`（フック表 `amark_render_hook_table_*`、走査 `amark_render_walk_run`、`amark_render_walk_skip_children`、`amark_render_kind_is_leaf`）を複製せずに使うことを求める。Markdown 固有の処理を render_core に入れないことも求める
-  - node-tree の `amark_node_iter_reset` は「次の next はその続きを報告する」。render_core の手順 3 はこれを使って子を飛ばすが、EXIT の訪問を行う記述がない（html-renderer 要件 11.3 と矛盾）
+  - html-renderer は `amark_markdown_*` の型・関数・コンテキスト操作の名前と規則を指定し、`src/render_core.h`（フック表 `amark_render_hook_table_*`、走査 `amark_render_walk_run`、`amark_render_walk_skip_children`。葉の判定は node-tree の `amark_node_kind_is_leaf`）を複製せずに使うことを求める。Markdown 固有の処理を render_core に入れないことも求める
+  - node-tree の `amark_node_iter_reset` は「次の next はその続きを報告する」。当初の render_core の手順 3 は EXIT の訪問を行う記述がなかったが、横断レビューの結果 html-renderer 側で修正され、リセットの直後に同じノードの EXIT を訪問する（html-renderer 要件 11.3）
   - node-tree はリストの区切り文字・箇条書き記号・フェンスの別・見出しの形式を保持しない（Non-Goals）。レンダラは常に正規化した記法を選ぶ
   - parser-core は解析後に `amark_node_normalize` を呼ぶため、隣接する text は結合されている。文字参照で書いた文字も復号後に結合される
-  - commonmark の CharClass（`amark_commonmark_is_punctuation`、`amark_commonmark_is_whitespace`）と UnicodeTables は commonmark の非公開部品で、構文のソースだけが使う前提。foundation の設計は「Unicode の文字分類は必要になった spec が utf8 モジュールの層へ追加する」としている
-  - エラー列挙は 0〜7 が割り当て済み（`INVALID_STATE = 7` は parser-core）
-- **Implications**: 型・関数の形は html-renderer に合わせる。render_core は 1 点の修正（省略後の EXIT の訪問）だけを依頼し、フレームと行の管理は Markdown 側に置く。Unicode 分類は基盤層の非公開モジュールへ移す（commonmark は委譲するだけ）。新しいエラーコードは作らず、プレフィックスの不正な操作は `AMARK_ERROR_INVALID_STATE` を再利用する
+  - Unicode の句読点・空白の分類は、commonmark が最初から非公開モジュール `src/unicode_class.{h,c}`（生成物 `src/unicode_class_data.c`、`amark_unicode_is_punctuation` / `amark_unicode_is_whitespace`）として作る。レンダラはパーサの非公開ヘッダに依存せずに同じ分類を使える
+  - foundation は後方復号 `amark_utf8_decode_previous` を公開する。出力の最後の文字の復号にはこれを使う
+  - エラー列挙は 0〜7 が割り当て済み（唯一の定義元は foundation の設計のエラー列挙の表。`INVALID_STATE = 7` を含む）
+- **Implications**: 型・関数の形は html-renderer に合わせる。render_core は変更せず（省略後の EXIT の訪問は html-renderer の規則）、フレームと行の管理は Markdown 側に置く。Unicode 分類は commonmark の `unicode_class` をそのまま使う。新しいエラーコードは作らず、プレフィックスの不正な操作は `AMARK_ERROR_INVALID_STATE` を再利用する
 
 ## Architecture Pattern Evaluation
 
 | Option | Description | Strengths | Risks / Limitations | Notes |
 |--------|-------------|-----------|---------------------|-------|
-| render_core の走査＋Markdown の訪問関数でフレーム管理（採用） | 駆動部は共有し、訪問関数が ENTER / EXIT ごとにノードフレームを積み降ろす | フックの有無にかかわらずプレフィックスとフレームが釣り合う。render_core を Markdown 非依存に保てる | 省略後の EXIT の訪問が駆動部に必要（R1） | html-renderer の約束どおり |
+| render_core の走査＋Markdown の訪問関数でフレーム管理（採用） | 駆動部は共有し、訪問関数が ENTER / EXIT ごとにノードフレームを積み降ろす | フックの有無にかかわらずプレフィックスとフレームが釣り合う。render_core を Markdown 非依存に保てる | 省略後の EXIT の訪問が駆動部に必要（html-renderer の RenderCore 手順 3 が提供） | html-renderer の約束どおり |
 | render_core にプレフィックス・行ごとのフックを追加 | 駆動部が行の管理を持つ | 他形式（man など）にも使える | Markdown 固有の処理が共通部に入る（html-renderer の Out of Boundary に反する） | 不採用 |
 | 出力を一度中間表現（行のリスト）にしてから整形 | 2 パス | 折り返しが単純 | 確保と処理が倍、フックの書き込みの意味が複雑 | 不採用 |
 | 原文の記法をノードに記憶 | ロスレスに近い | 出力が原文に近い | node-tree の Non-Goals、brief の Out of Boundary | 不採用 |
@@ -90,14 +91,14 @@
 - **Selected Approach**: 折り返し候補は text の中の、前後が空白でない単一の空白で、直後の文字が行頭に置かれてもエスケープ不要の構文を始めない（`-+=#>~` と数字以外）もの。soft break は直後の内容が安全なら候補、そうでなければ改行のまま。候補で改行すると空白が soft break に変わるため、比較は soft break を空白として出す HTML で行う
 - **Trade-offs**: 木は空白と soft break の違いだけ変わる（要件 9.2 でこの等価性を定義した）
 
-### Decision: Unicode 分類を基盤層へ移す
+### Decision: Unicode 分類は commonmark の共有モジュールを使う
 - **Context**: 要件 6.5。日本語の文の強調は置換なしで出力したいが、非 ASCII の句読点（`「` `。`）の隣では分類を誤ると開きにならない
 - **Alternatives Considered**:
   1. 非 ASCII を常に参照にする — 日本語が読めなくなる
   2. markdown-renderer が commonmark_internal.h を include — レンダラがパーサに依存する（structure.md 違反）
-  3. 句読点・空白の判定と表を `src/unicode_class.{h,c}` と生成物 `src/unicode_class_data.c` に移し、commonmark の CharClass はそれに委譲（採用）
-- **Rationale**: foundation の方針（Unicode の分類は必要になった spec が基盤層へ追加）どおりで、表の重複がない
-- **Follow-up**: 生成器 `tools/generate_unicode_tables.py` の出力先が 2 ファイルになる。commonmark の `commonmark_data_test.c` は同じ結果のまま通ること
+  3. commonmark が最初から作る非公開モジュール `src/unicode_class.{h,c}`（生成物 `src/unicode_class_data.c`）を include して使う（採用）
+- **Rationale**: パーサとレンダラが同一の分類を使い、表の重複がない。本仕様が commonmark のファイルを移設・変更する必要がない（横断レビューで決定）
+- **Follow-up**: commonmark の分類の表の版が変わったら本仕様の往復テストを再実行する（Revalidation Trigger）
 
 ### Decision: プレフィックスはノード単位で自動的に戻す
 - **Context**: 要件 11.6、11.7。フックが ENTER だけ組み込みに委譲して EXIT を自前で書くと、明示の push / pop が釣り合わない
@@ -111,8 +112,8 @@
 
 ## Risks & Mitigations
 - 強調の計画が満たせない形がパース由来の木にも現れる — 往復テストの強調の節で検出し、除外一覧に載せる前に計画の規則を見直す（除外は設計への記載が条件）
-- render_core の修正（R1）が html-renderer の既存テストの期待を変える — 子の省略を使う組み込みは image だけで EXIT は何も出さないため HTML の出力は変わらない。html_hook_test の「子の省略と EXIT の呼び出し」の確認が修正の検証になる
-- Unicode 分類の移動で commonmark の flanking が変わる — 表と判定を移すだけで関数の意味を変えない。commonmark の適合テストを再実行する
+- `render_core.h` の内部契約が変わり、フレームの釣り合いが崩れる — html-renderer の Revalidation Trigger により本仕様を再検証する。`markdown_hook_test.c` で子の省略の後の EXIT を確認する
+- 壁時計の時間による線形性の検査が環境で揺れる — 訪問回数・出力のバイト数・確保回数の決定的な計数で検査する
 - 出力の書き換え（直前の文字の置換、折り返しの挿入）がフックの出力を壊す — 書き換えは組み込みの text が書いた最後の文字と、組み込みの text の折り返し候補に限る
 
 ## References

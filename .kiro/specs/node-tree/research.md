@@ -102,6 +102,11 @@
 - **Selected Approach**: `AMARK_ERROR_INVALID_CHILD`（親子関係の規則違反・循環・document を子にする）と `AMARK_ERROR_ALREADY_EXISTS`（名前の重複）。それ以外は既存の `AMARK_ERROR_INVALID_ARGUMENT` に含める
 - **Rationale**: 利用者の分岐に意味がある区別だけをコードにする。`ALREADY_EXISTS` は parser-core の拡張名の重複にも再利用できる汎用名にする
 
+### Decision: 葉の判定 `amark_node_kind_is_leaf` を公開する
+- **Context**: 横断レビュー。html-renderer の render_core は、イテレータが ENTER だけを報告する種別（葉）を判定する必要があり、内容モデルから独自に導くと判定がずれるおそれがある
+- **Selected Approach**: 当初は内部関数だった `amark_node_kind_is_leaf` を `include/amark/node_kind.h` の公開 API にする（要件 2.7）。定義は `content == AMARK_NODE_CONTENT_NONE`、`NULL` は偽
+- **Rationale**: イテレータとレンダラが同じ関数で葉を判定し、ENTER / EXIT の扱いが常に一致する
+
 ### Decision: 正規化は基本保証
 - **Context**: 11.5
 - **Selected Approach**: 隣接 text の並びごとに、空 text を取り除き（確保なし）、残りを 1 回の確保で連結する。確保に失敗した並びは変更しない。それまでに処理した並びは正規化済みのまま残す
@@ -113,7 +118,7 @@
 - **Simplification**: イテレータは呼び出し側が領域を持つ構造体（確保なし、`_deinit` なし）。木の複製・比較・ソース位置・記法の記憶・ノードごとの利用者データは要求にないため持たない。レジストリの検索は線形探索（種別数は数十以下を想定）
 
 ## Risks & Mitigations
-- レジストリをノードより先に破棄される誤用 — 公開ヘッダに義務を明記し、parser-core の設計で方言（またはパーサ）がレジストリの所有者であることを定める
+- レジストリをノードより先に破棄される誤用 — 公開ヘッダに義務を明記する。parser-core の設計で、拡張ごとに 1 つのレジストリを拡張が所有し（parser-core の API には出さない）、拡張（またはそれを所有する方言）がその種別のノードと、そのフックを保持するレンダラより長く生きる義務を利用者に約束する（横断レビューで node-tree の記述を parser-core の決定に合わせた）
 - GFM のタスクリストなど、標準種別に拡張データを付けたい要求 — 現設計では付随データは拡張種別だけ。gfm フェーズで標準種別の規則か付随データの対象を改訂する（Revalidation Trigger）
 - Naos の `naos_add_executable` の扱い — foundation の規約どおり 1 ソース 1 実行ファイルとし、モジュール（`src/` の 1 ファイル）ごとにテスト実行ファイルを分ける
 - 判定関数・後片付け関数が木を変更する誤用 — 公開ヘッダで禁止を明記する（コールバック中に木を変更しない）

@@ -32,7 +32,7 @@
 - 親子関係の判定（`amark_node_kind_can_contain`）と、編集操作（追加・挿入・取り外し・置換・破棄）の検証
 - 参照（親・子・兄弟）、イテレータ `amark_node_iter_t` と走査中の編集の安全性規則
 - 正規化（隣接 text の結合と空 text の除去）
-- foundation のエラー列挙へ追加する `AMARK_ERROR_INVALID_CHILD`、`AMARK_ERROR_ALREADY_EXISTS` の定義内容（意味と文字列）
+- foundation のエラー列挙へ追加する `AMARK_ERROR_INVALID_CHILD`、`AMARK_ERROR_ALREADY_EXISTS` を node-tree で返す条件と、実装時の追記（値・文字列・意味の定義元は foundation design.md のエラー表）
 
 ### Out of Boundary
 - 構文の解析、解析中の一時状態、拡張（構文＋ノード種別）の単位・方言の定義（parser-core）。本仕様はレジストリを提供するだけで、どの拡張がいつ登録するかは決めない
@@ -53,7 +53,7 @@
 - 種別記述子 `amark_node_kind_desc_t` のフィールド、判定関数・後片付け関数の型、名前の規則の変更
 - レジストリの寿命規則（ノードより長く生きる義務）、スレッド利用の規則の変更
 - 文字列 getter の契約（値を持つ種別で `data` 非 `NULL`・NUL 終端、持たない種別で `{NULL, 0}`）の変更
-- イテレータのイベント列（葉は ENTER のみ）、走査中の編集の安全性規則の変更
+- イテレータのイベント列（葉は ENTER のみ）、公開の葉の判定 `amark_node_kind_is_leaf` の定義（html-renderer が使う）、走査中の編集の安全性規則の変更
 - 追加エラーコードの値・意味の変更
 
 ## Architecture
@@ -125,26 +125,22 @@ tests/
 
 ### Modified Files
 実装時に node-tree のタスクとして変更する（本 spec の作成時には変更しない）。
-- `include/amark/error.h` — `AMARK_ERROR_INVALID_CHILD = 5`、`AMARK_ERROR_ALREADY_EXISTS = 6` を末尾に追加（Cross-Spec Change Note 参照）
+- `include/amark/error.h` — `AMARK_ERROR_INVALID_CHILD = 5`、`AMARK_ERROR_ALREADY_EXISTS = 6` を末尾に追加（値は foundation design.md のエラー表で登録済み。Cross-Spec Change Note 参照）
 - `src/error.c` — 追加コードの文字列を `switch` に追加
 - `tests/error_test.c` — 追加コードの値と文字列の確認を追加
-- `include/amark/amark.h` — `node_kind.h`、`node.h`、`node_iter.h` を include に追加
-- `src/CMakeLists.txt` — `node_kind.c`、`node_registry.c`、`node.c`、`node_value.c`、`node_edit.c`、`node_normalize.c`、`node_iter.c` をソース一覧に追加
-- `tests/CMakeLists.txt` — 7 つのテスト実行ファイル `amark_node_kind_test` ほかを `naos_add_executable` で登録
-- `tests/cxx_header_test.cpp` — C++ から木の生成・追加・走査・破棄を呼ぶ確認を追加
+- `include/amark/amark.h` — `node_kind.h`、`node.h`、`node_iter.h` の include を node-tree のブロックとして追記
+- `src/CMakeLists.txt` — `node_kind.c`、`node_registry.c`、`node.c`、`node_value.c`、`node_edit.c`、`node_normalize.c`、`node_iter.c` をソース一覧に追記
+- `tests/CMakeLists.txt` — 7 つのテスト実行ファイル `amark_node_kind_test` ほかを `naos_add_executable` で追記登録
+- `tests/cxx_header_test.cpp` — C++ から木の生成・追加・走査・破棄を呼ぶ確認を追記
+- 上の 4 つ（と `error.h`・`src/error.c`・`tests/error_test.c`）は foundation が所有する追記専用の共有ファイルである。node-tree は自分のブロックを末尾に追記するだけで、既存の行を変更・並べ替えしない
 - `.kiro/steering/tech.md` — 命名の例 `amark_node_t *amark_node_create(amark_node_type_t type);` を確定した `amark_error_t amark_node_create(amark_node_type_t type, amark_node_t **node);` に直す
 
-## Cross-Spec Change Note（foundation への追加要求）
+## Cross-Spec Change Note（foundation のエラー列挙）
 
-foundation の単一のエラー列挙 `amark_error_t`（`include/amark/error.h`）へ、次の 2 つを末尾に追加する。独自のエラー型は作らない。
+本仕様が使う追加コード `AMARK_ERROR_INVALID_CHILD = 5`（`"invalid child node"`）と `AMARK_ERROR_ALREADY_EXISTS = 6`（`"already exists"`）は、foundation design.md のエラー表（0〜7 と所有 spec の一覧。値・文字列・意味の唯一の定義元）に登録済みである。本書では再定義しない。
 
-| 定数 | 値 | 文字列（`amark_error_string`） | 意味 |
-|---|---|---|---|
-| `AMARK_ERROR_INVALID_CHILD` | 5 | `"invalid child node"` | 編集操作が親子関係の規則に反する（親がその種別を受け入れない、ノードが自分自身または子孫の子になる、document を子にする） |
-| `AMARK_ERROR_ALREADY_EXISTS` | 6 | `"already exists"` | 同じ名前のものが既に登録されている（本仕様では種別名。parser-core の拡張名などにも再利用できる汎用の意味） |
-
-- 値は foundation の規則どおり次の連番の明示値とする。node-tree の実装時点で 5・6 が他の spec に使われていれば、次の空き番号を使い、本表を更新する
-- 追加は foundation の規則どおり `error.h`、`src/error.c`、`tests/error_test.c` を同時に更新する
+- 本仕様での使い方: `INVALID_CHILD` は編集操作の親子規則違反・循環・document を子にする場合、`ALREADY_EXISTS` は種別名の重複（標準名を含む）。`ALREADY_EXISTS` は parser-core の拡張名などにも再利用される汎用の意味である
+- 実装時は node-tree のタスクとして `error.h`、`src/error.c`、`tests/error_test.c` に 2 コードを同時に追記する（追記専用。既存の値は変えない）
 - 種別の不一致（値を持たない種別へのアクセス）、範囲外の値、親を持たない兄弟への挿入などは既存の `AMARK_ERROR_INVALID_ARGUMENT` を使う
 
 ## System Flows
@@ -198,6 +194,7 @@ stateDiagram-v2
 | 1.4, 1.5, 1.6, 1.7 | 部分木の破棄、先に取り外す、所有規則、`NULL` | NodeCore | `amark_node_destroy`、`amark_node_unlink` | — |
 | 2.1, 2.2, 2.3 | 18 の標準種別、固定の識別値と名前 | NodeKind | `amark_node_type_t`、標準種別表 | — |
 | 2.4, 2.5, 2.6 | 種別の問い合わせ、名前と分類、標準ハンドル | NodeKind, NodeCore | `amark_node_get_type`、`amark_node_get_kind`、`amark_node_kind_get_*` | — |
+| 2.7 | 葉の種別の判定（公開） | NodeKind | `amark_node_kind_is_leaf` | 次イベント |
 | 3.1, 3.4, 3.5, 3.7, 3.8 | 種別ごとの値、既定値、範囲、種別不一致 | NodeValue | `amark_node_get_heading_level` ほか | — |
 | 3.2, 3.3, 3.6, 3.9 | 文字列の複製・借用・UTF-8 検査・NUL | NodeValue | `amark_node_set_literal` ほか | — |
 | 4.1, 4.2, 4.8, 4.9, 4.10 | レジストリの生成・破棄・登録、複製、寿命の義務 | NodeRegistry | `amark_node_registry_*`、`amark_node_kind_desc_t` | — |
@@ -224,7 +221,7 @@ stateDiagram-v2
 | Component | Domain/Layer | Intent | Req Coverage | Key Dependencies (P0/P1) | Contracts |
 |-----------|--------------|--------|--------------|--------------------------|-----------|
 | NodeInternal | 非公開 | 構造体と内部関数の共有定義 | 全体の前提 | foundation (P0) | State |
-| NodeKind | 種別 | 種別表現、標準種別表、受け入れ判定 | 2.1–2.6, 4.7, 6.1–6.6 | NodeInternal (P0) | Service |
+| NodeKind | 種別 | 種別表現、標準種別表、葉の判定、受け入れ判定 | 2.1–2.7, 4.7, 6.1–6.6 | NodeInternal (P0) | Service |
 | NodeRegistry | 種別 | 拡張種別の登録と検索 | 4.1–4.10, 13.4 | NodeKind (P0), Slice/Utf8 (P0) | Service, State |
 | NodeCore | ノード | 生成・取り外し・破棄・所有・種別取得・参照 | 1.1–1.7, 2.4, 7.4, 7.5, 8.1, 8.2, 13.1, 13.3 | NodeKind (P0), Memory (P0) | Service, State |
 | NodeValue | ノード | 値のアクセサと付随データ | 3.1–3.9, 5.1–5.6 | NodeCore (P0), Utf8 (P0) | Service |
@@ -295,8 +292,7 @@ struct amark_node
     } as;
 };
 
-/* 内部関数（定義するファイル） */
-bool amark_node_kind_is_leaf(const amark_node_kind_t *kind);          /* node_kind.c: content == NONE */
+/* 内部関数（定義するファイル）。葉の判定 amark_node_kind_is_leaf は公開 API（node_kind.h）に移した */
 void amark_node_string_deinit(amark_node_string_t *string);           /* node.c: 解放して未設定に戻す */
 void amark_node_release_values(amark_node_t *node);                   /* node.c: 文字列の解放と destroy_data の呼び出し */
 amark_error_t amark_node_string_set(amark_node_string_t *string, amark_slice_t value); /* node_value.c: 検査・複製・置換 */
@@ -312,8 +308,8 @@ amark_slice_t amark_node_string_get(const amark_node_string_t *string);         
 
 | Field | Detail |
 |-------|--------|
-| Intent | 種別の表現、18 の標準種別の定数表、種別の問い合わせと受け入れ判定 |
-| Requirements | 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 4.7, 6.1, 6.2, 6.3, 6.4, 6.5, 6.6 |
+| Intent | 種別の表現、18 の標準種別の定数表、種別の問い合わせ、葉の判定と受け入れ判定 |
+| Requirements | 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 4.7, 6.1, 6.2, 6.3, 6.4, 6.5, 6.6 |
 
 **Responsibilities & Constraints**
 - 標準種別は `src/node_kind.c` の `static const struct amark_node_kind` の表に持つ。可変のグローバル状態ではない。ハンドルはプロセス内で常に同一（2.6）
@@ -375,6 +371,7 @@ AMARK_API amark_node_type_t amark_node_kind_get_type(const amark_node_kind_t *ki
 AMARK_API amark_slice_t amark_node_kind_get_name(const amark_node_kind_t *kind);
 AMARK_API amark_node_category_t amark_node_kind_get_category(const amark_node_kind_t *kind);
 AMARK_API amark_node_content_t amark_node_kind_get_content(const amark_node_kind_t *kind);
+AMARK_API bool amark_node_kind_is_leaf(const amark_node_kind_t *kind);
 AMARK_API bool amark_node_kind_can_contain(const amark_node_kind_t *parent, const amark_node_kind_t *child);
 ```
 
@@ -404,6 +401,7 @@ AMARK_API bool amark_node_kind_can_contain(const amark_node_kind_t *parent, cons
 - `amark_node_kind_get_standard(type)`: 1〜18 なら標準種別のハンドル、それ以外（`NONE`、`EXTENSION`、未定義値）は `NULL`（2.6）
 - `amark_node_kind_get_type`: 標準種別はその値、拡張種別は `AMARK_NODE_EXTENSION`、`NULL` は `AMARK_NODE_NONE`（2.4）
 - `amark_node_kind_get_name`: 名前を借用スライスで返す（`data[length] == '\0'`）。寿命は種別と同じ。`NULL` は `{NULL, 0}`（2.5）
+- `amark_node_kind_is_leaf(kind)`: `content == AMARK_NODE_CONTENT_NONE`（子を取らない種別）なら真、それ以外は偽。`NULL` は偽（2.7）。標準・拡張で同じ方法で答える。イテレータが ENTER だけを報告する種別（9.1）はちょうどこの判定が真の種別であり、NodeIter とレンダラ（html-renderer の render_core など）は同じ関数を使って「葉か」を判定する
 - `amark_node_kind_can_contain(parent, child)` の判定（6.1〜6.6）:
   1. どちらかが `NULL`、または `child` が `root_only` なら偽
   2. `parent->content` が `NONE` なら偽
@@ -414,7 +412,7 @@ AMARK_API bool amark_node_kind_can_contain(const amark_node_kind_t *parent, cons
 
 **Implementation Notes**
 - Integration: 下流のレンダラはフックのキーに種別ハンドルを使う。標準種別のハンドルは `amark_node_kind_get_standard` で得られるため、標準・拡張を同じ表で扱える
-- Validation: `node_kind_test.c` で 18 種別すべての値・名前・分類・内容モデルと、18 × 18 の受け入れ判定表を確認する
+- Validation: `node_kind_test.c` で 18 種別すべての値・名前・分類・内容モデル・`amark_node_kind_is_leaf` の結果（`NULL` で偽を含む）と、18 × 18 の受け入れ判定表を確認する。拡張種別の `is_leaf` は `node_registry_test.c` で確認する
 - Risks: 標準種別の規則を変えると下流の木の妥当性が変わる（Revalidation Trigger）
 
 #### NodeRegistry
@@ -425,7 +423,8 @@ AMARK_API bool amark_node_kind_can_contain(const amark_node_kind_t *parent, cons
 | Requirements | 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 4.10, 13.4 |
 
 **Responsibilities & Constraints**
-- レジストリは利用者が生成・破棄する独立したオブジェクトで、グローバルな登録状態はない（4.1）。**登録の所在の決定**: 拡張ノード種別はレジストリに属する。parser-core は方言（またはパーサ）ごとに 1 つのレジストリを所有し、各拡張の「ノード種別の登録」部分はそのレジストリへの `amark_node_registry_add` として実行する。レンダラはレジストリを所有せず、種別ハンドルまたは名前（`amark_node_registry_find`）でフックを結び付ける
+- レジストリは利用者が生成・破棄する独立したオブジェクトで、グローバルな登録状態はない（4.1）。**登録の所在の決定**: 拡張ノード種別はレジストリに属する。parser-core は**拡張ごとに 1 つ**のレジストリを所有し（拡張が自分の宣言したノード種別を自分のレジストリへ `amark_node_registry_add` する）、そのレジストリを parser-core の公開 API には出さない。拡張間の種別名の重複は、方言が拡張の追加時に検査する（1 つのレジストリ内の一意性は本コンポーネント、レジストリをまたぐ一意性は parser-core の方言の責務）。レンダラはレジストリを所有せず、parser-core の `amark_extension_find_kind` / `amark_dialect_find_kind`（または `amark_extension_get_kind_at`）で得た種別ハンドルでフックを結び付ける
+- 寿命: レジストリを所有する拡張（または拡張を所有する方言）は、その種別のノードと、その種別のフックを保持するレンダラより長く生きなければならない。これは 4.10 の義務を parser-core が拡張・方言の寿命として利用者に約束する形で引き継ぐ
 - 種別は個別に確保し、レジストリはそのポインタの配列を持つ。配列の伸長でハンドルは移動しない（4.7）
 - レジストリはその種別のノードがすべて破棄されるまで破棄してはならない。ライブラリは検出しない（4.10）。`node_kind.h` に明記する
 
@@ -476,7 +475,7 @@ AMARK_API const amark_node_kind_t *amark_node_registry_find(const amark_node_reg
 - Concurrency strategy: `amark_node_registry_add` と他の操作を同時に行わない。登録が終わった後は、`find` と、そのレジストリの種別を使うノードの生成・操作（異なる木）を複数スレッドから同時に行ってよい（13.4）。種別は登録後に変更されない
 
 **Implementation Notes**
-- Integration: parser-core は拡張単位の登録時にこの API を呼び、`AMARK_ERROR_ALREADY_EXISTS` をそのまま利用者へ返せる
+- Integration: parser-core は拡張の生成時に自分のレジストリへこの API を呼び、`AMARK_ERROR_ALREADY_EXISTS`（拡張内または標準種別との重複）をそのまま利用者へ返せる。方言は拡張の追加時に、他の拡張のレジストリを `amark_node_registry_find` で引いて名前の重複を検査できる
 - Validation: `node_registry_test.c` で登録・検索・重複（標準名と拡張名）・名前規則の境界（64 / 65 バイト、先頭数字、大文字、ハイフン）・記述子の矛盾・失敗注入の網羅パターン（失敗時 `live` が呼び出し前と同じ）を確認する
 - Risks: レジストリを先に破棄する誤用は検出できない。テストでは扱わず、ヘッダの文書で防ぐ
 
@@ -715,7 +714,7 @@ AMARK_API amark_error_t amark_node_iter_reset(amark_node_iter_t *iter, amark_nod
 - `amark_node_iter_next(iter)`（9.1〜9.4）:
   - `iter == NULL` または `DONE`: `DONE` を返す（9.3）
   - `NONE`: 根があれば `(root, ENTER)`、なければ `DONE`
-  - `ENTER` かつ現在ノードが葉でない（`content != NONE`）: 最初の子があれば `(first_child, ENTER)`、なければ `(node, EXIT)`（9.2）
+  - `ENTER` かつ現在ノードが葉でない（`!amark_node_kind_is_leaf(kind)`）: 最初の子があれば `(first_child, ENTER)`、なければ `(node, EXIT)`（9.2）
   - それ以外（`EXIT`、または葉の `ENTER`）: 現在ノードが起点なら `DONE`。次の兄弟があれば `(next, ENTER)`。親があれば `(parent, EXIT)`。親もなければ（起点でないノードが取り外された）`DONE`
   - 葉の種別は `ENTER` だけを報告する（9.1）。起点の外へは出ない（9.4）
 - `amark_node_iter_get_node` / `get_event`: 現在の位置。`NONE` と `DONE` では `NULL` を返す / 現在のイベント
@@ -751,7 +750,7 @@ AMARK_API amark_error_t amark_node_iter_reset(amark_node_iter_t *iter, amark_nod
 | Intent | foundation の列挙へ 2 コードを追加する |
 | Requirements | 12.1 |
 
-- Cross-Spec Change Note の表どおりに `error.h`・`src/error.c`・`tests/error_test.c` を同時に更新する。foundation の `-Wswitch` による文字列漏れ検出がそのまま働く
+- foundation design.md のエラー表に登録済みの値（5、6）と文字列どおりに、`error.h`・`src/error.c`・`tests/error_test.c` へ同時に追記する。foundation の `-Wswitch` による文字列漏れ検出がそのまま働く
 
 #### NodeIntegration
 
@@ -781,7 +780,7 @@ graph TB
     Node -->|owns| Values[owned strings and data]
     Node -->|owns children| Node
     Caller[caller] -->|owns roots| Node
-    Caller -->|owns| Registry
+    Extension[parser-core extension] -->|owns| Registry
 ```
 
 ## Error Handling
@@ -811,8 +810,8 @@ graph TB
 すべて公開 API だけを使い、確保失敗はテスト側の差し替えアロケータ（foundation の `test_allocator_*`）で注入する。
 
 ### Unit Tests
-- `node_kind_test.c`: 18 標準種別の識別値（1〜18）・名前・分類・内容モデル（2.1〜2.3）、`get_standard` が `NONE`・`EXTENSION`・未定義値で `NULL` を返し同じ値で常に同じハンドルを返すこと（2.6）、18 × 18 の受け入れ判定表が設計の表どおりであること（6.1、6.2、6.6）
-- `node_registry_test.c`: 登録とハンドル・名前・分類の問い合わせ（2.5、4.2）、名前の境界（64 バイト可・65 バイト不可・先頭数字・大文字・ハイフン・空）（4.4）、標準名・既登録名の重複（4.3）、記述子の矛盾 5 パターン（4.5）、名前による検索（標準・拡張・該当なし）（4.6）、多数登録後も先に得たハンドルが同じで検索結果と一致（4.7）、登録に渡した名前バッファを書き換えても名前が変わらない（4.8）、拡張の内容モデル・明示親限定・独自判定の受け入れ判定（6.3〜6.5）、失敗注入の網羅パターンと破棄後の `live == 0`（4.9、12.3、12.6）
+- `node_kind_test.c`: 18 標準種別の識別値（1〜18）・名前・分類・内容モデル（2.1〜2.3）、`amark_node_kind_is_leaf` が葉の 8 種別だけで真・`NULL` で偽（2.7）、`get_standard` が `NONE`・`EXTENSION`・未定義値で `NULL` を返し同じ値で常に同じハンドルを返すこと（2.6）、18 × 18 の受け入れ判定表が設計の表どおりであること（6.1、6.2、6.6）
+- `node_registry_test.c`: 登録とハンドル・名前・分類の問い合わせ（2.5、4.2）、名前の境界（64 バイト可・65 バイト不可・先頭数字・大文字・ハイフン・空）（4.4）、標準名・既登録名の重複（4.3）、記述子の矛盾 5 パターン（4.5）、名前による検索（標準・拡張・該当なし）（4.6）、多数登録後も先に得たハンドルが同じで検索結果と一致（4.7）、登録に渡した名前バッファを書き換えても名前が変わらない（4.8）、拡張の内容モデル・明示親限定・独自判定の受け入れ判定（6.3〜6.5）、拡張種別の `amark_node_kind_is_leaf`（内容モデル NONE だけ真、2.7）、失敗注入の網羅パターンと破棄後の `live == 0`（4.9、12.3、12.6）
 - `node_test.c`: 標準・拡張の生成と初期リンク（1.1、1.2）、未知種別（1.3）、根の破棄と `live == 0`（1.4、12.6）、`NULL` の破棄（1.7）、根の参照がすべて `NULL`（8.1、8.2）、根の取り外しが何もしない（7.5）、生成の失敗注入（12.3）
 - `node_value_test.c`: 既定値（3.4）、各値の往復と借用スライスの NUL 終端（3.1〜3.3）、範囲の境界と未定義のリスト種別（3.5）、UTF-8 不正（3.6）、種別不一致（3.7、3.8）、NUL を含む値（3.9）、長さ `SIZE_MAX` のスライスで `OVERFLOW`（12.5）、失敗注入で旧値が残る（12.3）、付随データの所有・後片付け回数・同一値・`destroy_data == NULL`・標準種別の拒否・未設定時 `NULL`（5.1〜5.6）
 - `node_edit_test.c`: 追加・先頭追加・前後挿入・置換・取り外しの位置とリンクの整合と参照（7.1、7.2、7.4〜7.6、8.1〜8.3）、子を持つ木の破棄と親を持つノードの破棄（1.4、1.5、1.6）、深さ 10 万段の破棄（13.1）、移動（7.3）、引数エラー（7.7）、規則違反と循環（6.7、6.8）、失敗時の全リンク不変（7.8）、深い木の構築が線形時間で終わる（13.2）
@@ -837,5 +836,5 @@ graph TB
 - サイズ計算は確保前にあふれを確認する（文字列の複製、正規化の連結）
 
 ## Downstream Integration Guidance
-- **parser-core**: 方言（またはパーサ）が `amark_node_registry_t` を 1 つ所有し、拡張の「ノード種別」部分は登録時にそのレジストリへ `amark_node_registry_add` する。パーサが出力する文書は、そのレジストリより先に破棄されなければならないことを parser-core が利用者に約束する。解析中の状態はノードに持たせず parser-core が別に持つ。解析後に `amark_node_normalize` を呼べる
-- **html-renderer / markdown-renderer**: イテレータで走査し、標準種別は `amark_node_get_type` の `switch`、フック（追加・上書き）は `const amark_node_kind_t *` をキーに引く。拡張がレンダラフックを登録するときは、`amark_node_registry_add` で得たハンドル（または `amark_node_registry_find` で名前から得たハンドル）を渡す。標準種別の上書きは `amark_node_kind_get_standard` のハンドルで同じ表に入れられる
+- **parser-core**: **拡張ごとに** `amark_node_registry_t` を 1 つ所有し、拡張が宣言したノード種別をそのレジストリへ `amark_node_registry_add` する。レジストリは parser-core の公開 API に出さない。方言は拡張の追加時に、拡張間の種別名の重複を検査する。拡張（または拡張を所有する方言）は、その種別のノードを含む文書と、その種別のフックを保持するレンダラより長く生きなければならないことを parser-core が利用者に約束する（標準種別だけの文書はこの制約を受けない）。解析中の状態はノードに持たせず parser-core が別に持つ。解析後に `amark_node_normalize` を呼べる
+- **html-renderer / markdown-renderer**: イテレータで走査し、標準種別は `amark_node_get_type` の `switch`、フック（追加・上書き）は `const amark_node_kind_t *` をキーに引く。拡張種別のハンドルは parser-core の `amark_extension_find_kind` / `amark_dialect_find_kind`（または `amark_extension_get_kind_at`）で得る。標準種別の上書きは `amark_node_kind_get_standard` のハンドルで同じ表に入れられる。葉の判定（ENTER だけが報告される種別か）は公開の `amark_node_kind_is_leaf` を使い、内容モデルから独自に導かない

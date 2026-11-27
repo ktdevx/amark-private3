@@ -32,7 +32,7 @@
 - 後処理 `amark_postprocessor_t`、定義テーブル `amark_definition_table_t`、拡張ごとの解析状態
 - 拡張 `amark_extension_t`（記述子、ノード種別の登録、鍵付きの付随データ）と方言 `amark_dialect_t`（所有、名前の衝突、優先順位、凍結）
 - 上限（ブロックの入れ子の深さ、ブラケットの深さ）と計算量の保証
-- foundation のエラー列挙へ追加する `AMARK_ERROR_INVALID_STATE` の意味と文字列
+- foundation のエラー列挙へ追加する `AMARK_ERROR_INVALID_STATE` を parser-core で返す条件と、実装時の追記（値・文字列・意味の定義元は foundation design.md のエラー表）
 - 「Cross-Spec Contract」に定める、拡張とレンダラを結び付ける契約
 
 ### Out of Boundary
@@ -46,7 +46,7 @@
 - foundation の公開ヘッダ: `export.h`、`error.h`、`memory.h`、`slice.h`、`utf8.h`、`buffer.h`
 - node-tree の公開ヘッダ: `node_kind.h`、`node.h`、`node_iter.h`
 - C 標準ライブラリ: `<stddef.h>`、`<stdint.h>`、`<stdbool.h>`、`<string.h>`
-- テスト: Naos、foundation の `tests/support/test_allocator`
+- テスト: Naos、foundation の `tests/support/test_allocator`（テスト補助は `tests/support/test_<area>.{h,c}`、関数は `test_<area>_*` の命名に従う）
 - 依存方向（左ほど下位。右から左への include のみ）: `foundation → node-tree → parse_shared.h → block_syntax.h, inline_syntax.h → extension.h → dialect.h → parser.h`。`src/parser_internal.h` は本 spec の `.c` だけが include する。parser-core はレンダラのヘッダを include せず、node-tree の非公開ヘッダ `node_internal.h` を include しない
 
 ### Revalidation Triggers
@@ -54,7 +54,8 @@
 - 行処理アルゴリズムの順序（継続 → 開始 → 遅延 → 内容）、段落の中断・遅延の可能性の定義、空行の記録規則の変更
 - デリミタ処理の手順・openers_bottom の索引、ブラケットの閉じと無効化の意味の変更
 - 段落のフォールバック規則（空白の除去、遅延継続、処理器の呼び出し時点）の変更
-- 拡張・方言の所有規則、名前の衝突規則、優先順位の規則、凍結の規則、寿命の義務の変更
+- 拡張・方言の所有規則、名前の衝突規則、優先順位の規則、凍結の規則、寿命の義務（標準種別だけの文書は拡張・方言・パーサの破棄後も有効、という保証を含む。`amark_commonmark_parse` が依存する）の変更
+- 「空行」の定義（継続判定と開始判定の後の行の残りがスペースとタブだけ）、インライン対象を 1 つずつ完了まで解析する順序と `amark_inline_context_get_block` の契約の変更（commonmark が依存する）
 - 鍵付きの付随データ（attachment）と種別ハンドル取得の契約の変更（レンダラ側が依存する）
 - 追加エラーコードの値・意味の変更、上限の既定値の変更
 
@@ -66,23 +67,19 @@ parser-core はレンダラの型を一切知らない。拡張・ノード種�
 2. **鍵付きの付随データ（attachment）**: `amark_extension_set_attachment(ext, key, data, destroy, user_data)` で、型を知らない任意のデータを `const void *` の鍵ごとに拡張へ結び付けられる。鍵はアドレスの同一性で比べる。レンダラの spec は自分の静的オブジェクトのアドレスを鍵として公開してよい（例: html-renderer がフック表を置く鍵）。parser-core はデータを読まず、拡張の破棄時に `destroy` を 1 回呼ぶ
 3. **結び付けるのは拡張パッケージの側**: 「構文＋ノード種別＋HTML 出力＋Markdown 出力」を提供するパッケージ（例: 将来の gfm）は、parser-core の拡張を生成する関数と、各レンダラにフックを登録する関数を自分で公開する。後者は種別ハンドル（または拡張そのもの）を受け取る。parser-core はレンダラに依存せず、レンダラは parser-core に依存しない
 4. **列挙の手段**: `amark_dialect_get_extension_count` / `amark_dialect_get_extension_at` で方言内の拡張を列挙できる。両方に依存する上位のモジュールや利用者のコードは、列挙と attachment を使って方言の全拡張のレンダラ出力を一括で登録できる
-5. **寿命**: 種別ハンドルと attachment は拡張（方言に追加後は方言）の破棄まで有効。レンダラが種別ハンドルを保持する場合、方言をレンダラより長く生かすのは利用者の義務である
+5. **寿命**: 種別ハンドルと attachment は拡張（方言に追加後は方言）の破棄まで有効。拡張（またはそれを所有する方言）は、その拡張の種別のノードを含む文書と、その種別のフックを保持するレンダラより長く生きなければならない（利用者の義務）。標準種別だけの文書と標準種別だけのフックはこの制約を受けない（標準種別のハンドルは node-tree の定数データ）
 
 html-renderer への期待: フックのキーを `const amark_node_kind_t *` とし、標準種別の上書きは `amark_node_kind_get_standard` のハンドルで同じ表に入れる。attachment を使う場合は鍵とデータの型を html-renderer 側で公開する。本契約は parser-core 側に変更を要さない。
 
-## Cross-Spec Change Note（foundation への追加要求）
+## Cross-Spec Change Note（foundation のエラー列挙）
 
-foundation の単一のエラー列挙 `amark_error_t`（`include/amark/error.h`）へ次を末尾追加する。独自のエラー型は作らない。
+本仕様が使う追加コード `AMARK_ERROR_INVALID_STATE = 7`（`"invalid state"`）は、foundation design.md のエラー表（0〜7 と所有 spec の一覧。値・文字列・意味の唯一の定義元）に登録済みである。node-tree の `AMARK_ERROR_INVALID_CHILD = 5`、`AMARK_ERROR_ALREADY_EXISTS = 6` も同じ表に登録済みである。本書では再定義しない。
 
-| 定数 | 値 | 文字列 | 意味 |
-|---|---|---|---|
-| `AMARK_ERROR_INVALID_STATE` | 7 | `"invalid state"` | オブジェクトの現在の状態ではその操作ができない（終了済み・失敗済みのパーサへの供給と終了、凍結された方言の変更、方言が所有する拡張の別の方言への追加） |
+- 本仕様での使い方: `INVALID_STATE` は、終了済み・失敗済みのパーサへの供給と終了、凍結された方言の変更、方言が所有する拡張の別の方言への追加
+- 実装時は parser-core のタスクとして `error.h`、`src/error.c`、`tests/error_test.c` に追記する（追記専用。既存の値は変えない）
+- 既存コードの使い分け: 引数の形の違反は `AMARK_ERROR_INVALID_ARGUMENT`、名前の重複と定義の重複は `AMARK_ERROR_ALREADY_EXISTS`、ノードの親子規則違反は `AMARK_ERROR_INVALID_CHILD`
 
-- 値は foundation の規則どおり次の連番の明示値とする。実装時点で 7 が他の spec（例: html-renderer）に使われていれば次の空き番号を使い、本表を更新する
-- `error.h`、`src/error.c`、`tests/error_test.c` を同時に更新する
-- 既存コードの使い分け: 引数の形の違反は `AMARK_ERROR_INVALID_ARGUMENT`、名前の重複と定義の重複は node-tree が追加した `AMARK_ERROR_ALREADY_EXISTS`、ノードの親子規則違反は node-tree の `AMARK_ERROR_INVALID_CHILD`
-
-node-tree への要求: API の変更はない。node-tree の design.md「Downstream Integration Guidance」の「方言（またはパーサ）が `amark_node_registry_t` を 1 つ所有」という記述を、本設計の決定「拡張ごとに 1 つのレジストリを所有し、方言は拡張間の名前の重複を検査する」に合わせて実装時に更新するよう依頼する（文書のみ）。
+node-tree との関係: node-tree の design.md は、本設計の決定（拡張ごとに 1 つのレジストリを拡張が所有し、parser-core の API には出さない。方言は拡張間の名前の重複を検査する）に合わせて更新済みである。
 
 ## Architecture
 
@@ -185,10 +182,10 @@ src/
 └── parser.c              # オプション、パーサの寿命と状態、供給・終了・リセット・一括パース、解析状態、後処理、正規化
 tests/
 ├── support/
-│   ├── test_syntaxes.h   # テスト用の拡張を作る関数の宣言
-│   ├── test_syntaxes.c   # テスト用の構文（下の Testing Strategy の一覧）。公開 API だけを使う
-│   ├── tree_dump.h       # 木を S 式風の文字列にする補助の宣言
-│   └── tree_dump.c       # node_iter による反復で木を文字列化（期待値比較用）
+│   ├── test_syntax.h     # テスト用の拡張を作る関数 test_syntax_* の宣言
+│   ├── test_syntax.c     # テスト用の構文（下の Testing Strategy の一覧）。公開 API だけを使う
+│   ├── test_tree_dump.h  # 木を S 式風の文字列にする補助 test_tree_dump_* の宣言
+│   └── test_tree_dump.c  # node_iter による反復で木を文字列化（期待値比較用）
 ├── parser_input_test.c      # 前処理（行末・NUL・不正 UTF-8・BOM・最終行）と UTF-8 の保証
 ├── parser_fallback_test.c   # 構文なしの段落とテキスト、空白の除去、空入力
 ├── parser_stream_test.c     # 分割供給の全分割点で一括と同一、状態遷移、リセット、一括パース
@@ -205,11 +202,12 @@ tests/
 
 ### Modified Files
 実装時に本 spec のタスクとして変更する（本 spec の作成時には変更しない）。
-- `include/amark/error.h`、`src/error.c`、`tests/error_test.c` — `AMARK_ERROR_INVALID_STATE` の追加（Cross-Spec Change Note）
-- `include/amark/amark.h` — 6 つの公開ヘッダを include に追加
-- `src/CMakeLists.txt` — 本 spec の 13 個の `.c` をソース一覧に追加
-- `tests/CMakeLists.txt` — 12 個のテスト実行ファイルを登録し、`test_syntaxes.c` と `tree_dump.c` をテスト補助ライブラリ `amark_test_support` に追加する
-- `tests/cxx_header_test.cpp` — C++ から方言の生成、一括パース、文書と方言の破棄を呼ぶ確認を追加
+- `include/amark/error.h`、`src/error.c`、`tests/error_test.c` — `AMARK_ERROR_INVALID_STATE = 7` の追記（値は foundation design.md のエラー表で登録済み）
+- `include/amark/amark.h` — 6 つの公開ヘッダの include を parser-core のブロックとして追記
+- `src/CMakeLists.txt` — 本 spec の 13 個の `.c` をソース一覧に追記
+- `tests/CMakeLists.txt` — 12 個のテスト実行ファイルを追記登録し、`test_syntax.c` と `test_tree_dump.c` をテスト補助ライブラリ `amark_test_support` のソースに追記する
+- `tests/cxx_header_test.cpp` — C++ から方言の生成、一括パース、文書と方言の破棄を呼ぶ確認を追記
+- 上の共有ファイル（包括ヘッダ、ビルド定義、C++ 検査、エラー列挙、`amark_test_support` のソース一覧）は foundation が所有する追記専用のファイルである。parser-core は自分のブロックを追記するだけで、既存の行を変更・並べ替えしない
 
 ## System Flows
 
@@ -238,6 +236,7 @@ graph TB
 - 継続判定は、文書の直下から最も内側の開いているブロックまで、各ブロックの `continue_line` を呼ぶ。`NO` で止まり、それより内側は「未一致」になる。`CLOSE` はそのブロックを閉じて行を終える（フェンスの閉じ）。`continue_line` が `NULL` のブロックは常に `NO`（見出し、区切り線）
 - 開始判定は、未一致のブロックが残る状態で始まってよい。最初のブロックを開く直前に、未一致のブロックを内側から閉じる（新しいブロックが始まった行は遅延継続にならないため）
 - 開始判定を呼ぶ位置は「現在の位置」。構文は字下げを自分で読み飛ばす。`start_chars` を持つ構文は、現在の位置から最初の空白でない文字がその集合に含まれるときだけ呼ばれる（空行では呼ばれない）。`start_chars == NULL` の構文は毎回呼ばれる
+- **空行の定義**（4.1、7.1、8.4、8.5）: 継続判定と開始判定で読み進めた後の現在位置から行末までがスペースとタブだけである行を空行とする（BlockLine の `blank` を、その時点の位置で評価する）。構文を含まない方言では読み進めがないため、行全体がスペースとタブだけの行と一致する。例: `> - a` / `>` / `> - b` の 2 行目は、引用の `continue_line` が `>` を読み進めた後の残りが空なので空行であり、項目に空行が記録されて CommonMark どおりリストが loose になる
 - 遅延継続: 新しいブロックが開かれず、未一致のブロックがあり、前の行の終わりで最も内側だったブロックが遅延継続を受け付ける（`AMARK_BLOCK_FLAG_LAZY` を持つ INLINE のブロック。フォールバック段落は常に持つ）開いたブロックで、行が空行でないとき、行の残りをそのブロックに加え、未一致のブロックを閉じない
 - 内容の追加: 未一致のブロックを閉じた後の最も内側の開いているブロック（tip）が RAW なら行の残りを蓄え、INLINE なら行として加える。BLOCKS か NONE で行が空行でなければ、子を受け入れる最も内側のブロックの下にフォールバック段落を開いて加える。空行は何も加えない
 - 文書の終わりでは、開いているすべてのブロックを内側から閉じる
@@ -306,7 +305,7 @@ stateDiagram-v2
 | 1.1, 1.2, 1.3, 1.4 | 生成とオプション | ParserCore | `amark_parser_create`、`amark_parser_options_init` | パーサの状態 |
 | 1.5, 1.6, 1.7 | 破棄・リセット | ParserCore | `amark_parser_destroy`、`amark_parser_reset` | パーサの状態 |
 | 2.1, 2.2, 2.5, 2.6 | 分割供給と同一性 | ParserCore, InputReader | `amark_parser_feed` | 1 行の処理 |
-| 2.3, 2.4, 2.8 | 終了と一括パース | ParserCore | `amark_parser_finish`、`amark_parse` | インライン段階 |
+| 2.3, 2.4, 2.8 | 終了と一括パース | ParserCore | `amark_parser_finish`、`amark_parser_parse` | インライン段階 |
 | 2.7 | 終了後の拒否 | ParserCore | `AMARK_ERROR_INVALID_STATE` | パーサの状態 |
 | 3.1, 3.2, 3.3, 3.4, 3.5, 3.7 | 行末・NUL・不正 UTF-8・BOM | InputReader | 内部 `amark_input_reader_*` | 1 行の処理 |
 | 3.6 | タブの桁と部分消費 | BlockLine, BlockContext | `amark_block_context_advance_columns` ほか | 1 行の処理 |
@@ -317,24 +316,24 @@ stateDiagram-v2
 | 6.1, 6.2, 6.4, 6.7 | 継続とクローズ順 | BlockEngine | `continue_line`、結果の列挙 | 1 行の処理 |
 | 6.3, 6.5 | 内容の扱い 4 種と RAW の追加 | BlockEngine, BlockLine | `amark_block_content_t` | 1 行の処理 |
 | 6.6, 6.8 | finalize とブロックの状態 | BlockEngine, BlockContext | `finalize`、`destroy_state` | クローズ |
-| 7.1, 7.6 | 遅延継続 | BlockEngine, Paragraph | `AMARK_BLOCK_FLAG_LAZY` | 1 行の処理 |
+| 7.1, 7.6 | 遅延継続と空行の定義 | BlockEngine, Paragraph, BlockLine | `AMARK_BLOCK_FLAG_LAZY`、`amark_block_context_is_blank` | 1 行の処理 |
 | 7.2, 7.3 | 段落の行の提供と引き取り | Paragraph, BlockContext | `amark_block_context_get_paragraph`、`amark_block_context_open_from_paragraph` | 1 行の処理 |
 | 7.4, 7.5 | 段落の内容の処理器 | Paragraph | `amark_paragraph_processor_t` | クローズ |
 | 8.1, 8.2 | 定義テーブル | DefinitionTable, ParserMap | `amark_definition_table_add`、`_find` | — |
 | 8.3 | 拡張ごとの解析状態 | ParserCore, Extension | `state_create`、`state_destroy`、`*_get_state` | パーサの状態 |
-| 8.4, 8.5 | 空行の記録と問い合わせ | BlockEngine, BlockContext | `record_blank`、`amark_block_context_ends_with_blank` | 1 行の処理 |
+| 8.4, 8.5 | 空行（継続・開始の後の残りで判定）の記録と問い合わせ | BlockEngine, BlockContext, BlockLine | `record_blank`、`amark_block_context_ends_with_blank` | 1 行の処理 |
 | 8.6 | 解析中の状態をノードに持たない | ParserCore, BlockEngine | ブロック記録（パーサ側の表） | パーサの状態 |
-| 9.1, 9.2, 9.3, 9.4, 9.5, 9.6 | インラインの呼び出しとテキスト | InlineEngine | `amark_inline_syntax_t`、`amark_inline_context_*` | インライン段階 |
+| 9.1, 9.2, 9.3, 9.4, 9.5, 9.6 | インライン対象の逐次処理、呼び出しとテキスト | InlineEngine | `amark_inline_syntax_t`、`amark_inline_context_*`、`amark_inline_context_get_block` | インライン段階 |
 | 9.7 | トリガー文字の検証 | Extension | `amark_extension_create` | — |
 | 10.1, 10.2, 10.3, 10.4, 10.5 | デリミタ処理 | InlineDelimiter | `amark_delimiter_handler_t`、`amark_inline_context_push_delimiter` | インライン段階 |
 | 11.1, 11.2, 11.3, 11.4, 11.5, 11.6 | ブラケット処理 | InlineBracket | `amark_inline_context_push_bracket` ほか | インライン段階 |
 | 12.1, 12.2 | 後処理 | ParserCore | `amark_postprocessor_t` | インライン段階 |
 | 13.1, 13.2, 13.3, 13.4 | 拡張の生成と種別 | Extension | `amark_extension_desc_t`、`amark_extension_create` | — |
 | 13.5, 13.6 | attachment と破棄 | Extension | `amark_extension_set_attachment`、`_get_attachment` | — |
-| 13.7, 13.8 | 同じ API・寿命の義務 | Extension, Dialect | 公開ヘッダの文書 | — |
+| 13.7, 13.8 | 同じ API・寿命の義務（拡張種別を含む文書に限る） | Extension, Dialect | 公開ヘッダの文書 | — |
 | 14.1, 14.2, 14.3, 14.4 | 追加・衝突・順序・優先順位 | Dialect | `amark_dialect_add_extension`、`amark_dialect_set_priority` | — |
 | 14.5, 14.6, 14.8 | 取り外し・検索・破棄 | Dialect | `amark_dialect_remove_extension`、`_find_*`、`_destroy` | — |
-| 14.7, 14.9 | 凍結と寿命の義務 | Dialect, ParserCore | `amark_dialect_freeze` | パーサの状態 |
+| 14.7, 14.9 | 凍結と寿命の義務（拡張種別を含む文書に限る） | Dialect, ParserCore | `amark_dialect_freeze`、`dialect.h` の文書 | パーサの状態 |
 | 15.1, 15.5 | 線形時間とメモリ | BlockEngine, InlineEngine, InlineDelimiter, InlineBracket, Paragraph | 計算量の規則 | 全フロー |
 | 15.2 | ブロックの深さの上限 | BlockEngine | `max_nesting_depth` | 1 行の処理 |
 | 15.3 | ブラケットの上限 | InlineBracket | `max_bracket_depth` | インライン段階 |
@@ -514,7 +513,7 @@ AMARK_API void *amark_extension_get_attachment(const amark_extension_t *extensio
 - `get_kind_at`: 範囲外は `NULL`。`find_kind`: この拡張の種別だけを名前で探す（標準種別は返さない）
 - `set_attachment(ext, key, data, destroy, user_data)`: `ext`・`key` が `NULL` は `AMARK_ERROR_INVALID_ARGUMENT`。同じ鍵があれば旧データの `destroy` を呼んで置き換える（同じ `data` なら何もしない）。`data == NULL` は鍵の削除（旧データの `destroy` を呼ぶ）。新しい鍵の確保失敗は `AMARK_ERROR_NO_MEMORY` でデータの所有は移らない（13.5）。凍結された方言の拡張にも設定できる（解析に影響しないため）。ただしその拡張を使う解析と同時に呼んではならない
 - `get_attachment`: 鍵の一致するデータ、なければ `NULL`
-- 寿命の義務（13.8、`extension.h` に明記）: 拡張の種別のノードを含む文書は、拡張の破棄（方言に追加済みなら方言の破棄）より先に破棄すること
+- 寿命の義務（13.8、`extension.h` に明記）: 拡張の種別のノードを**含む**文書は、拡張の破棄（方言に追加済みなら方言の破棄）より先に破棄すること。その種別のフックを保持するレンダラも同様。標準種別のノードだけからなる文書はノードが node-tree の定数の種別だけを参照するため、拡張の破棄の後も有効である
 
 **Implementation Notes**
 - Validation: `extension_test.c` で正常な生成と種別の取得、各検証エラー、種別名の重複（拡張内、標準名）、トリガー文字の境界（`0x1F`、`0x7F`、`0x80`、`\n`）、attachment の置換・削除・後片付けの回数、所有された拡張の destroy が何もしないこと、失敗注入の網羅パターン（失敗時 `live` が呼び出し前と同じ）
@@ -564,7 +563,7 @@ AMARK_API bool amark_dialect_is_frozen(const amark_dialect_t *dialect);
 - `find_kind(name)`: 標準種別（`amark_node_kind_get_standard` の 1〜18 の名前）、次に追加順に各拡張の `amark_extension_find_kind`。なければ `NULL`（14.6）
 - `freeze`: 呼び出し表を構築して凍結する。既に凍結済みなら何もせず `AMARK_OK`。確保失敗は `AMARK_ERROR_NO_MEMORY` で凍結しない。`amark_parser_create` は内部で `freeze` を呼ぶ（14.7）。凍結は解除できない
 - `destroy`: 拡張を追加順に破棄し（`owner` を外して `amark_extension_destroy`）、自身を解放する（14.8）
-- 寿命の義務（14.9、`dialect.h` に明記）: 方言は、それを使うすべてのパーサと、それらが返したすべての文書より後に破棄すること
+- 寿命の義務（14.9、`dialect.h` に明記）: 方言は、それを使うすべてのパーサと、それらが返した文書のうち方言の拡張の種別のノードを含むものより後に破棄すること。返した文書はパーサと方言を参照しないため、標準種別のノードだけからなる文書は方言とパーサの破棄の後も有効である（commonmark の `amark_commonmark_parse` は、内部で作った方言とパーサを破棄してから文書を返すことにこの保証を使う）
 
 ##### State Management
 - State model: 「組み立て中」と「凍結」の 2 状態。凍結後は構文の構成と順序が変わらない
@@ -601,7 +600,7 @@ AMARK_API bool amark_dialect_is_frozen(const amark_dialect_t *dialect);
 | Intent | 1 行の中の現在位置・桁・タブの部分消費の管理 |
 | Requirements | 3.6, 5.4, 6.5 |
 
-- 状態: 行（スライス）、バイト位置 `offset`、桁 `column`、`partial_tab`（現在位置のタブのうち未消費の桁数、0〜3）、最初の空白でない位置 `first_nonspace` とその桁、`blank`（`first_nonspace` が行末）
+- 状態: 行（スライス）、バイト位置 `offset`、桁 `column`、`partial_tab`（現在位置のタブのうち未消費の桁数、0〜3）、現在位置からの最初の空白でない位置 `first_nonspace` とその桁、`blank`（`first_nonspace` が行末。つまり現在位置から行末までスペースとタブだけ）。エンジンが空行の判定（遅延継続、空行の記録、フォールバック段落の継続と開始）に使う `blank` は、継続判定と開始判定を終えた時点の位置で評価した値である
 - タブの桁: タブは次の 4 の倍数の桁へ進める（3.6）
 - `advance(bytes)`: バイト単位で進める。タブの途中にいる場合はそのタブの残りを消費してから数える。行末で止める
 - `advance_columns(columns)`: 桁単位で進める。タブの幅が残りの桁より大きければ、`offset` をタブに置いたまま `partial_tab` に残りの桁を記録する（部分消費、3.6）
@@ -756,7 +755,7 @@ typedef struct amark_paragraph_processor
 **クローズ時**（6.6）
 - `finalize(ctx, node, state, content, user_data)` の `content`: RAW は蓄えた行（各行の末尾に `\n`）、INLINE は蓄えた行を `\n` で連結した内容（末尾の改行なし）、BLOCKS と NONE は空
 - `set_inline_content(ctx, content)`: INLINE のブロック自身のインライン内容を置き換える（内容を複製）
-- `add_inline_target(ctx, node, content)`: クローズ中のブロックの子孫 `node`（INLINE の子を受け入れる種別）を、内容 `content`（複製）でインライン解析の対象に加える。`node` が子孫でない、子を受け入れない: `AMARK_ERROR_INVALID_ARGUMENT`
+- `add_inline_target(ctx, node, content)`: クローズ中のブロックの子孫 `node`（INLINE の子を受け入れる種別）を、内容 `content`（複製）でインライン解析の対象に加える。`node` が子孫でない、子を受け入れない: `AMARK_ERROR_INVALID_ARGUMENT`。既に対象として登録されたノードを再び渡すと内容を置き換える（対象はノードごとに 1 つ、9.1）
 - `ends_with_blank(ctx, node)`: その解析で作られた任意のブロックについて、記録された「最後の行が空行」を返す（記録がなければ偽、8.4）。リストの tight 判定は、リストの `finalize` が項目と子孫を node-tree の参照関数でたどってこれを問い合わせ、`amark_node_set_list_tight` を呼んで行う
 
 **ブロックの状態**（6.8）: `open` に渡した `state` は、`continue_line`・`finalize`・`can_contain`・`record_blank` に渡され、ブロックを閉じた後（`finalize` の後）、または解析の失敗・リセット・パーサの破棄で閉じられずに捨てられる時に、`destroy_state(state, user_data)` が 1 回だけ呼ばれる
@@ -800,7 +799,7 @@ typedef struct amark_paragraph_processor
   - `CONTAINER` の後は、開いているブロックの深さ（文書を除く）が `max_nesting_depth` 未満である限り、新しい位置で最初の構文から試行を繰り返す。上限に達したら試行をやめ、行の残りを内容の追加へ回す（15.2）
   - 新しいブロックが開かれなかった行で、遅延継続の条件を満たさず、tip が BLOCKS または NONE で行が空行でなければ、追加先（最後に継続したブロック、子を受け入れなければ受け入れる祖先）にフォールバック段落を開く（4.2、4.6）
   - RAW のブロックへの追加は BlockLine の内容の取り出し（部分消費の補い、6.5）と `\n`
-- 空行の記録（8.4、8.5）: 行が空行のとき、最も内側の開いているブロック（その行で開いたものを含む）に、構文の `record_blank(node, state, user_data)`（なければ真）の結果を `last_line_blank` として記録し、その祖先の記録を偽にする。空行でない行では最も内側のブロックの記録を偽にする（cmark の `S_set_last_line_blank` と同じ規則を、例外を構文側の宣言に移したもの）
+- 空行の記録（8.4、8.5）: 行が空行（継続判定と開始判定の後の残りがスペースとタブだけ。「1 行の処理」の空行の定義）のとき、最も内側の開いているブロック（その行で開いたものを含む）に、構文の `record_blank(node, state, user_data)`（なければ真）の結果を `last_line_blank` として記録し、その祖先の記録を偽にする。空行でない行では最も内側のブロックの記録を偽にする（cmark の `S_set_last_line_blank` と同じ規則を、例外を構文側の宣言に移したもの）
 - ブロック記録（8.4、8.6）: ノードのポインタをキーとする ParserMap に `amark_block_record_t` を持ち、インライン段階の完了まで保つ。解析中の状態はノードに書かない
 - クローズ（6.6、6.8）: 「ブロックのクローズ」の図。`finalize` の後に `destroy_state`。クローズ済みのブロックの内容バッファは、INLINE の内容をインライン対象として記録に移した後で解放する
 - 計算量（15.1）: 1 行あたり、継続判定は一致したブロック数（行の中の記号の数で抑えられる）に比例し、閉じるブロックの総数は開いたブロックの総数以下。開始判定は位置ごとに構文数の定数回。全体は入力長に線形
@@ -865,10 +864,10 @@ AMARK_API amark_definition_table_t *amark_inline_context_get_definitions(amark_i
 AMARK_API void *amark_inline_context_get_state(amark_inline_context_t *ctx);
 AMARK_API const amark_extension_t *amark_inline_context_get_extension(const amark_inline_context_t *ctx);
 ```
-- 処理順（9.1）: インライン段階の開始時、`amark_node_iter` で文書を走査し、インライン対象の記録を持つノードに出会うたびにその内容を解析する。対象のノードの子として結果を追加する
+- 処理順（9.1）: インライン段階の開始時、`amark_node_iter` で文書を走査し、インライン対象の記録を持つノードに出会うたびにその内容を解析する。対象のノードの子として結果を追加する。対象は 1 つずつ処理し、ある対象の解析（内容の終わりのブラケットとデリミタの処理を含む）を完了してから次の対象へ進む。対象の記録はノードのポインタをキーとするため、各対象は互いに異なるノードである（同じノードを再登録すると内容が置き換わる）
 - 走査（9.2、9.3）: 内容を先頭から読み、トリガー表（凍結時に作った 256 要素の表）に構文の一覧がないバイトは保留テキストへ連続で加える（`memchr` 相当の連続走査）。一覧があるバイトでは順に `parse(ctx, user_data, &handled)` を呼び、`handled` が真で位置が進んでいれば採用、そうでなければ位置を戻して次の構文へ。どの構文も採用されなければそのバイトをテキストにする
 - 進まない処理（9.4）: `handled` が真でも位置が呼び出し前から進んでいなければ「処理しなかった」として扱い、その呼び出しの間に追加したノードとテキストを取り消す（取り消しのために、呼び出し前の追加先の最後の子と保留テキストの長さを記録する）。デリミタとブラケットの登録は必ず位置を進めるため、進まない呼び出しで取り消す対象は追加したノードとテキストだけである
-- 文脈（9.5）: `get_content` は内容全体（妥当な UTF-8、NUL を含まない）、`get_offset` は現在位置、`advance` は内容の終わりで止まる。直前・直後の文字は `get_content` と `get_offset` で構文自身が復号する（flanking の判定用）。`get_block` は対象のノード
+- 文脈（9.5）: `get_content` は内容全体（妥当な UTF-8、NUL を含まない）、`get_offset` は現在位置、`advance` は内容の終わりで止まる。直前・直後の文字は `get_content` と `get_offset` で構文自身が復号する（flanking の判定用）。`get_block` は現在解析中のインライン対象のノード。1 つの対象の解析の間（その対象に対するすべての `parse` とデリミタの `create` の呼び出し）は常に同じノードを返し、対象が変われば別のノードを返す（9.1。構文はこれを使って対象ごとの状態をノードで区別できる）
 - テキスト（9.6）: `append_text` は保留テキストのバッファに追記するだけで、ノードの追加・デリミタ・ブラケットの登録の直前と内容の終わりにだけ 1 つの text ノードとして確定する。`trim_trailing_spaces` は保留テキストの末尾の `' '` を取り除いた数を返す（保留テキストが空なら 0。ハード改行の判定用）
 - `append_node(ctx, node)`: 保留テキストを確定してから現在の追加先（対象のノード）の末尾に `amark_node_append_child` で追加する。所有は成否にかかわらず移る。受け入れられなければ `AMARK_ERROR_INVALID_CHILD`（解析の失敗）
 - 構文が 1 つもない場合（4.4）: 内容全体が 1 つのテキストになる。内容が空なら子を作らない
@@ -990,8 +989,8 @@ AMARK_API void amark_parser_destroy(amark_parser_t *parser);
 AMARK_API amark_error_t amark_parser_reset(amark_parser_t *parser);
 AMARK_API amark_error_t amark_parser_feed(amark_parser_t *parser, const char *data, size_t length);
 AMARK_API amark_error_t amark_parser_finish(amark_parser_t *parser, amark_node_t **document);
-AMARK_API amark_error_t amark_parse(amark_dialect_t *dialect, const amark_parser_options_t *options, const char *data,
-                                    size_t length, amark_node_t **document);
+AMARK_API amark_error_t amark_parser_parse(amark_dialect_t *dialect, const char *data, size_t length,
+                                           const amark_parser_options_t *options, amark_node_t **document);
 ```
 - `options_init`: 両方を既定値 1000 にする。`NULL` は何もしない（1.4）
 - `create`（1.1〜1.3）: `dialect`・`parser` が `NULL`、`options` のいずれかの項目が 0: `AMARK_ERROR_INVALID_ARGUMENT`。`options == NULL` なら既定値（1.2）。`amark_dialect_freeze` を呼び（失敗はそのまま返す）、パーサを確保し、解析の開始（下の「解析の開始」）を行って `Ready` で返す。途中の失敗はすべて戻して `*parser` を変更しない
@@ -1001,7 +1000,8 @@ AMARK_API amark_error_t amark_parse(amark_dialect_t *dialect, const amark_parser
 - `finish(parser, &document)`（2.3、2.8）: `Ready` でなければ `AMARK_ERROR_INVALID_STATE`（2.7）。残りの行の処理 → BlockEngine の終了 → インライン段階（InlineEngine）→ `amark_node_normalize(document)` → 後処理を凍結時の順に `process(document, definitions, 拡張の状態, user_data)`（12.1。エラーなら以降を呼ばず失敗、12.2）→ 解析の後片付け（文書は破棄しない）→ `*document` に書いて `Finished`。失敗時は後片付けして `Failed`、`*document` は変更しない（16.3）
 - `reset`（1.7）: どの状態からでも後片付けをして解析の開始を行い `Ready` にする。解析の開始の失敗時は `Failed` のまま失敗を返す
 - `destroy`（1.5、1.6）: `NULL` は何もしない。後片付けをして解放する。既に返した文書には触れない
-- `amark_parse`（2.4）: `create`・`feed`・`finish`・`destroy` を順に行う。途中の失敗では生成したものをすべて解放してそのエラーを返す
+- `amark_parser_parse(dialect, data, length, options, document)`（2.4）: 引数の順序は「対象（方言）、入力（`data`, `length`）、オプション、出力」で、`feed` の `data, length` の並びに揃える。`create`・`feed`・`finish`・`destroy` を順に行う。途中の失敗では生成したものをすべて解放してそのエラーを返す。返した文書は（標準種別のノードだけなら）方言の破棄の後も有効（14.9）
+- 引数の並びの規約: 入力を受け取る関数は常に `data, length` の順で、対象のオブジェクトの直後に置く（`feed(parser, data, length)`、`parser_parse(dialect, data, length, ...)`）。入力を受け取らない `create(dialect, options, &parser)` は「対象、オプション、出力」
 - 分割の同一性（2.2）: ブロック段階は完成した行だけを処理し、行の確定は InputReader が分割位置によらず同じに行うため、木は分割に依存しない
 
 ##### State Management
@@ -1014,7 +1014,7 @@ AMARK_API amark_error_t amark_parse(amark_dialect_t *dialect, const amark_parser
 ### foundation への追加・統合
 
 #### ErrorCodeAddition
-- Cross-Spec Change Note の表どおりに `error.h`・`src/error.c`・`tests/error_test.c` を同時に更新する（16.1）
+- foundation design.md のエラー表に登録済みの値（7）と文字列どおりに、`error.h`・`src/error.c`・`tests/error_test.c` へ同時に追記する（16.1）
 
 #### ParserIntegration
 
@@ -1057,7 +1057,7 @@ graph TB
 | エラー | 返す操作と条件 |
 |---|---|
 | `AMARK_ERROR_INVALID_ARGUMENT` | 必須引数が `NULL`、オプションが 0、記述子の不正、名前の形式違反、トリガー文字の範囲外、見つからない名前の取り外し・優先順位、文脈関数の誤用 |
-| `AMARK_ERROR_INVALID_STATE`（追加） | 終了済み・失敗済みのパーサへの供給と終了、凍結された方言の変更、所有済みの拡張の追加 |
+| `AMARK_ERROR_INVALID_STATE`（foundation のエラー表で 7） | 終了済み・失敗済みのパーサへの供給と終了、凍結された方言の変更、所有済みの拡張の追加 |
 | `AMARK_ERROR_ALREADY_EXISTS`（node-tree） | 方言内の名前の重複、拡張内の種別名の重複、定義テーブルの鍵の重複 |
 | `AMARK_ERROR_INVALID_CHILD`（node-tree） | 構文が開いた・作ったノードを受け入れる親がない |
 | `AMARK_ERROR_NO_MEMORY` | すべての確保失敗 |
@@ -1070,9 +1070,9 @@ graph TB
 
 ## Testing Strategy
 
-すべて公開 API だけを使う。確保失敗は foundation の `test_allocator_*` で注入する。構文の振る舞いは `tests/support/test_syntaxes.c` のテスト用拡張で確かめ、結果は `tree_dump` の文字列（例: `(document (paragraph (text "a\nb")))`）と比較する。
+すべて公開 API だけを使う。確保失敗は foundation の `test_allocator_*` で注入する。構文の振る舞いは `tests/support/test_syntax.c` のテスト用拡張（`test_syntax_*` 関数で作る）で確かめ、結果は `tests/support/test_tree_dump.c` の `test_tree_dump_*` 関数が作る文字列（例: `(document (paragraph (text "a\nb")))`）と比較する。
 
-テスト用拡張（`test_syntaxes.c`、CommonMark の規則を簡略化したもの）: `>` のコンテナ（タブの部分消費、`record_blank` 偽）、`-` の項目とリスト（1 回の開始で 2 つを open、tight の設定）、```` ``` ```` の RAW 葉（`CLOSE`）、`    ` の字下げ RAW 葉（`maybe_lazy` 判定）、`#` の LINE_DONE 見出し、`=` の段落引き取り（`first_line = 0`）、`|` の末尾 1 行の引き取りとセルの `add_inline_target`、`[x]: url` の段落の内容の処理器（定義テーブルへの登録）、`<` の `close_after_line` 付き RAW、`` ` `` のコードスパン、`\n` の改行（`trim_trailing_spaces`）、`*` の強調（rule of 3 と分類）、`~` の取り消し線（分類 0）、`[` `]` のリンク（ブラケット、無効化、定義の検索）、`!` `[` の画像、記録用の構文（呼び出し順の観測）、エラーを返す構文、契約違反をする構文、後処理（呼び出し順とエラー）、解析状態を持つ拡張（生成・後片付けの回数）。
+テスト用拡張（`test_syntax.c`、CommonMark の規則を簡略化したもの）: `>` のコンテナ（タブの部分消費、`record_blank` 偽）、`-` の項目とリスト（1 回の開始で 2 つを open、tight の設定）、```` ``` ```` の RAW 葉（`CLOSE`）、`    ` の字下げ RAW 葉（`maybe_lazy` 判定）、`#` の LINE_DONE 見出し、`=` の段落引き取り（`first_line = 0`）、`|` の末尾 1 行の引き取りとセルの `add_inline_target`、`[x]: url` の段落の内容の処理器（定義テーブルへの登録）、`<` の `close_after_line` 付き RAW、`` ` `` のコードスパン、`\n` の改行（`trim_trailing_spaces`）、`*` の強調（rule of 3 と分類）、`~` の取り消し線（分類 0）、`[` `]` のリンク（ブラケット、無効化、定義の検索）、`!` `[` の画像、記録用の構文（呼び出し順の観測）、エラーを返す構文、契約違反をする構文、後処理（呼び出し順とエラー）、解析状態を持つ拡張（生成・後片付けの回数）。
 
 ### Unit Tests
 - `parser_input_test.c`: LF / CR / CR LF の混在（3.1）、行末なしの最終行（3.2）、NUL の置換（3.3）、不正な UTF-8（`C0 80`、`ED A0 80`、`F4 90 80 80`、途切れ `E3 81`、孤立 `80`）が最大部分列ごとに 1 つの U+FFFD になり解析が成功する（3.4）、先頭の BOM だけが除かれる（3.5）、出力の全文字列が `amark_utf8_validate` を通る（3.7）
@@ -1080,15 +1080,16 @@ graph TB
 - `extension_test.c`: 生成と種別の取得（13.1、13.2）、記述子の各エラー（13.3）、種別名の重複（13.4）、トリガー文字の境界（9.7）、attachment の設定・置換・削除・取得・破棄時の後片付け回数（13.5、13.6）、失敗注入
 - `dialect_test.c`: 追加と所有（14.1）、各衝突で状態不変・所有は呼び出し側（14.2）、試行順（14.3）、優先順位の変更（14.4）、取り外し（14.5）、検索・列挙・標準種別の検索（14.6）、凍結後の拒否（14.7）、破棄で拡張と attachment が解放される（14.8）、失敗注入
 - `block_syntax_test.c`: 開始判定の優先順位と採用（5.1）、コンテナの後の続行（5.2）、葉と LINE_DONE（5.3）、文脈の値（位置・桁・字下げ・空行・中断、5.4）、NONE で位置が戻る（5.5）、受け入れない追加先の自動クローズ（5.6）、`can_contain` の上書き（5.7）、他の拡張の構文での open（5.8）、継続の順序と未一致のクローズ時期（6.1）、`CLOSE`（6.2）、4 種の内容（6.3）、RAW の中で開始判定しない（6.4）、`>\t` の部分消費が RAW の内容に空白として現れる（3.6、6.5）、finalize の内容（6.6）、文書の終わりのクローズ（6.7）、状態の後片付けが 1 回（正常・失敗・リセット・破棄、6.8）、契約違反の検出
-- `paragraph_test.c`: `>` の中の遅延継続行と、空行・開始のある行が遅延継続にならないこと（7.1）、`AMARK_BLOCK_FLAG_LAZY` の有無（7.6）、中断時の行の提供（7.2）、`first_line = 0` と `count - 1` の引き取り（7.3）、処理器の消費と繰り返し、処理器の後で提供される行（7.4）、全消費で段落が残らない（7.5）、`ends_with_blank` と `record_blank`（8.4、8.5）、リストの tight / loose（8.4）
-- `inline_syntax_test.c`: 文書順の処理と `add_inline_target`（9.1）、同じトリガーの優先順位（9.2）、未処理とトリガーでない文字のテキスト化（9.3）、進まない処理の取り消し（9.4）、文脈の値と `trim_trailing_spaces`（9.5）、隣接テキストのまとめ（9.6）、インライン構文なしでテキスト 1 つ（4.4）、定義テーブルの共有（8.1）
+- `paragraph_test.c`: `>` の中の遅延継続行と、空行・開始のある行が遅延継続にならないこと、`>` だけの行（継続の後の残りが空）が空行として扱われること（7.1）、`AMARK_BLOCK_FLAG_LAZY` の有無（7.6）、中断時の行の提供（7.2）、`first_line = 0` と `count - 1` の引き取り（7.3）、処理器の消費と繰り返し、処理器の後で提供される行（7.4）、全消費で段落が残らない（7.5）、`ends_with_blank` と `record_blank`（8.4、8.5）、リストの tight / loose（`> - a` / `>` / `> - b` が loose になることを含む、8.4）
+- `inline_syntax_test.c`: 文書順の処理と `add_inline_target`、対象ごとに解析が完了してから次へ進むことと `get_block` が 1 つの対象の間は同じノード・対象ごとに異なるノードを返すこと（9.1）、同じトリガーの優先順位（9.2）、未処理とトリガーでない文字のテキスト化（9.3）、進まない処理の取り消し（9.4）、文脈の値と `trim_trailing_spaces`（9.5）、隣接テキストのまとめ（9.6）、インライン構文なしでテキスト 1 つ（4.4）、定義テーブルの共有（8.1）
 - `inline_delimiter_test.c`: 強調相当で CommonMark の代表例（`*foo*`、`**foo**`、`***foo***`、`*foo**bar**baz*`、`*foo**bar*`、`**foo*`）の木（10.1〜10.3）、取り消し線相当（10.2）、不一致の残り（10.5）、分類の下限（10.4、`match` の呼び出し回数で確認）
 - `inline_bracket_test.c`: リンク・画像の閉じと中の強調（11.3）、リンク後の無効化と画像では無効化しない（11.4）、一致しない閉じ（11.5）、残りの開き（11.6）、`get_content_offset` によるラベル（11.2）、定義の重複（8.2）
 
 ### Integration Tests
-- `parser_stream_test.c`: 代表的な入力（テスト用拡張の全構文、CR LF、多バイト文字、不正バイト、BOM）を全分割点の 2 分割と 1 バイトずつの供給で与え、一括と同じダンプになる（2.1、2.2）、`amark_parse` と同一（2.4）、長さ 0（2.5）、`NULL` データ（2.6）、終了後の拒否（2.7）、リセット後の再利用（1.7）、生成・オプション・破棄（1.1〜1.6）、解析状態の生成と後片付けの回数（8.3）、後処理の順序（12.1）
+- `parser_stream_test.c`: 代表的な入力（テスト用拡張の全構文、CR LF、多バイト文字、不正バイト、BOM）を全分割点の 2 分割と 1 バイトずつの供給で与え、一括と同じダンプになる（2.1、2.2）、`amark_parser_parse` と同一（2.4）、長さ 0（2.5）、`NULL` データ（2.6）、終了後の拒否（2.7）、リセット後の再利用（1.7）、生成・オプション・破棄（1.1〜1.6）、解析状態の生成と後片付けの回数（8.3）、後処理の順序（12.1）
 - `parser_error_test.c`: パーサの生成・供給・終了の失敗注入の網羅パターン（各回で `NO_MEMORY` か成功、破棄後 `live == 0`、16.2、16.5）、構文と処理器と後処理がエラーを返した場合の伝播と失敗状態（12.2、16.3）、失敗後の拒否とリセット、`NULL` 引数（16.4）、契約違反
 - `cxx_header_test.cpp`: C++ から方言の生成、一括パース、文書と方言の破棄
+- 寿命の保証（`parser_stream_test.c`）: 標準種別だけの文書を返した後にパーサと方言を破棄しても、文書の走査と破棄が成功し `live == 0` になる（13.8、14.9）
 - `error_test.c`: 追加コードの値と固有の文字列（16.1）
 
 ### Performance

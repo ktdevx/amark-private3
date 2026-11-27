@@ -29,7 +29,7 @@
 - 標準 18 種別の HTML 出力規則（本書の「組み込み出力の表」）、HTML エスケープ表、URL 安全文字表、危険な URL の判定規則
 - 安全性の既定値（生 HTML・危険な URL を抑止）と soft break の出力方法
 - フックの呼び出し規則（ENTER / EXIT、葉は ENTER のみ、子の省略、組み込みへの委譲、未登録の拡張種別は透過、エラー伝播、失敗時の出力の巻き戻し）
-- レンダラ共通の内部モジュール `render_core`（フック表と走査駆動部）。markdown-renderer はこれを再利用する
+- レンダラ共通の内部モジュール `render_core`（フック表と走査駆動部）。`src/render_core.h` はレンダラ間で共有する非公開の内部契約（cross-renderer internal contract）であり、本仕様が所有する。markdown-renderer はこれを複製せずに再利用する
 - Cross-Spec Contract（markdown-renderer が揃えるべき形、拡張・parser-core との結び付け方、commonmark の適合テストの設定）
 
 ### Out of Boundary
@@ -48,11 +48,11 @@
 
 ### Revalidation Triggers
 - フック型の引数・戻り値、コンテキスト操作の意味（子の省略、委譲、行頭保証）、ENTER / EXIT の呼び出し規則の変更（markdown-renderer と拡張に影響）
-- `render_core` の内部インターフェースの変更（markdown-renderer に影響）
+- `src/render_core.h` の内部契約（型、関数、走査の手順、子の省略後の EXIT の訪問を含む）の変更。どのような変更でも markdown-renderer の再検証を要する
 - 組み込み出力の表、エスケープ表、URL 安全文字表、危険な URL 判定の変更（commonmark の適合テストに影響）
 - 安全性の既定値、設定構造体のフィールドの変更
 - 失敗時の出力の巻き戻し規則、フック登録の置き換え・解除の規則の変更
-- node-tree のイテレータのイベント列、標準種別の値・親子規則、種別ハンドルの同一性の規則の変更（本仕様が再検証する側）
+- node-tree のイテレータのイベント列と `amark_node_iter_reset` の意味、`amark_node_kind_is_leaf`、標準種別の値・親子規則、種別ハンドルの同一性の規則の変更（本仕様が再検証する側）
 
 ## Architecture
 
@@ -97,7 +97,7 @@ graph TB
 |-------|------------------|-----------------|-------|
 | 言語 | C99（foundation の設定を継承） | 本体とテスト | 新しい依存なし |
 | ランタイム API | foundation（エラー、アロケータ、スライス、バッファ） | 出力先、確保、借用文字列 | `amark_buffer_append`、`amark_buffer_truncate` |
-| 木 | node-tree（種別ハンドル、アクセサ、イテレータ） | 入力の走査と値の取得 | `amark_node_iter_*`、`amark_node_kind_get_content` |
+| 木 | node-tree（種別ハンドル、アクセサ、イテレータ） | 入力の走査と値の取得 | `amark_node_iter_*`、`amark_node_kind_is_leaf`、`amark_node_kind_get_content` |
 | テスト | Naos v0.4.0、`amark_test_support` | テスト実行ファイル、失敗注入 | foundation の `naos_add_executable` 規約 |
 | 出力規則の基準 | cmark `html.c` / houdini（規則のみ採用、コードは取り込まない） | 期待 HTML との一致 | 詳細は `research.md` |
 
@@ -109,7 +109,7 @@ include/amark/
 └── html.h                    # 設定、レンダラ、フック型、コンテキスト操作、単発描画、エスケープ・URL ユーティリティ、利用者の義務（コメント）
 src/
 ├── render_core.h             # 非公開（レンダラ共通）: フック表と走査駆動部の型・関数。export しない
-├── render_core.c             # フック表の init/deinit/set/find、走査駆動部（イテレータ、子の省略、葉の判定）
+├── render_core.c             # フック表の init/deinit/set/find、走査駆動部（イテレータ、子の省略と省略後の EXIT の訪問。葉の判定は node-tree の amark_node_kind_is_leaf）
 ├── html_escape.c             # amark_html_escape、amark_html_escape_url、amark_html_url_is_dangerous（static const の表）
 ├── html_internal.h           # 非公開: struct amark_html_context、struct amark_html_renderer、設定の検証、組み込み出力の宣言
 ├── html_standard.c           # 標準 18 種別の組み込み出力、行頭保証、tight 判定、画像の alt 平坦化
@@ -124,7 +124,7 @@ tests/
 ├── html_inline_test.c        # インライン種別と画像（要件 4、5）
 ├── html_options_test.c       # 安全性と soft break の設定、設定の検証（要件 7、8）
 ├── html_hook_test.c          # フックの登録・置換・解除・呼び出し規則・委譲・子の省略・エラー伝播（要件 10、11）
-├── html_render_test.c        # 入口の引数、部分木、追記、決定性、失敗注入と巻き戻し、深い木、線形性（要件 1、12、13）
+├── html_render_test.c        # 入口の引数、部分木、追記、決定性、失敗注入と巻き戻し、深い木、決定的な計数による線形性（要件 1、12、13）
 └── html_commonmark_test.c    # 仕様の代表例を手組みの木で再現し期待 HTML とバイト比較（要件 9）
 ```
 
@@ -156,10 +156,15 @@ graph TB
     Err -->|no| Skip{enter and skip requested and not leaf}
     Skip -->|yes| Reset[reset iterator to node exit]
     Skip -->|no| Next
-    Reset --> Next
+    Reset --> VisitExit[set event EXIT and visit same node exit]
+    VisitExit --> ExitErr{error}
+    ExitErr -->|yes| Rollback
+    ExitErr -->|no| Next
 ```
 
-- 子の省略の要求はイベントごとに初期化する。葉（`content == NONE`）の ENTER と EXIT では無視する
+- 子の省略の要求はイベントごとに初期化する。葉（`amark_node_kind_is_leaf` が真）の ENTER では無視する（葉には EXIT がない）
+- 子の省略後の EXIT の訪問（11.3）: node-tree の `amark_node_iter_reset(iter, node, EXIT)` は「次の `next` はその位置の続きを報告する」ため、リセットだけでは同じノードの EXIT が報告されない。駆動部はリセットの直後に `walk->event = EXIT`、`skip_children = false` として同じノードの EXIT で訪問関数を自ら呼ぶ。続く `next` は EXIT の続き（次の兄弟の ENTER または親の EXIT）を報告するため、EXIT は二重に訪問されない
+- EXIT の訪問はフックのある種別ではフックを（11.3 の「出るときの呼び出し」）、ない種別では組み込み出力を呼ぶ。組み込みで子を省略するのは image だけで、その EXIT は何も出さないため HTML の出力は変わらない
 - 組み込みの image は ENTER で子の省略を自ら要求する（「画像の alt 平坦化」）。フックが image の ENTER で `render_default` を呼んだ場合も同じ
 - エラー時は `amark_buffer_truncate(output, start)` で出力先を呼び出し前の長さに戻す（`start` は呼び出し時の `output->length`）
 
@@ -179,9 +184,12 @@ sequenceDiagram
     end
     Std->>Std: write title if any and close
     Std->>Outer: request skip children
-    Outer->>Std: image EXIT writes nothing
+    Outer->>Outer: reset iterator to image EXIT
+    Outer->>Std: visit image EXIT writes nothing
+    Outer->>Outer: next reports event after image EXIT
 ```
 
+- 外側の走査は子の省略を受けて画像の EXIT へ位置を移し、同じ画像の EXIT を 1 回だけ訪問する（「1 イベントの処理」）。image の EXIT にフックがあればそのフックが EXIT で呼ばれる
 - 内側のイテレータは確保を行わず、画像の部分木を 1 回だけ走査する。入れ子の画像は内側の走査にそのまま含まれ、タグを出さず子孫の文字列だけが連結される。フックは呼ばない（5.5）
 
 ## Requirements Traceability
@@ -201,7 +209,7 @@ sequenceDiagram
 | 10.1, 10.2, 10.3, 10.4, 10.5, 10.6, 10.7, 10.8, 10.9 | フックの登録 | HtmlRenderer, RenderCore | `amark_html_renderer_set_hook`、`amark_render_hook_table_*` | — |
 | 11.1, 11.2, 11.3, 11.4, 11.5, 11.6, 11.7, 11.8 | フックの呼び出しと制御 | RenderCore, HtmlContext, HtmlRenderer | `amark_html_render_fn_t`、`amark_html_context_*` | 1 イベントの処理 |
 | 12.1, 12.2, 12.3, 12.4, 12.5, 12.6 | エラーと資源 | 全コンポーネント | 共通 API 規約、巻き戻し | 1 イベントの処理 |
-| 13.1, 13.2, 13.3, 13.4 | 深い木、線形、スレッド、グローバル状態なし | RenderCore, HtmlStandard, HtmlRenderer | 反復走査、`static const` の表 | alt 平坦化 |
+| 13.1, 13.2, 13.3, 13.4 | 深い木、線形、スレッド、グローバル状態なし | RenderCore, HtmlStandard, HtmlRenderer | 反復走査、`static const` の表、決定的な計数による線形性の検査 | alt 平坦化 |
 
 ## Components and Interfaces
 
@@ -293,9 +301,9 @@ AMARK_API bool amark_html_url_is_dangerous(amark_slice_t url);
   - フックとフックから呼ぶ処理は、描画中の木を変更してはならない
   - `amark_html_context_t *` はフックの呼び出し中だけ有効で、保持して後で使ってはならない
   - 描画中に同じレンダラへ `set_hook` / `destroy` を行ってはならない
-  - フックを登録した種別ハンドルの出所であるレジストリは、そのレンダラより長く生きなければならない（先にレンダラを破棄するか、フックを解除する）
+  - フックを登録した種別ハンドルの出所（node-tree のレジストリ、または parser-core の拡張。方言に追加済みならその拡張を所有する方言）は、そのレンダラより長く生きなければならない（先にレンダラを破棄するか、フックを解除する）
   - 登録が終わったレンダラは、異なる出力先に対して複数スレッドから同時に描画してよい（13.3）
-- フックの登録はパーサ・拡張の仕組みを使わず、種別ハンドルだけで行う（10.8）。ハンドルは `amark_node_kind_get_standard(type)`（標準）、`amark_node_registry_add` の結果、`amark_node_registry_find` で得る
+- フックの登録はパーサ・拡張の仕組みを使わず、種別ハンドルだけで行う（10.8）。ハンドルは `amark_node_kind_get_standard(type)`（標準）、node-tree の `amark_node_registry_add` / `amark_node_registry_find` の結果、または parser-core の `amark_extension_find_kind` / `amark_extension_get_kind_at` / `amark_dialect_find_kind` の結果で得る（後者は拡張パッケージの側が呼び、html-renderer のコードは parser-core のヘッダを include しない）
 
 ### レンダラ共通
 
@@ -356,7 +364,6 @@ amark_error_t amark_render_walk_run(amark_render_walk_t *walk, const amark_node_
                                     const amark_render_hook_table_t *table, amark_render_visit_fn_t visit,
                                     void *context);
 void amark_render_walk_skip_children(amark_render_walk_t *walk);
-bool amark_render_kind_is_leaf(const amark_node_kind_t *kind);
 ```
 - `amark_render_hook_table_set(table, kind, fn, user_data)`:
   - `kind == NULL`: `AMARK_ERROR_INVALID_ARGUMENT`（10.7）
@@ -369,14 +376,14 @@ bool amark_render_kind_is_leaf(const amark_node_kind_t *kind);
 - `amark_render_walk_run(walk, root, table, visit, context)`:
   1. `amark_node_iter_init(&walk->iter, (amark_node_t *)root)`（const を外すのはここだけ）
   2. `amark_node_iter_next` が `DONE` を返すまで: `walk->node`・`walk->event` を設定し `skip_children = false`、`hook = find(table, kind)`、`visit(context, walk, hook)` を呼ぶ。非 `AMARK_OK` ならその値を直ちに返す（11.7）
-  3. `event == ENTER` かつ `skip_children` かつ葉でないなら `amark_node_iter_reset(&walk->iter, node, EXIT)`（11.3）
+  3. `event == ENTER` かつ `skip_children` かつ `!amark_node_kind_is_leaf(kind)` なら、`amark_node_iter_reset(&walk->iter, node, EXIT)` の後、`walk->event = EXIT`、`walk->skip_children = false` として同じノードについて `visit(context, walk, hook)` を呼ぶ（`hook` は ENTER で引いたものと同じ種別の項目）。非 `AMARK_OK` ならその値を直ちに返す。続く `amark_node_iter_next` は EXIT の続きを報告する（11.3）
   4. 終われば `AMARK_OK`
-- イベント列は node-tree のイテレータのとおりで、葉は ENTER のみ（11.1、11.2）。反復で動き深さに比例するスタックを使わない（13.1）。確保しない
-- `amark_render_kind_is_leaf(kind)`: `amark_node_kind_get_content(kind) == AMARK_NODE_CONTENT_NONE`
+- イベント列は node-tree のイテレータのとおりで、葉は ENTER のみ（11.1、11.2）。子を省略したノードでも ENTER と EXIT はちょうど 1 回ずつ訪問され、子孫は訪問されない（11.3）。反復で動き深さに比例するスタックを使わない（13.1）。確保しない
+- 葉の判定は node-tree の公開関数 `amark_node_kind_is_leaf(kind)`（`content == NONE`）を使い、`render_core` 独自の判定関数は持たない
 
 **Implementation Notes**
-- Integration: markdown-renderer は `render_core.h` を include し、同じ表と駆動部を使う（Cross-Spec Contract）
-- Validation: 非公開のため、HTML のフックを通して公開 API から検証する（`html_hook_test.c`、`html_render_test.c`）
+- Integration: markdown-renderer は `render_core.h` を include し、同じ表と駆動部を使う（Cross-Spec Contract）。`render_core.h` はレンダラ間で共有する内部契約であり、その型・関数・手順（特に子の省略後の EXIT の訪問）の変更は markdown-renderer の再検証を要する
+- Validation: 非公開のため、HTML のフックを通して公開 API から検証する（`html_hook_test.c`、`html_render_test.c`）。子の省略後の EXIT の訪問は、子を取る種別のフックが ENTER で子を省略したとき、同じノードの EXIT でフックがちょうど 1 回呼ばれ子孫のフックが呼ばれないことで確認する
 - Risks: 走査中に木を変更するフックは走査を壊す（義務として文書化）
 
 ### 符号化
@@ -611,7 +618,7 @@ graph TB
     Renderer -->|owns| Options[options copy]
     Renderer -->|owns| Table[hook table]
     Table -->|refers| Kind[node kind handle]
-    Registry[node registry] -->|owns| Kind
+    Registry[node registry or extension] -->|owns| Kind
     Caller -->|owns| Buffer[output buffer]
     Context[render context] -->|refers| Buffer
     Context -->|refers| Options
@@ -646,8 +653,8 @@ graph TB
 - `html_block_test.c`: 組み込み出力の表のブロック全行、list の開始番号 0・1・2・999999999、見出し 1〜6、info の空・1 語・複数語・タブ区切り・`language-` 始まり・特殊文字、空のコンテナ、cr の挿入位置（2.1〜2.12）、tight / loose と入れ子のリスト内のコードブロック、部分木起点の tight 段落（3.1〜3.4）
 - `html_inline_test.c`: text・code・emphasis・strong・line break・link（title あり・なし・特殊文字）（4.1〜4.8）、image の属性順、alt の平坦化（強調・リンク・入れ子の画像・code・html_inline・改行を含む）、alt 内でフックが呼ばれないこと（5.1〜5.5）
 - `html_options_test.c`: 既定値、生 HTML の抑止と許可（block の改行規則を含む）、危険な URL の抑止と許可（link と image）、2 つの許可の独立性、soft break の 3 方式、未定義の soft break で `INVALID_ARGUMENT`（7.1〜7.4、7.6、7.7、8.1〜8.4）
-- `html_hook_test.c`: 拡張種別への追加（ENTER / EXIT の 2 回、葉は 1 回）、標準種別の上書き、置き換え、解除で元に戻ること、`kind == NULL`、利用者データの受け渡し、子の省略、`render_default` への委譲（image を含む）、未登録の拡張種別の透過、フックのエラーで中止され出力先が戻ること、コンテキストの各書き込み操作、`get_options`、パーサなしで登録できること（10.1〜10.9、11.1〜11.7）
-- `html_render_test.c`: 追記（既存内容の保持と、既存内容が改行で終わらなくても先頭に改行を足さないこと）、部分木の起点、引数エラー、同一出力の再現（1.1〜1.7）、描画の前後で木の値とリンクが不変、レンダラ生成・フック登録・描画の失敗注入の網羅パターン（各回で出力先・表が不変、後片付け後 `live == 0`）（12.2〜12.6）、深さ 10 万段の block quote と emphasis の木（13.1）、10 万ノードの平坦な文書と 1 万段の入れ子の画像で出力が線形に増えること（13.2）
+- `html_hook_test.c`: 拡張種別への追加（ENTER / EXIT の 2 回、葉は 1 回）、標準種別の上書き、置き換え、解除で元に戻ること、`kind == NULL`、利用者データの受け渡し、子の省略（ENTER で子を省略したノードについて、同じノードの EXIT でフックがちょうど 1 回呼ばれ、子孫のフックは呼ばれず、続く兄弟・親の EXIT は通常どおり 1 回ずつ呼ばれること。子を省略した EXIT のフックがエラーを返すと中止され出力先が戻ること。image のフックが ENTER で `render_default` に委譲した場合も image の EXIT でフックが呼ばれること）、`render_default` への委譲（image を含む）、未登録の拡張種別の透過、フックのエラーで中止され出力先が戻ること、コンテキストの各書き込み操作、`get_options`、パーサなしで登録できること（10.1〜10.9、11.1〜11.7）
+- `html_render_test.c`: 追記（既存内容の保持と、既存内容が改行で終わらなくても先頭に改行を足さないこと）、部分木の起点、引数エラー、同一出力の再現（1.1〜1.7）、描画の前後で木の値とリンクが不変、レンダラ生成・フック登録・描画の失敗注入の網羅パターン（各回で出力先・表が不変、後片付け後 `live == 0`）（12.2〜12.6）、深さ 10 万段の block quote と emphasis の木（13.1）、10 万ノードの平坦な文書と 1 万段の入れ子の画像での決定的な計数による線形性（13.2、Performance 参照）
 
 ### Integration Tests
 - `html_commonmark_test.c`: 仕様の代表例のバイト比較（9.1〜9.3）
@@ -655,7 +662,11 @@ graph TB
 - C++ 検査とヘッダ単独 include 検査（HtmlIntegration）
 
 ### Performance
-- 深さ 10 万段の描画が完了する（13.1）。ノード数を 10 倍にしたとき計測した描画時間がおおむね 10 倍以内に収まる（極端な非線形を検出する目安、13.2）
+- 深さ 10 万段の描画が完了する（13.1）
+- 線形性（13.2）は壁時計の時間の比ではなく、決定的な計数で検査する（parser-core と同じ方針。時間の比は環境と負荷で揺れるため使わない）。ノード数 n と 10n の 2 つの入力（平坦な文書、深い入れ子の画像、深い block quote）について次を確認する:
+  - 訪問回数: テスト用のフックで数えた訪問関数の呼び出し回数（ENTER / EXIT）が、木のイベント数（非葉 2 回、葉 1 回）とちょうど等しい。子を省略した image の部分木の子孫は外側の走査で 0 回
+  - 出力のバイト数: 出力長が入力から計算した期待値（各ノードの出力の和）と一致し、n に対して線形に増える
+  - 確保回数: 計測アロケータ（`test_allocator_*`）で数えた描画中の確保回数が、出力先の伸長による O(log 出力長) 回以下で、フック表・走査・alt 平坦化による確保が 0 回
 
 ## Security Considerations
 - 既定で生 HTML を出さず、`javascript:` などの URL を空にする。判定は cmark と同一で、許可は 2 つの独立した設定で明示する
@@ -675,8 +686,9 @@ markdown-renderer は次を同じ形で提供し、内部では `src/render_core
 - `render_core` に Markdown 固有の処理が必要になった場合は、レンダラ非依存の形で `render_core` を改訂し、本仕様の Revalidation Trigger として扱う
 
 ### 拡張・parser-core との結び付け
-- html-renderer は parser-core に依存しない。拡張の単位（構文＋ノード種別）からレンダラへの結び付けは、拡張の側が「種別ハンドルを得て `amark_html_renderer_set_hook` を呼ぶ」ことで行う。推奨形: 拡張は `<ext>_html_register(amark_html_renderer_t *renderer, const amark_node_registry_t *registry)` のような関数を提供し、`amark_node_registry_find(registry, name)` で得たハンドルに登録する（関数の所在と形は parser-core / 各拡張が決める）
-- フックの種別ハンドルの出所のレジストリは、そのレンダラより長く生きなければならない
+- html-renderer は parser-core に依存しない（本仕様のコードは parser-core のヘッダを include せず、parser-core もレンダラに依存しない）。拡張の単位（構文＋ノード種別）からレンダラへの結び付けは、両方に依存する拡張パッケージの側が「種別ハンドルを得て `amark_html_renderer_set_hook` を呼ぶ」ことで行う
+- parser-core はノードのレジストリを拡張ごとに内部に持ち、公開しない。推奨形: 拡張パッケージは `<ext>_html_register(amark_html_renderer_t *renderer, const amark_extension_t *extension)` のような関数を提供し、`amark_extension_find_kind(extension, name)`（または `amark_extension_get_kind_at`）で得たハンドルに登録する。方言から得る場合は `amark_dialect_find_kind` を使う。種別ハンドルそのものを受け取る形でもよい（関数の所在と形は各拡張パッケージが決める）
+- 寿命: フックを登録した種別ハンドルの出所の拡張（方言に追加済みなら、その拡張を所有する方言）は、その種別のフックを保持するレンダラより長く生きなければならない（parser-core の寿命の義務と同じ）。先にレンダラを破棄するか、フックを解除する
 - 1 つの拡張が HTML と Markdown の出力を提供する場合、同じ種別ハンドルに対してそれぞれのレンダラの `set_hook` を呼ぶ
 
 ### commonmark の適合テスト
@@ -685,4 +697,7 @@ markdown-renderer は次を同じ形で提供し、内部では `src/render_core
 
 ### Cross-Spec Change Note
 - 新しいエラーコード: なし（既存の `AMARK_ERROR_INVALID_ARGUMENT`、`AMARK_ERROR_NO_MEMORY`、`AMARK_ERROR_OVERFLOW` を再利用）
-- foundation・node-tree の API への変更要求: なし。実装時に foundation が所有する `include/amark/amark.h`、`src/CMakeLists.txt`、`tests/CMakeLists.txt`、`tests/cxx_header_test.cpp`、テスト補助ライブラリの構成に本仕様のファイルを追記する（各 spec が追記する規約どおり）
+- foundation・node-tree の API への変更要求: なし。葉の判定には node-tree が公開する `amark_node_kind_is_leaf` を使う（`render_core` に独自の判定関数を置かない）
+- 共有ファイル: `include/amark/amark.h`、`src/CMakeLists.txt`、`tests/CMakeLists.txt`、`tests/cxx_header_test.cpp`、`amark_test_support` のソース一覧は foundation が所有する追記専用のファイルであり、本仕様は自分のブロックを追記するだけで既存の行を変更しない
+- テスト補助: `tests/support/test_tree.{h,c}`、関数名 `test_tree_*`（テスト補助の命名規約 `test_<area>_*` どおり）
+- `render_core` の子の省略後の EXIT の訪問（11.3）は本仕様の設計と実装に含まれる。markdown-renderer はこれを前提にし、`render_core` を変更しない

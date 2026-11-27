@@ -2,11 +2,11 @@
 
 ## Overview
 
-**Purpose**: CommonMark 仕様 0.31.2 の全構文を、parser-core の公開拡張 API だけを使う 17 個の拡張として提供し、それらをまとめた CommonMark 方言プリセットと、Markdown テキストから木・HTML を得る簡易 API を提供する。flanking の判定・ラベルの正規化・文字参照に必要なデータ（HTML5 名前付き文字参照、Unicode 16.0.0 の句読点・空白・大文字小文字の畳み込み）を、`tools/` の生成器で作った静的な表として持つ。仕様の例（652 件）の適合テストと cmark 相当の病的入力テストをテスト側に置く。
+**Purpose**: CommonMark 仕様 0.31.2 の全構文を、parser-core の公開拡張 API だけを使う 17 個の拡張として提供し、それらをまとめた CommonMark 方言プリセットと、Markdown テキストから木・HTML を得る簡易 API を提供する。flanking の判定・ラベルの正規化・文字参照に必要なデータ（HTML5 名前付き文字参照、Unicode 16.0.0 の句読点・空白・大文字小文字の畳み込み）を、`tools/` の生成器で作った静的な表として持つ。句読点・空白の判定は、markdown-renderer と共有する非公開モジュール `src/unicode_class.{h,c}`（生成物 `src/unicode_class_data.c`）として本仕様が新設する。仕様の例（652 件）の適合テストと cmark 相当の病的入力テストをテスト側に置く。
 
 **Users**: ライブラリ利用者は簡易 API またはプリセットの方言で CommonMark を解析する。方言を組み立てる利用者は構文の単位を選んで方言を作る（例: 生 HTML なし）。将来の gfm はプリセットに拡張を足して GFM 方言を作り、markdown-renderer は本方言の解析結果で往復テストを行う。
 
-**Impact**: 公開ヘッダ `amark/commonmark.h`、`src/commonmark_*.c` 群、生成した表 2 つ、生成器 2 つ、テストとテストデータを追加する。parser-core に契約の緩和 1 件と意味の明確化 2 件を依頼する（API の追加・変更なし）。エラーコードとノード種別は追加しない。
+**Impact**: 公開ヘッダ `amark/commonmark.h` と `amark/commonmark_html.h`、`src/commonmark_*.c` 群、共有の非公開モジュール `src/unicode_class.{h,c}`、生成した表 3 つ、生成器 2 つ、テストとテストデータを追加する。parser-core の契約の緩和 1 件と意味の明確化 2 件（C1〜C3）は parser-core の文書に適用済みで、本仕様はそれに依存する振る舞いを確かめるだけである（API の追加・変更なし）。エラーコード（foundation の表の 0〜7 が唯一の正本）とノード種別は追加しない。
 
 ### Goals
 - 0.31.2 の spec.txt の全 652 例で、生 HTML と危険な URL を許可した html-renderer の出力が期待 HTML とバイト単位で一致する
@@ -23,29 +23,33 @@
 ## Boundary Commitments
 
 ### This Spec Owns
-- 公開ヘッダ `amark/commonmark.h`: 構文の単位の列挙、拡張の生成、拡張名の取得、方言への一括追加、方言プリセットの生成、簡易パース、HTML への簡易変換
+- 公開ヘッダ `amark/commonmark.h`: 構文の単位の列挙、拡張の生成、拡張名の取得、方言への一括追加、方言プリセットの生成、簡易パース（レンダラのヘッダを include しない）
+- 公開ヘッダ `amark/commonmark_html.h`: HTML への簡易変換（`amark/commonmark.h` と `amark/html.h` を include する）
 - CommonMark 0.31.2 の各構文の規則（開始・継続・終了・flanking・rule of 3・リンクの宛先と title・ラベルの正規化・HTML ブロックの 7 種類・文字参照・コードスパンの規則）と、その拡張の記述子・名前・優先順位
 - 拡張間の内部の約束: リンク参照定義の値の型と定義テーブルの名前空間 `commonmark.link`
 - CommonMark が必要とするデータの表（エンティティ、Unicode の句読点・空白・畳み込み）、その生成器、出典とライセンスの表記
+- 非公開の共有モジュール UnicodeClass（`src/unicode_class.h`、`src/unicode_class.c`、生成物 `src/unicode_class_data.c`）: `amark_unicode_is_punctuation` / `amark_unicode_is_whitespace`。`include/` に置かず export しない。markdown-renderer も利用者（消費側）である
 - 病的入力への構文側の対策（内容ごとの記憶、ラベル長の打ち切り、宛先の括弧の入れ子の上限、参照展開の量の上限）
 - 仕様適合テスト（spec.txt の固定、抽出器、比較・報告）と病的入力テスト
-- Cross-Spec Change Note に記す parser-core への依頼
+- parser-core に適用済みの C1〜C3 に依存する振る舞いの確認（Cross-Spec Change Note）
 
 ### Out of Boundary
 - 段落・テキスト・空行・遅延継続の振る舞い、デリミタ処理とブラケット処理の手順、ブロックの入れ子とブラケットの上限（parser-core。本仕様は使うだけ）
 - ノード種別の定義と値の制約（node-tree）。本仕様はノード種別を追加しない
 - HTML の出力規則、エスケープ、URL の符号化、安全性の既定値（html-renderer）。適合テストの不一致がレンダラ起因の場合の修正も html-renderer の作業として扱う
-- エラー列挙、アロケータ、バッファ、UTF-8（foundation）
+- エラー列挙（foundation の表のコード 0〜7 が唯一の正本）、アロケータ、バッファ、UTF-8 の前方・後方の復号（foundation）
+- 包括ヘッダ・ビルド・テスト登録のシェルのファイル（`amark.h`、`src/CMakeLists.txt`、`tests/CMakeLists.txt`、`tests/cxx_header_test.cpp`、`amark_test_support` のソース一覧）は foundation が所有し、本仕様は追記だけを行う
 - GFM の構文と方言、Markdown の出力
 
 ### Allowed Dependencies
-- foundation の公開ヘッダ: `export.h`、`error.h`、`memory.h`、`slice.h`、`utf8.h`、`buffer.h`
+- foundation の公開ヘッダ: `export.h`、`error.h`、`memory.h`、`slice.h`、`utf8.h`（`amark_utf8_decode`、`amark_utf8_decode_previous`）、`buffer.h`
+- 本仕様が所有する非公開ヘッダ `src/unicode_class.h`: `<stdint.h>`・`<stdbool.h>` だけに依存する基盤層の部品。commonmark の CharClass と markdown-renderer が include する
 - node-tree の公開ヘッダ: `node_kind.h`、`node.h`
 - parser-core の公開ヘッダ: `parse_shared.h`、`block_syntax.h`、`inline_syntax.h`、`extension.h`、`dialect.h`、`parser.h`
-- html-renderer の公開ヘッダ `html.h`: 簡易変換（CommonmarkConvert）とテストだけが include する。構文のソースは include しない
+- html-renderer の公開ヘッダ `html.h`: 公開ヘッダ `amark/commonmark_html.h`、簡易変換の実装 `commonmark_convert.c`、テストだけが include する。`amark/commonmark.h` と構文のソースは include しない
 - C 標準ライブラリ: `<stddef.h>`、`<stdint.h>`、`<stdbool.h>`、`<string.h>`
 - テスト: Naos、`amark_test_support`（差し替えアロケータ）。生成器: Python 3（標準ライブラリのみ、開発時だけ）
-- 依存方向（左ほど下位。右から左への include のみ）: `上流の公開ヘッダ → commonmark_internal.h（データ・文字・走査の共通部品） → 各構文のソース → commonmark_dialect.c → commonmark_convert.c`。構文のソース同士は互いを include・呼び出しせず、共通部品だけを使う。parser-core の `src/parser_internal.h` と node-tree の `src/node_internal.h` は include しない
+- 依存方向（左ほど下位。右から左への include のみ）: `上流の公開ヘッダ, unicode_class.h → commonmark_internal.h（データ・文字・走査の共通部品） → 各構文のソース → commonmark_dialect.c → commonmark_convert.c`（公開ヘッダは `commonmark.h → commonmark_html.h`）。構文のソース同士は互いを include・呼び出しせず、共通部品だけを使う。parser-core の `src/parser_internal.h` と node-tree の `src/node_internal.h` は include しない
 
 ### Revalidation Triggers
 - 対象の仕様の版の変更（期待 HTML と構文の規則が変わる。html-renderer も再検証）
@@ -53,7 +57,9 @@
 - リンク参照定義の値の型と名前空間の変更
 - 簡易 API の引数・所有規則の変更
 - 生成した表の出典の版の変更（Unicode の版、entities.json）
-- parser-core の文脈 API・デリミタ・ブラケット・段落の処理器の意味の変更（本仕様が再検証する側）
+- UnicodeClass の関数・意味・表の変更（markdown-renderer が消費側のため、markdown-renderer も再検証）
+- foundation の `amark_utf8_decode_previous` の意味の変更
+- parser-core の文脈 API・デリミタ・ブラケット・段落の処理器の意味、C1〜C3 の契約の変更（本仕様が再検証する側）
 - html-renderer の組み込み出力の表の変更（適合テストの再実行）
 
 ## Architecture
@@ -65,8 +71,10 @@ graph TB
     Upstream[foundation node-tree parser-core headers]
     Html[html-renderer header]
     Public[commonmark public header]
+    PublicHtml[commonmark html public header]
+    UnicodeClass[unicode class shared module]
     Internal[commonmark internal header]
-    Data[generated entity and unicode tables]
+    Data[generated entity and case fold tables]
     Chars[chars and entities]
     Scan[shared scanners label link html]
     BlockUtil[block util]
@@ -80,6 +88,7 @@ graph TB
     Internal --> Upstream
     Data --> Internal
     Chars --> Data
+    Chars --> UnicodeClass
     Scan --> Chars
     BlockUtil --> Internal
     Blocks --> Scan
@@ -90,7 +99,11 @@ graph TB
     Dialect --> Public
     Convert --> Dialect
     Convert --> Html
+    Convert --> PublicHtml
+    PublicHtml --> Public
+    PublicHtml --> Html
     Tools -.-> Data
+    Tools -.-> UnicodeClass
     Tests --> Convert
 ```
 
@@ -106,7 +119,7 @@ graph TB
 | Layer | Choice / Version | Role in Feature | Notes |
 |-------|------------------|-----------------|-------|
 | 言語 | C99（foundation の設定を継承） | 本体とテスト | 新しい依存なし |
-| エンジン | parser-core の公開拡張 API | 全構文の実装の土台 | 契約の緩和・明確化を依頼（API 変更なし） |
+| エンジン | parser-core の公開拡張 API | 全構文の実装の土台 | 契約の緩和・明確化（C1〜C3）は適用済み（API 変更なし） |
 | 木・出力 | node-tree 標準 18 種別、html-renderer | 解析結果、簡易変換と適合テスト | 種別の追加なし |
 | 仕様 | CommonMark 0.31.2 spec.txt（CC BY-SA 4.0） | 規則の正本と適合テストのデータ | `tests/data/commonmark/` に固定 |
 | データ | WHATWG entities.json（CC BY 4.0）、Unicode 16.0.0 UCD（Unicode License v3） | 生成した静的表の出典 | 生データはリポジトリに置かない |
@@ -118,12 +131,16 @@ graph TB
 ### Directory Structure
 ```
 include/amark/
-└── commonmark.h                     # 単位の列挙、拡張の生成・名前、方言への追加・生成、簡易パース・変換
+├── commonmark.h                     # 単位の列挙、拡張の生成・名前、方言への追加・生成、簡易パース（レンダラのヘッダを含まない）
+└── commonmark_html.h                # HTML への簡易変換（commonmark.h と html.h を include）
 src/
+├── unicode_class.h                  # 非公開（基盤層、markdown-renderer と共有）: amark_unicode_is_punctuation / amark_unicode_is_whitespace
+├── unicode_class.c                  # 非公開: ASCII は表を引かず、0x80 以上は unicode_class_data.c の表を二分探索
+├── unicode_class_data.c             # 生成物: 句読点（P・S）の範囲表、Zs の表。先頭に出典・版・SHA-256・ライセンス
 ├── commonmark_internal.h            # 非公開: 記述子の extern 宣言、共通部品の宣言、定義の値の型、名前空間
 ├── commonmark_entity_data.c         # 生成物: 名前付き文字参照の表（名前の昇順）。先頭に出典・SHA-256・ライセンス
-├── commonmark_unicode_data.c        # 生成物: 句読点の範囲表、Zs の表、畳み込みの表。先頭に出典・版・SHA-256・ライセンス
-├── commonmark_chars.c               # 文字の分類（ASCII 句読点、Unicode 句読点・空白）、前後の文字の復号、畳み込み
+├── commonmark_unicode_data.c        # 生成物: 大文字小文字の畳み込みの表だけ（commonmark 専用）。先頭に出典・版・SHA-256・ライセンス
+├── commonmark_chars.c               # ASCII 句読点の判定、前後の文字の復号（後方は amark_utf8_decode_previous）、畳み込み。Unicode の句読点・空白は unicode_class に委ねる
 ├── commonmark_entity.c              # 文字参照の照合と復号（名前付き・10 進・16 進）、エスケープと文字参照の解決（unescape）
 ├── commonmark_scan.c                # ラベルの走査と正規化、リンクの宛先・title の走査
 ├── commonmark_html_scan.c           # HTML の開き・閉じタグ、コメント、処理命令、宣言、CDATA の走査、HTML ブロックの開始・終了条件
@@ -149,14 +166,14 @@ src/
 └── commonmark_convert.c             # HTML への簡易変換（html.h を include する唯一の本体ソース）
 tools/
 ├── generate_entity_table.py         # entities.json → src/commonmark_entity_data.c
-└── generate_unicode_tables.py       # UnicodeData.txt と CaseFolding.txt → src/commonmark_unicode_data.c
+└── generate_unicode_tables.py       # UnicodeData.txt → src/unicode_class_data.c、CaseFolding.txt → src/commonmark_unicode_data.c
 tests/
 ├── data/commonmark/
 │   ├── spec-0.31.2.txt              # 改変しない spec.txt
 │   └── LICENSE.txt                  # CC BY-SA 4.0、著者、出典 URL、版、SHA-256、改変していない旨
 ├── support/
-│   ├── spec_examples.h              # 抽出器の宣言（例の構造体、読み込み、解放）
-│   └── spec_examples.c              # spec.txt の読み込みと例の抽出（`→` をタブへ、節名と番号の記録）
+│   ├── test_spec_examples.h         # 抽出器の宣言（例の構造体、読み込み、解放）
+│   └── test_spec_examples.c         # spec.txt の読み込みと例の抽出（`→` をタブへ、節名と番号の記録）
 ├── commonmark_spec_test.c           # 全例のバイト比較、1 バイトずつの供給の同一性、例の数の確認、失敗の報告
 ├── commonmark_pathological_test.c   # 病的入力の類型ごとの入力生成・出力検査・CPU 時間の上限
 ├── commonmark_dialect_test.c        # 単位の生成・名前・一括追加・プリセット・取り外し・凍結・簡易 API
@@ -164,15 +181,16 @@ tests/
 ├── commonmark_inline_test.c         # インライン構文の境界（数値参照の範囲、ラベル長、括弧 32 段、展開量）
 ├── commonmark_data_test.c           # 生成した表の件数と代表値、文字の分類、畳み込み
 └── commonmark_error_test.c          # 方言の生成・解析・簡易 API の失敗注入、資源の解放
-THIRD_PARTY_NOTICES.md               # エンティティ表（CC BY 4.0）、Unicode データ（Unicode License v3）、spec.txt（テストのみ、CC BY-SA 4.0）
+THIRD_PARTY_NOTICES.md               # エンティティ表 src/commonmark_entity_data.c（CC BY 4.0）、Unicode データ src/unicode_class_data.c と src/commonmark_unicode_data.c（Unicode License v3）、spec.txt（テストのみ、CC BY-SA 4.0）
 ```
 
 ### Modified Files
 実装時に本 spec のタスクとして変更する（本 spec の作成時には変更しない）。
-- `include/amark/amark.h` — `amark/commonmark.h` を include に追加
-- `src/CMakeLists.txt` — `src/commonmark_*.c`（生成物 2 つを含む 22 個）をソース一覧に追加
-- `tests/CMakeLists.txt` — `support/spec_examples.c` を `amark_test_support` に追加、7 つのテスト実行ファイルを `naos_add_executable` で登録、spec.txt のパスをコンパイル定義 `AMARK_COMMONMARK_SPEC_PATH` で渡す、病的入力テストに CTest の `TIMEOUT 300` を設定
-- `tests/cxx_header_test.cpp` — C++ から `amark_commonmark_dialect_create`、`amark_commonmark_convert_to_html` を呼ぶ確認を追加
+シェルのファイル（`amark.h`、`src/CMakeLists.txt`、`tests/CMakeLists.txt`、`tests/cxx_header_test.cpp`、`amark_test_support` のソース一覧）は foundation が所有し、本仕様は追記だけを行う。
+- `include/amark/amark.h` — `amark/commonmark.h` と `amark/commonmark_html.h` の include を追記
+- `src/CMakeLists.txt` — `src/commonmark_*.c`（生成物 2 つを含む 26 個）と `src/unicode_class.c`、`src/unicode_class_data.c`（生成物）をソース一覧に追記
+- `tests/CMakeLists.txt` — `support/test_spec_examples.c` を `amark_test_support` に追記、7 つのテスト実行ファイルを `naos_add_executable` で登録、spec.txt のパスをコンパイル定義 `AMARK_COMMONMARK_SPEC_PATH` で渡す、病的入力テストに CTest の `TIMEOUT 300` を設定
+- `tests/cxx_header_test.cpp` — C++ から `amark_commonmark_dialect_create`（`amark/commonmark.h`）、`amark_commonmark_convert_to_html`（`amark/commonmark_html.h`）を呼ぶ確認を追記
 - `CMakeLists.txt`（インストール規則）— `THIRD_PARTY_NOTICES.md` を `LICENSE` と同じ場所にインストール
 - `.kiro/steering/structure.md` — `tools/`（開発時だけの生成器）と `tests/data/`（固定したテストデータ）のディレクトリの約束を追記
 
@@ -200,7 +218,7 @@ sequenceDiagram
 ```
 
 - 一括追加は表の順（列挙の値の昇順）に行い、途中の失敗では、この呼び出しで追加した拡張を逆順に `amark_dialect_remove_extension` で外して破棄し、未追加の拡張を破棄する（2.6、1.2）
-- `amark_commonmark_parse` は文書を返してから方言を破棄する。CommonMark の拡張はノード種別を定義しないため、文書は方言を参照しない（Cross-Spec Change Note C1）
+- `amark_commonmark_parse` は文書を返してから方言を破棄する。CommonMark の拡張はノード種別を定義しないため、文書は方言を参照しない（parser-core に適用済みの C1）
 
 ### 1 行のブロック開始判定（CommonMark の優先順位）
 
@@ -233,7 +251,7 @@ graph TB
 | 2.1, 2.2, 2.3, 2.6 | プリセット、部分集合、未凍結、失敗時の解放 | CommonmarkDialect | `amark_commonmark_dialect_create` | 方言の生成 |
 | 2.4, 2.5 | 凍結済み・名前の重複 | CommonmarkDialect | `amark_dialect_add_extension` のエラーの伝播 | — |
 | 3.1, 3.3, 3.4, 3.5, 3.6 | 簡易パース | CommonmarkDialect | `amark_commonmark_parse` | 方言の生成と簡易 API |
-| 3.2 | HTML への簡易変換 | CommonmarkConvert | `amark_commonmark_convert_to_html` | 方言の生成と簡易 API |
+| 3.2 | HTML への簡易変換 | CommonmarkHtmlHeader, CommonmarkConvert | `amark_commonmark_convert_to_html` | 方言の生成と簡易 API |
 | 4.1 | ブロック引用 | BlockQuoteExtension, BlockUtil | 記述子 `commonmark_block_quote` | 開始判定 |
 | 4.2, 4.3, 4.4, 4.5, 4.6 | リスト | ListExtension, BlockUtil | 記述子 `commonmark_list`、リストの記録 | 開始判定 |
 | 4.7 | 継続しない行 | BlockQuoteExtension, ListExtension | `continue_line` | 開始判定 |
@@ -250,32 +268,34 @@ graph TB
 | 6.6 | 改行 | LineBreakExtension | `trim_trailing_spaces` | — |
 | 6.7 | 生 HTML | HtmlInlineExtension, HtmlScan | インライン構文 `<` | — |
 | 6.8 | オートリンク | AutolinkExtension | インライン構文 `<` | — |
-| 7.1, 7.2 | 強調 | EmphasisExtension, CharClass | デリミタ処理器 | — |
+| 7.1, 7.2 | 強調 | EmphasisExtension, CharClass, UnicodeClass | デリミタ処理器 | — |
 | 7.3, 7.4, 7.5, 7.6 | リンク・画像 | LinkExtension, LinkScan | ブラケット API | — |
 | 7.7 | ラベルの正規化 | LinkScan, CharClass, UnicodeTables | `amark_commonmark_normalize_label` | — |
 | 7.8 | 優先順位 | CodeSpanExtension, AutolinkExtension, HtmlInlineExtension, LinkExtension | 左から順の呼び出しと優先順位 | — |
-| 8.1, 8.2, 8.5, 8.7 | spec.txt と抽出・報告 | SpecFixture, SpecExamples | `spec_examples_load` | — |
+| 8.1, 8.2, 8.5, 8.7 | spec.txt と抽出・報告 | SpecFixture, SpecExamples | `test_spec_examples_load` | — |
 | 8.3, 8.4, 8.6 | バイト比較と分割供給 | ConformanceTest | html-renderer の設定 | — |
 | 9.1, 9.6 | 線形時間とメモリ | 全構文の拡張, CodeSpanExtension, HtmlInlineExtension, LinkScan | 計算量の規則 | — |
 | 9.2, 9.3 | 病的入力の類型と上限 | PathologicalTest | parser-core の上限 | — |
 | 9.4 | 参照展開の量 | LinkExtension | 解析状態の展開量 | — |
 | 9.5 | 括弧の入れ子 32 段 | LinkScan | `amark_commonmark_scan_link_destination` | — |
 | 10.1, 10.3, 10.5 | エンティティ表 | EntityTable, EntityGenerator, ThirdPartyNotices | 生成物の先頭の記録 | — |
-| 10.2, 10.3, 10.5 | Unicode の表 | UnicodeTables, UnicodeGenerator, ThirdPartyNotices | 生成物の先頭の記録 | — |
+| 10.2, 10.3, 10.5 | Unicode の表 | UnicodeClass, UnicodeTables, UnicodeGenerator, ThirdPartyNotices | 生成物の先頭の記録 | — |
 | 10.4 | ビルドに生成器不要 | CommonmarkIntegration | 生成物のコミット | — |
 | 11.1, 11.2, 11.3 | エラーと確保 | 全コンポーネント, ErrorInjectionTest | 共通 API 規約 | — |
-| 11.4 | 妥当な UTF-8 | EntityAndEscape, CharClass | 復号・符号化の規則 | — |
+| 11.4 | 妥当な UTF-8 | EntityAndEscape, CharClass（foundation の前方・後方の復号） | 復号・符号化の規則 | — |
 | 12.1, 12.2, 12.3 | 並行利用 | CommonmarkDialect, 全構文の拡張 | 静的な記述子、解析状態 | — |
 
 ## Components and Interfaces
 
 | Component | Domain/Layer | Intent | Req Coverage | Key Dependencies (P0/P1) | Contracts |
 |-----------|--------------|--------|--------------|--------------------------|-----------|
-| CommonmarkPublicHeader | 公開 API | `amark/commonmark.h` | 1.1, 1.6, 2.1, 3.1, 3.2 | parser-core, html-renderer (P0) | Service |
+| CommonmarkPublicHeader | 公開 API | `amark/commonmark.h` | 1.1, 1.6, 2.1, 3.1 | parser-core (P0) | Service |
+| CommonmarkHtmlHeader | 公開 API | `amark/commonmark_html.h` | 3.2 | CommonmarkPublicHeader, html-renderer (P0) | Service |
 | CommonmarkInternal | 非公開 | 共通の宣言と内部の約束 | 全体の前提, 5.7 | parser-core (P0) | State |
 | EntityTable | データ | 生成した名前付き文字参照の表 | 10.1, 10.5 | — | State |
-| UnicodeTables | データ | 生成した句読点・空白・畳み込みの表 | 10.2, 10.5 | — | State |
-| CharClass | 文字 | 分類、前後の文字の復号、畳み込み | 6.1, 7.1, 7.7, 11.4 | UnicodeTables (P0) | Service |
+| UnicodeClass | 共有の非公開部品 | 句読点・空白の判定と生成した表（markdown-renderer と共有） | 7.1, 10.2, 10.5 | — | Service, State |
+| UnicodeTables | データ | 生成した畳み込みの表（commonmark 専用） | 10.2, 10.5 | — | State |
+| CharClass | 文字 | ASCII 句読点、前後の文字の復号、畳み込み | 6.1, 7.1, 7.7, 11.4 | UnicodeClass, UnicodeTables, foundation Utf8 (P0) | Service |
 | EntityAndEscape | 文字 | 文字参照の復号、エスケープの解決 | 5.5, 6.2, 6.3, 7.3, 11.4 | EntityTable, CharClass (P0) | Service |
 | LinkScan | 走査 | ラベル、宛先、title | 5.7, 5.8, 7.3, 7.7, 9.5 | CharClass, EntityAndEscape (P0) | Service |
 | HtmlScan | 走査 | HTML の構造と HTML ブロックの条件 | 5.6, 6.7 | CharClass (P0) | Service |
@@ -303,18 +323,17 @@ graph TB
 
 | Field | Detail |
 |-------|--------|
-| Intent | `amark/commonmark.h` に単位の列挙と公開関数を宣言する |
-| Requirements | 1.1, 1.3, 1.6, 2.1, 2.2, 3.1, 3.2 |
+| Intent | `amark/commonmark.h` に単位の列挙と公開関数を宣言する（レンダラに依存しない） |
+| Requirements | 1.1, 1.3, 1.6, 2.1, 2.2, 3.1 |
 
 **Contracts**: Service [x]
 
 ##### Service Interface
 ```c
 /* include/amark/commonmark.h */
-#include <amark/buffer.h>
 #include <amark/dialect.h>
-#include <amark/html.h>
 #include <amark/parser.h>
+#include <amark/slice.h>
 #include <stdint.h>
 
 #define AMARK_COMMONMARK_SPEC_VERSION "0.31.2"
@@ -350,12 +369,33 @@ AMARK_API amark_error_t amark_commonmark_add_extensions(amark_dialect_t *dialect
 AMARK_API amark_error_t amark_commonmark_dialect_create(uint32_t constructs, amark_dialect_t **dialect);
 AMARK_API amark_error_t amark_commonmark_parse(const char *data, size_t length, const amark_parser_options_t *options,
                                                amark_node_t **document);
+```
+- `amark/commonmark.h` は `amark/html.h` を include せず、html-renderer の型を使わない。HTML への簡易変換は `amark/commonmark_html.h`（下記）に分ける
+- ヘッダ冒頭のコメントに記す利用者向けの事項: 対象の仕様の版、単位の一覧と拡張名、プリセットは凍結されていないこと、繰り返し解析する場合は方言を作って `amark_parser_parse` で再利用すべきこと（簡易 API は呼び出しごとに方言を作る）、CommonMark の拡張だけからなる方言で作った文書は方言の破棄後も有効なこと（parser-core の C1）、HTML への簡易変換は `amark/commonmark_html.h` にあること
+
+#### CommonmarkHtmlHeader
+
+| Field | Detail |
+|-------|--------|
+| Intent | `amark/commonmark_html.h` に HTML への簡易変換を宣言する |
+| Requirements | 3.2, 3.3 |
+
+**Contracts**: Service [x]
+
+##### Service Interface
+```c
+/* include/amark/commonmark_html.h */
+#include <amark/buffer.h>
+#include <amark/commonmark.h>
+#include <amark/html.h>
+
 AMARK_API amark_error_t amark_commonmark_convert_to_html(const char *data, size_t length,
                                                          const amark_parser_options_t *parse_options,
                                                          const amark_html_options_t *html_options,
                                                          amark_buffer_t *output);
 ```
-- ヘッダ冒頭のコメントに記す利用者向けの事項: 対象の仕様の版、単位の一覧と拡張名、プリセットは凍結されていないこと、繰り返し解析する場合は方言を作って `amark_parse` で再利用すべきこと（簡易 API は呼び出しごとに方言を作る）、CommonMark の拡張だけからなる方言で作った文書は方言の破棄後も有効なこと（C1 の適用後）、HTML の既定値は生 HTML と危険な URL を出力しないこと
+- ヘッダ冒頭のコメント: HTML の既定値は生 HTML と危険な URL を出力しないこと、繰り返し変換する場合は方言を再利用し `amark_parser_parse` と `amark_html_render` を使うべきこと
+- 包括ヘッダ `amark/amark.h` は `amark/commonmark.h` と `amark/commonmark_html.h` の両方を include する（追記）
 
 ##### 単位の表（CommonmarkDialect が持つ）
 
@@ -399,6 +439,7 @@ AMARK_API amark_error_t amark_commonmark_convert_to_html(const char *data, size_
 #include <amark/extension.h>
 #include <amark/buffer.h>
 #include <amark/utf8.h>
+#include "unicode_class.h"
 
 /* 各構文のソースが定義する記述子（CommonmarkDialect だけが参照する） */
 extern const amark_extension_desc_t amark_commonmark_thematic_break_desc;
@@ -435,16 +476,38 @@ typedef struct amark_commonmark_link_definition
 - `src/commonmark_entity_data.c` は生成物。`static const` の配列 `{名前（`&` と `;` を除く）, 名前の長さ, コードポイント 2 個（2 個目がなければ 0）}` を名前のバイト順の昇順に持ち、件数を定数で公開する（内部）。先頭は foundation の定型ヘッダ（MIT）、続いて「生成物、手で編集しない」「出典 URL、取得日、SHA-256、CC BY 4.0、WHATWG への帰属」を記したコメント
 - 内部 API: `extern const amark_commonmark_entity_t amark_commonmark_entities[]; extern const size_t amark_commonmark_entity_count;`
 
+#### UnicodeClass（共有の非公開モジュール）
+
+| Field | Detail |
+|-------|--------|
+| Intent | Unicode 16.0.0 の句読点・空白の判定。commonmark（flanking・エスケープ）と markdown-renderer（出力側の flanking）が同じ分類を使う |
+| Requirements | 7.1, 10.2, 10.5 |
+
+**Contracts**: Service [x] / State [x]
+
+##### Service Interface
+```c
+/* src/unicode_class.h（非公開。include/ に置かず、AMARK_API を付けない） */
+#include <stdbool.h>
+#include <stdint.h>
+
+bool amark_unicode_is_punctuation(uint32_t c); /* ASCII 句読点、または一般カテゴリ P（Pc Pd Pe Pf Pi Po Ps）/ S（Sc Sk Sm So） */
+bool amark_unicode_is_whitespace(uint32_t c);  /* 一般カテゴリ Zs、タブ、LF、FF、CR */
+```
+- `src/unicode_class.c`: ASCII は表を引かずに判定し、0x80 以上は `src/unicode_class_data.c` の昇順の表を二分探索する（対数時間）。可変の状態を持たない
+- `src/unicode_class_data.c` は生成物: 句読点のコードポイント範囲 `{first, last}` の昇順配列と、Zs のコードポイントの昇順配列（0x80 以上だけでもよい）。先頭に定型ヘッダ、生成物である旨、出典 URL（UnicodeData.txt）、版 16.0.0、SHA-256、Unicode License v3 の著作権表示
+- 所有と変更: 本仕様が所有する。markdown-renderer が消費側であり、関数・意味・表の変更は markdown-renderer の再検証を伴う。ほかの spec が使う場合も `src/unicode_class.h` だけを include する
+- Validation: `commonmark_data_test.c`
+
 #### UnicodeTables
 
 | Field | Detail |
 |-------|--------|
-| Intent | Unicode 16.0.0 の句読点・空白・畳み込みの静的表 |
+| Intent | Unicode 16.0.0 の大文字小文字の畳み込みの静的表（commonmark 専用） |
 | Requirements | 10.2, 10.5 |
 
 **Contracts**: State [x]
-- `src/commonmark_unicode_data.c` は生成物: 句読点（一般カテゴリ Pc Pd Pe Pf Pi Po Ps Sc Sk Sm So）のコードポイント範囲 `{first, last}` の昇順配列、Zs のコードポイントの昇順配列、畳み込み `{元, 先の個数 1〜3, 先 3 個}` の元の昇順配列（CaseFolding の状態 C と F）。先頭に定型ヘッダ、出典 URL（UnicodeData.txt と CaseFolding.txt）、版 16.0.0、各 SHA-256、Unicode License v3 の著作権表示
-- ASCII の範囲は CharClass が表を引かずに判定するため、表は 0x80 以上だけでもよい（生成器が全範囲を出しても誤りではない）
+- `src/commonmark_unicode_data.c` は生成物: 畳み込み `{元, 先の個数 1〜3, 先 3 個}` の元の昇順配列（CaseFolding の状態 C と F）だけを持つ。ラベルの正規化だけが使うため commonmark 専用とし、UnicodeClass には置かない。先頭に定型ヘッダ、出典 URL（CaseFolding.txt）、版 16.0.0、SHA-256、Unicode License v3 の著作権表示
 
 ### 文字
 
@@ -460,13 +523,12 @@ typedef struct amark_commonmark_link_definition
 ##### Service Interface
 ```c
 bool amark_commonmark_is_ascii_punctuation(uint32_t c);   /* !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~ */
-bool amark_commonmark_is_punctuation(uint32_t c);         /* ASCII 句読点、または一般カテゴリ P / S */
-bool amark_commonmark_is_whitespace(uint32_t c);          /* Zs、タブ、LF、FF、CR */
 uint32_t amark_commonmark_char_before(amark_slice_t text, size_t offset); /* 直前の 1 文字。先頭なら '\n' */
 uint32_t amark_commonmark_char_at(amark_slice_t text, size_t offset);     /* その位置の 1 文字。末尾なら '\n' */
 size_t amark_commonmark_case_fold(uint32_t c, uint32_t folded[3]);       /* 畳み込み先の個数（なければ c 自身の 1） */
 ```
-- 表は二分探索で引く（対数時間）。`char_before` は UTF-8 の継続バイトを最大 3 バイト戻って復号する（入力は妥当な UTF-8）。内容の先頭と末尾は CommonMark の規則どおり空白（行末）として扱う
+- Unicode の句読点・空白の判定は UnicodeClass の `amark_unicode_is_punctuation` / `amark_unicode_is_whitespace` を `commonmark_internal.h` 経由で使い、CharClass は同じ意味の関数を重複して定義しない
+- 畳み込みの表は二分探索で引く（対数時間）。`char_at` は foundation の `amark_utf8_decode`、`char_before` は foundation の `amark_utf8_decode_previous` で復号し、独自の後方の復号を持たない（入力は parser-core が正規化した妥当な UTF-8）。内容の先頭と末尾は CommonMark の規則どおり空白（行末）として扱う
 - Validation: `commonmark_data_test.c`
 
 #### EntityAndEscape
@@ -667,7 +729,7 @@ amark_slice_t amark_commonmark_rest_of_line(const amark_block_context_t *ctx);
 - `amark_commonmark_get_extension_name(construct)`: 定義済みの 1 ビットなら拡張名（静的、NUL 終端）、それ以外 `{NULL, 0}`（1.6）
 - `amark_commonmark_add_extensions(dialect, constructs)`（1.2、2.4、2.5）: `dialect == NULL`、`constructs == 0`、`constructs & ~AMARK_COMMONMARK_ALL`: `AMARK_ERROR_INVALID_ARGUMENT`。凍結済みなら `AMARK_ERROR_INVALID_STATE`（`amark_dialect_is_frozen` で先に確かめる）。表の順に、指定されたビットの拡張を生成して `amark_dialect_add_extension`。失敗したら、その拡張を破棄し、この呼び出しで追加した拡張を逆順に `amark_dialect_remove_extension` で取り外して、そのエラー（`ALREADY_EXISTS`、`NO_MEMORY` など）を返す。取り外しは凍結されていない方言では失敗しない
 - `amark_commonmark_dialect_create(constructs, dialect)`（2.1、2.2、2.6）: `dialect == NULL` と `constructs` の検査は同上。`amark_dialect_create` → `amark_commonmark_add_extensions` → 成功なら凍結せずに `*dialect` に書く。失敗なら方言を破棄して `*dialect` を変更しない
-- `amark_commonmark_parse(data, length, options, document)`（3.1、3.3〜3.6）: `document == NULL`、`length > 0 && data == NULL`: `AMARK_ERROR_INVALID_ARGUMENT`。`amark_commonmark_dialect_create(AMARK_COMMONMARK_ALL)` → `amark_parse(dialect, options, data, length, &doc)` → 方言を破棄 → 成功なら `*document = doc`。`options == NULL` は parser-core の既定値。同じ入力の通常のパースと同一の木（3.6）
+- `amark_commonmark_parse(data, length, options, document)`（3.1、3.3〜3.6）: `document == NULL`、`length > 0 && data == NULL`: `AMARK_ERROR_INVALID_ARGUMENT`。`amark_commonmark_dialect_create(AMARK_COMMONMARK_ALL)` → `amark_parser_parse(dialect, data, length, options, &doc)` → 方言を破棄 → 成功なら `*document = doc`。`options == NULL` は parser-core の既定値。同じ入力の通常のパースと同一の木（3.6）
 - 並行利用（12.1〜12.3）: 可変のグローバル状態を持たない。簡易 API は呼び出しごとに方言を作るため共有状態がない。プリセットを凍結した方言は parser-core の規則どおり複数のパーサから同時に使える（構文のコールバックは解析状態と文脈だけを書き換える）
 
 **Implementation Notes**
@@ -682,23 +744,23 @@ amark_slice_t amark_commonmark_rest_of_line(const amark_block_context_t *ctx);
 | Requirements | 3.2, 3.3, 3.4, 3.5 |
 
 **Contracts**: Service [x]
-- `amark_commonmark_convert_to_html(data, length, parse_options, html_options, output)`: `output == NULL`、`length > 0 && data == NULL`: `AMARK_ERROR_INVALID_ARGUMENT`。手順は 方言の生成（`AMARK_COMMONMARK_ALL`）→ `amark_parse` → `amark_html_render(doc, html_options, output)` → 文書の破棄 → 方言の破棄。`html_options` の検証は `amark_html_render` に委ね、不正なら `AMARK_ERROR_INVALID_ARGUMENT` が返る（出力先は変わらない）
+- `amark_commonmark_convert_to_html(data, length, parse_options, html_options, output)`: `output == NULL`、`length > 0 && data == NULL`: `AMARK_ERROR_INVALID_ARGUMENT`。宣言は `amark/commonmark_html.h`。手順は 方言の生成（`AMARK_COMMONMARK_ALL`）→ `amark_parser_parse(dialect, data, length, parse_options, &doc)` → `amark_html_render(doc, html_options, output)` → 文書の破棄 → 方言の破棄。`html_options` の検証は `amark_html_render` に委ね、不正なら `AMARK_ERROR_INVALID_ARGUMENT` が返る（出力先は変わらない）
 - 出力先は html-renderer が失敗時に呼び出し前の長さへ戻す。解析の失敗では出力先に何も書かない（3.5）
 - `html_options == NULL` は html-renderer の既定値（生 HTML と危険な URL を出力しない、3.3）
-- 本体で `amark/html.h` を include するのはこのファイルだけ
+- 本体のソースで `amark/html.h`（`amark/commonmark_html.h` 経由を含む）を include するのはこのファイルだけ
 
 ### ツールとデータの出典
 
 #### EntityGenerator / UnicodeGenerator
 
 **Contracts**: Batch [x]
-- Trigger: 保守者が手で実行する（`python3 tools/generate_entity_table.py <entities.json> > src/commonmark_entity_data.c`、`python3 tools/generate_unicode_tables.py <UnicodeData.txt> <CaseFolding.txt> > src/commonmark_unicode_data.c`）
+- Trigger: 保守者が手で実行する（`python3 tools/generate_entity_table.py <entities.json> > src/commonmark_entity_data.c`、`python3 tools/generate_unicode_tables.py <UnicodeData.txt> <CaseFolding.txt> --class-output src/unicode_class_data.c --fold-output src/commonmark_unicode_data.c`）
 - Input / validation: 入力ファイルのパス。entities.json は JSON として読み、`;` で終わる名前だけを採る。UnicodeData.txt は範囲の行（`First>` / `Last>`）を展開してカテゴリを判定する。CaseFolding.txt は状態 C と F を採る。入力の SHA-256 を計算する
-- Output: foundation の定型ヘッダ、生成物である旨、出典の URL・版（Unicode 16.0.0 / entities.json の取得日）・SHA-256・ライセンスのコメント、`static const` の表、件数の定数。出力は入力だけで決まる（並び順を固定、10.3）
+- Output: UnicodeGenerator は 2 つのファイル（句読点・空白の表 `unicode_class_data.c`、畳み込みの表 `commonmark_unicode_data.c`）を出力する。各ファイルに foundation の定型ヘッダ、生成物である旨、出典の URL・版（Unicode 16.0.0 / entities.json の取得日）・SHA-256・ライセンスのコメント、`static const` の表、件数の定数。出力は入力だけで決まる（並び順を固定、10.3）
 - Idempotency: 同じ入力から同じバイト列を出力する。ビルドと CI は実行しない（10.4）
 
 #### ThirdPartyNotices / SpecFixture
-- `THIRD_PARTY_NOTICES.md`: WHATWG HTML Standard の名前付き文字参照（CC BY 4.0、変更: C の表へ変換）、Unicode Character Database 16.0.0（Unicode License v3 の全文）、CommonMark Spec 0.31.2（CC BY-SA 4.0、テストデータとしてだけ同梱し、ライブラリには含まれない）（8.1、10.5）
+- `THIRD_PARTY_NOTICES.md`: WHATWG HTML Standard の名前付き文字参照（対象ファイル `src/commonmark_entity_data.c`、CC BY 4.0、変更: C の表へ変換）、Unicode Character Database 16.0.0（対象ファイル `src/unicode_class_data.c` と `src/commonmark_unicode_data.c`、Unicode License v3 の全文）、CommonMark Spec 0.31.2（CC BY-SA 4.0、テストデータとしてだけ同梱し、ライブラリには含まれない）（8.1、10.5）
 - `tests/data/commonmark/spec-0.31.2.txt`: 上流のタグ `0.31.2` の spec.txt をバイト単位で同一に保持。`LICENSE.txt` に著者 John MacFarlane、CC BY-SA 4.0、出典 URL、SHA-256、改変していない旨（8.1）
 
 ### テスト
@@ -707,8 +769,8 @@ amark_slice_t amark_commonmark_rest_of_line(const amark_block_context_t *ctx);
 
 **Contracts**: Service [x]
 ```c
-/* tests/support/spec_examples.h */
-typedef struct spec_example
+/* tests/support/test_spec_examples.h（テスト補助の命名規約 test_<area>_*） */
+typedef struct test_spec_example
 {
     int number;             /* 1 から */
     char *section;          /* 直前の見出し */
@@ -716,10 +778,10 @@ typedef struct spec_example
     size_t markdown_length;
     char *html;
     size_t html_length;
-} spec_example_t;
+} test_spec_example_t;
 
-int spec_examples_load(const char *path, spec_example_t **examples, size_t *count);
-void spec_examples_free(spec_example_t *examples, size_t count);
+int test_spec_examples_load(const char *path, test_spec_example_t **examples, size_t *count);
+void test_spec_examples_free(test_spec_example_t *examples, size_t count);
 ```
 - 32 個の `` ` `` と ` example` の行で例を開始し、`.` だけの行で入力と期待 HTML を分け、32 個の `` ` `` だけの行で終える。例の中の `→`（U+2192）をタブに戻す（8.2）。`#` で始まる行（例の外）で節名を更新する
 - テスト補助のため `malloc` 系を直接使ってよい（ライブラリのアロケータの計測に混ざらないように）
@@ -727,7 +789,7 @@ void spec_examples_free(spec_example_t *examples, size_t count);
 #### ConformanceTest（`commonmark_spec_test.c`）
 **Contracts**: Batch [x]
 - 例の数が 652 であることを確かめる（8.2）
-- 各例: プリセットの方言（1 回だけ作って凍結し再利用）で `amark_parse`、`amark_html_options_init` の後に `allow_raw_html = true`、`allow_dangerous_urls = true` として `amark_html_render`、期待 HTML とバイト比較（8.3、8.4）
+- 各例: プリセットの方言（1 回だけ作って凍結し再利用）で `amark_parser_parse`、`amark_html_options_init` の後に `allow_raw_html = true`、`allow_dangerous_urls = true` として `amark_html_render`、期待 HTML とバイト比較（8.3、8.4）
 - 不一致は例の番号・節・入力・期待・実際を出力して数え、1 件でもあればテストを失敗させる（8.5）
 - 各例を 1 バイトずつ `amark_parser_feed` して得た HTML が一括と同一（8.6）
 - 計測アロケータで、全例の処理後に `live == 0`
@@ -766,7 +828,7 @@ void spec_examples_free(spec_example_t *examples, size_t count);
 - `commonmark_dialect_test.c`: 17 単位それぞれの生成と名前（1.1、1.6）、2 ビット・0・未定義ビットの拒否（1.3）、一括追加と名前の重複での全か無か（1.2、2.5）、凍結済みで `INVALID_STATE`（2.4）、プリセットの拡張数 17・未凍結・後から追加と取り外しができる（2.1〜2.3）、部分集合（2.2）、外した構文の記法（HTML ブロックなしで `<div>` が段落のテキスト、インデントコードなしで字下げ行が段落、リンク参照定義なしで定義行が段落、強調なしで `*a*` がテキスト、1.4）、新しいノード種別がない（全文書の全ノードが標準種別、1.5）、自作の拡張との混在と優先順位の変更（1.7）、簡易パースと通常のパースの木の同一性（3.6）、簡易パースの文書が方言の破棄後も使える（3.1）、簡易変換の追記と既定の安全性（3.2、3.3）、`NULL` と長さの検査（3.4）、2 つのスレッドで同じ凍結済みの方言を使う解析（スレッドの API が使える環境だけ。C99 の範囲外のため任意、12.2、12.3）
 - `commonmark_block_test.c`: 仕様の例にない境界（9 桁と 10 桁の開始番号、見出しレベル 6 と 7、フェンスの長さ違いの閉じ、HTML ブロックの種類ごとの終了、リストの記号の変化での分割、空項目と空行、深さの上限の付近）と、外した構文との組み合わせ（4.1〜4.7、5.1〜5.8）
 - `commonmark_inline_test.c`: 数値参照の範囲（6.2、6.3）、コードスパンの空白の規則（6.4、6.5）、文字参照のスペースと改行（6.6）、生 HTML とオートリンクの境界（6.7、6.8）、flanking の Unicode の句読点（記号 S を含む、7.1）、rule of 3（7.2）、リンクの各形と無効化（7.3〜7.6）、ラベルの畳み込み（7.7）、優先順位（7.8）、ラベル 999 / 1000 文字（5.8）、括弧 32 / 33 段（9.5）、展開量の上限の境界（9.4）
-- `commonmark_data_test.c`: エンティティ表が昇順で重複がなく、`amp`、`ngE`（2 コードポイント）、`CounterClockwiseContourIntegral` を含み、`;` なしの名前を含まない（10.1）。句読点に `!`、`£`（Sc）、`、`（Po）を含み `a` を含まない。空白に U+3000 を含む。`ẞ` の畳み込みが `ss`（10.2）。生成物の先頭に出典と SHA-256 の記録がある（ソースを読む検査、10.3）
+- `commonmark_data_test.c`: エンティティ表が昇順で重複がなく、`amp`、`ngE`（2 コードポイント）、`CounterClockwiseContourIntegral` を含み、`;` なしの名前を含まない（10.1）。`amark_unicode_is_punctuation` が `!`、`£`（Sc）、`、`（Po）で真、`a` で偽。`amark_unicode_is_whitespace` が U+3000 で真。句読点と Zs の表が昇順で重複がない。`ẞ` の畳み込みが `ss`（10.2）。生成物の先頭に出典と SHA-256 の記録がある（ソースを読む検査、10.3）
 - `commonmark_error_test.c`: 方言の生成、一括追加、代表的な文書（全構文を含む）の解析、簡易変換について、失敗注入の網羅パターン（各回で `NO_MEMORY` かつ状態不変、または成功、後片付け後 `live == 0`、11.1〜11.3）。全例の文字列の UTF-8 妥当性（`amark_utf8_validate`、11.4）は ConformanceTest の各例でも確認する
 
 ### 統合
@@ -776,7 +838,7 @@ void spec_examples_free(spec_example_t *examples, size_t count);
 **Contracts**: Batch [x]
 - Trigger: `cmake -S . -B build && cmake --build build && ctest --test-dir build`（静的・動的の両方、3 OS）
 - Input: Modified Files の一覧
-- Output: 7 つのテスト実行ファイルが CTest に登録され成功する。ヘッダ単独 include 検査が `amark/commonmark.h` に適用される。C++ 検査がプリセットの生成と簡易変換を呼んでリンクできる。動的ライブラリの公開シンボルは CommonmarkPublicHeader の 6 関数だけが増える。テスト補助と抽出器は `amark_test_support` にだけ含まれる（8.7）。ビルドは Python を必要としない（10.4）。`THIRD_PARTY_NOTICES.md` がインストールされる
+- Output: 7 つのテスト実行ファイルが CTest に登録され成功する。ヘッダ単独 include 検査が `amark/commonmark.h` と `amark/commonmark_html.h` に適用され、`amark/commonmark.h` が `amark/html.h` なしでコンパイルできる。C++ 検査がプリセットの生成と簡易変換を呼んでリンクできる。動的ライブラリの公開シンボルは CommonmarkPublicHeader の 5 関数と CommonmarkHtmlHeader の 1 関数だけが増え、`amark_unicode_*` は export されない。テスト補助と抽出器は `amark_test_support` にだけ含まれる（8.7）。ビルドは Python を必要としない（10.4）。`THIRD_PARTY_NOTICES.md` がインストールされる
 
 ## Data Models
 
@@ -810,7 +872,7 @@ void spec_examples_free(spec_example_t *examples, size_t count);
 
 ## Testing Strategy
 - 単体・統合・性能のテストは「テスト」の各コンポーネントに記した。要点:
-  - Unit: CharClass と表（`commonmark_data_test.c`）、EntityAndEscape・LinkScan・HtmlScan の境界（`commonmark_inline_test.c`）、ブロック構文の境界（`commonmark_block_test.c`）
+  - Unit: UnicodeClass、CharClass と表（`commonmark_data_test.c`）、EntityAndEscape・LinkScan・HtmlScan の境界（`commonmark_inline_test.c`）、ブロック構文の境界（`commonmark_block_test.c`）
   - Integration: 全 652 例のバイト比較と 1 バイト供給の同一性（`commonmark_spec_test.c`）、方言の組み立てと簡易 API（`commonmark_dialect_test.c`）、失敗注入（`commonmark_error_test.c`）、C++ 検査
   - Performance: 病的入力の 25 類型（`commonmark_pathological_test.c`）
 
@@ -826,14 +888,15 @@ void spec_examples_free(spec_example_t *examples, size_t count);
 
 ## Cross-Spec Change Note: parser-core
 
-parser-core の公開 API の追加・変更は不要である。CommonMark の全構文は現在の API で実装できる。次の 3 件を parser-core の文書（要件と公開ヘッダのコメント）に反映するよう依頼する。
+parser-core の公開 API の追加・変更は不要である。本仕様が依存する次の 3 件は、parser-core の要件・設計に適用済み（applied upstream）であり、本仕様はタスク 1.3 などでそれに依存する振る舞いを確かめるだけである。
 
-| ID | 種類 | 対象 | 変更内容 | 理由 |
-|---|---|---|---|---|
-| C1 | 契約の緩和 | 要件 13.8、14.9、`extension.h`・`dialect.h` の寿命の義務 | 「拡張（方言）を、そのノード種別を使う文書より先に破棄してはならない」を、義務の対象を「その拡張（方言内の拡張）が登録したノード種別のノードを含む文書」に限ると明記する。標準種別だけからなる文書は、解析を終えた後は方言・拡張・パーサを参照せず、それらの破棄後も有効である | `amark_commonmark_parse` が内部で方言を作って破棄し、文書だけを返すため（3.1） |
-| C2 | 意味の明確化 | 要件 7.1、8.4、8.5、`block_syntax.h` の空行・遅延継続・段落の継続の説明 | 「行が空行」は「その行の継続判定と開始判定を終えた位置から行末まで、スペースとタブだけである」ことを指すと明記する（設計の BlockLine の `blank` と同じ） | `> - a\n>\n> - b` で `>` の後が空行として項目に記録されることが CommonMark（cmark）の規則であり、行全体の判定では loose / tight が変わるため |
-| C3 | 意味の明確化 | 要件 9.1、`inline_syntax.h` の `amark_inline_context_get_block` | インライン対象は文書順に 1 つずつ最後まで解析され、1 つの対象の解析中は `get_block` が同じノードを返し、異なる対象は異なるノードであることを契約として明記する | コードスパン・生 HTML・参照展開量の「内容ごとの記憶」を、拡張の解析状態でノードの変化から初期化するため（9.1、9.4） |
+| ID | 種類 | 内容（要約） | 本仕様での利用 |
+|---|---|---|---|
+| C1 | 契約の緩和 | 寿命の義務は拡張が登録したノード種別のノードを含む文書だけに及ぶ。標準種別だけの文書は方言の破棄後も有効 | `amark_commonmark_parse` が方言を破棄して文書だけを返す（3.1） |
+| C2 | 意味の明確化 | 「行が空行」は継続判定と開始判定を終えた位置から行末までがスペースとタブだけであること | `> - a\n>\n> - b` の loose（4.5） |
+| C3 | 意味の明確化 | インライン対象は 1 つずつ最後まで解析され、対象ごとに `get_block` のノードが異なる | 内容ごとの記憶の初期化（9.1、9.4） |
 
-- 変更の実施は parser-core の文書の更新として扱い、parser-core の実装の振る舞いは変わらない（現在の設計がすでに満たしている）
-- node-tree、html-renderer、foundation への変更要求: なし。新しいエラーコード: なし（8 以降の割り当ては不要）
+- parser-core の簡易解析 API は `amark_parser_parse(dialect, data, length, options, &doc)`（D7）を使う
+- foundation への依存: `amark_utf8_decode_previous`（D3、foundation が追加）を CharClass が使う。新しいエラーコード: なし（foundation の表のコード 0〜7 が唯一の正本）
+- markdown-renderer: UnicodeClass（`src/unicode_class.h`）と抽出器 `tests/support/test_spec_examples.h` の消費側。これらの変更は markdown-renderer の再検証を伴う
 - 適合テストで不一致がレンダラ側の規則に起因すると判明した場合は、html-renderer の組み込み出力の表の修正として html-renderer の spec に戻す（brief の約束）

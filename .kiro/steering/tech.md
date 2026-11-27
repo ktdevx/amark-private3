@@ -27,11 +27,22 @@
 
 ### メモリ
 
-ライブラリ内の動的確保はすべて、差し替え可能なグローバルアロケータを経由する: `amark_malloc`, `amark_realloc`, `amark_calloc`, `amark_free`。`malloc` などを直接呼ばない。
+ライブラリ内の動的確保はすべて、差し替え可能なグローバルアロケータを経由する: `amark_malloc`, `amark_realloc`, `amark_calloc`, `amark_free`。`malloc` などを直接呼ばない（直接呼ぶのは `src/memory.c` の既定アロケータだけ）。
+
+### 文字列の所有権
+
+- 借用は `amark_slice_t`（先頭とバイト長。NUL 終端を仮定せず、NUL を含みうる）。参照先の寿命は貸し手が保証する
+- 所有は `amark_malloc` 系で確保した `char *` と長さの組で、常に `data[length] == '\0'`。所有者が `amark_free` で解放する
+- 正本は `foundation` spec の設計（Slice）
 
 ### エラー処理
 
-エラーコードはライブラリ全体で単一の列挙とする。モジュールや spec ごとの独自体系を作らず、必要なコードは共通の列挙に追加する。
+エラーコードはライブラリ全体で単一の列挙 `amark_error_t` とする。モジュールや spec ごとの独自体系を作らず、必要なコードは共通の列挙に追加する。
+
+- 失敗しうる公開関数は `amark_error_t` を返し、結果は出力引数で返す。成功は `AMARK_OK`（0）
+- **全コードの唯一の正本は `foundation` spec の設計にあるエラーコード一覧表**（値・所有 spec・文字列・意味）。他の spec の設計は表を参照し、値や文字列を定義し直さない
+- 追加は末尾のみ。公開済みの値の変更・削除・再利用は禁止。新しいコードが必要な spec は一覧表へ行を追記し（「次の空き番号」を見込みで使わない）、`error.h` の列挙、`src/error.c` の `switch`、`tests/error_test.c` の確認を同時に更新する
+- 意味が合えば既存のコードを再利用する
 
 ### 命名
 
@@ -43,10 +54,10 @@
 ```c
 typedef struct amark_buffer amark_buffer_t;
 
-amark_error_t amark_buffer_init(amark_buffer_t *buffer);
+void amark_buffer_init(amark_buffer_t *buffer);   /* 確保しないので失敗しない */
 void amark_buffer_deinit(amark_buffer_t *buffer);
 
-amark_node_t *amark_node_create(amark_node_type_t type);
+amark_error_t amark_node_create(amark_node_type_t type, amark_node_t **node);   /* 結果は出力引数 */
 void amark_node_destroy(amark_node_t *node);
 ```
 
@@ -62,24 +73,45 @@ void amark_node_destroy(amark_node_t *node);
 ```c
 amark_error_t amark_buffer_append(amark_buffer_t *buffer, const char *data, size_t length)
 {
-    size_t required = buffer->length + length;
+    amark_error_t error;
 
-    if (!buffer->data || ((buffer->length + length) > buffer->capacity))
+    if (!buffer || ((length > 0) && !data))
     {
-        char *grown = amark_realloc(buffer->data, required);
-        if (!grown)
-        {
-            return AMARK_ERROR_NO_MEMORY;
-        }
-        buffer->data = grown;
-        buffer->capacity = required;
+        return AMARK_ERROR_INVALID_ARGUMENT;
+    }
+
+    if (length == 0)
+    {
+        return AMARK_OK;
+    }
+
+    error = amark_buffer_reserve(buffer, length);   /* あふれ・確保失敗ではバッファを変えない */
+    if (error)
+    {
+        return error;
     }
 
     memcpy(buffer->data + buffer->length, data, length);
-    buffer->length = required;
+    buffer->length += length;
+    buffer->data[buffer->length] = '\0';
 
     return AMARK_OK;
 }
+```
+
+比較の左右に算術式がある場合の例: `if (additional > (SIZE_MAX - buffer->length - 1))`
+
+### 機械的に検査する規約と検査しない規約
+
+- 検査する: 整形（`clang-format` 18 の `--dry-run --Werror`、CI の format ジョブ）、ソースヘッダ表記（CTest の `amark.source_headers`）、エラー文字列の定義漏れ（`default` なしの `switch` と `-Wswitch` + 警告のエラー化）、公開ヘッダの単独 include と C++ からの利用（ヘッダ検査とテスト）
+- 検査しない（レビューで確認する）: 演算順序の括弧付け、ステップ間の空行、命名規約の一部（`_init` / `_create` の使い分けなど）、モジュール間の include の向き
+
+```c
+/* 全ソースの先頭に置く定型ヘッダ */
+/*
+ * Copyright (c) 2026 The Amark Authors
+ * SPDX-License-Identifier: MIT
+ */
 ```
 
 ### Testing
@@ -87,26 +119,47 @@ amark_error_t amark_buffer_append(amark_buffer_t *buffer, const char *data, size
 - Naos で書き、CTest から実行する
 - **ライブラリ本体をテストするためだけのコードを、ライブラリ側のソースコードに持たない**。テスト用のフック、テスト専用の関数、テスト用の条件コンパイルを本体に入れない。確保失敗の注入などはテスト側でアロケータを差し替えて実現する
 - テストは公開 API を通して行う
+- モジュールごとに 1 実行ファイル（`naos_add_executable(amark_<module>_test ...)`）。CTest 名は `amark_<module>_test.<suite>.<test>`
+- テスト補助は `tests/support/` の静的ライブラリ `amark_test_support`。計測アロケータ（`test_allocator_*`）で確保失敗の注入、確保・解放の釣り合い、バイト数（生存・累計・最大）を検証する
 - CommonMark 方言は仕様の例を適合テストとして実行する
 
 ### CI/CD
 
 GitHub Actions で 3 OS すべてについて、静的・動的の両方をビルドしテストする。
 
+- 行列: `{linux-gcc, linux-clang, macos-clang, windows-msvc} × {static, shared}`。警告をエラーとし、テスト後にインストールして `tests/package/` の利用者プロジェクトを `find_package(Amark)` でビルド・実行する
+- 整形検査は `ubuntu-24.04` の `clang-format-18` に版を固定して行う
+- リリース: `project()` の `VERSION` を上げてマージ → `vX.Y.Z` タグを push → タグと `VERSION` の一致確認と全ジョブの成功の後に `gh release create` で公開
+
 ## Development Environment
 
 ### Required Tools
 
-- C99 コンパイラ（GCC / Clang / MSVC）
+- C99 コンパイラ（GCC / Clang / MSVC）。テストの C++ 検査用に C++11 コンパイラ
 - CMake 3.21 以上
+- clang-format 18（整形）
+
+### Build Options
+
+| Option | Default | Content |
+|---|---|---|
+| `BUILD_SHARED_LIBS` | `OFF` | `ON` で動的ライブラリ |
+| `AMARK_BUILD_TESTS` | トップレベル時 `ON` | テストを構成する（Naos の取得もこのときだけ） |
+| `AMARK_INSTALL` | トップレベル時 `ON` | インストール規則を生成する |
+| `AMARK_WARNINGS_AS_ERRORS` | `OFF` | 警告をエラーにする（CI では `ON`） |
+
+利用者は `find_package(Amark)` またはサブディレクトリ取り込みで `Amark::amark` にリンクする
 
 ### Common Commands
 
 ```bash
 # Configure: cmake -S . -B build
-# Build:     cmake --build build
-# Test:      ctest --test-dir build
+# Build:     cmake --build build --config Release
+# Test:      ctest --test-dir build -C Release --output-on-failure
 # Shared:    cmake -S . -B build -DBUILD_SHARED_LIBS=ON
+# Strict:    cmake -S . -B build -DAMARK_WARNINGS_AS_ERRORS=ON
+# Install:   cmake --install build --config Release --prefix <dir>
+# Format:    clang-format-18 --dry-run --Werror <files>
 ```
 
 ## Key Technical Decisions
@@ -118,3 +171,5 @@ GitHub Actions で 3 OS すべてについて、静的・動的の両方をビ�
 
 ---
 _Document standards and patterns, not every dependency_
+
+_updated_at: 2026-11-27 — foundation の設計に合わせて命名例（`void amark_buffer_init`、出力引数の `amark_node_create`）とコード例を修正し、エラーコード一覧表の規則、所有権規約、ビルドオプション、検査する規約としない規約、CI とリリースを追記_

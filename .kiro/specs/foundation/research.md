@@ -86,7 +86,7 @@
 - **Selected Approach**: `amark_error_t`。`AMARK_OK = 0`、以降 `AMARK_ERROR_*` に連番の明示値を振る。番兵（個数を表す定数）は公開しない（追加のたびに値が変わり ABI の約束になってしまうため）。文字列は `default` なしの `switch` で返し、`switch` の後で未知の値の文字列を返す
 - **Rationale**: 末尾追加は ABI 互換。`-Wswitch` による漏れ検出が効く
 - **Trade-offs**: MSVC 単独では漏れを検出しない。テストは既知の各コードの文字列を個別に確認する
-- **Follow-up**: 後続 spec はコードを追加する際、`error.h` の列挙・`error.c` の文字列・`error_test.c` の確認を同時に更新する
+- **Follow-up**: 後続 spec はコードを追加する際、design.md のエラーコード一覧表（全コードの唯一の正本。値・所有 spec・文字列・意味）に行を追記し、`error.h` の列挙・`error.c` の文字列・`error_test.c` の確認を同時に更新する。「次の空き番号」を各 spec が見込みで使う方式は、並行 spec の番号衝突を招くため採らない（横断レビューでの是正）
 
 ### Decision: 文字列の所有権規約
 - **Context**: 要件 8.7。node-tree と共有する seam
@@ -102,7 +102,18 @@
 ### Decision: `amark_buffer_init` は値を返さない
 - **Context**: steering（tech.md）の命名例では `amark_error_t amark_buffer_init(...)` としているが、初期化は確保を伴わず失敗しない
 - **Selected Approach**: `void amark_buffer_init(amark_buffer_t *buffer)`。「失敗しうる関数はエラーコードを返す」という規約（要件 7.7）を優先する
-- **Follow-up**: steering 更新タスク（要件 12.5）で tech.md の例をこの形に合わせる
+- **Follow-up**: tech.md の例はこの形に修正済み（横断レビューでの是正）。実装時は 5.1 で実際の宣言と突き合わせる
+
+### Decision: UTF-8 の逆方向復号を foundation に置く
+- **Context**: 要件 10.8。commonmark の強調の flanking 判定（直前の文字の分類）と markdown-renderer の出力末尾の文字の分類が、ある位置の直前の 1 文字を必要とする（横断レビューで判明）
+- **Selected Approach**: `amark_utf8_decode_previous(input, offset, &codepoint, &consumed)`。結果は「先頭から `offset` までを前方へ復号したときの最後の単位」と一致させる。継続バイトでないバイトは前方復号で必ず新しい単位を始めるので、直前 4 バイト内の最後の非継続バイトから前方の復号を再利用すれば足りる
+- **Rationale**: 各 spec が独自に逆方向の走査を書くと、不正バイトの扱いが前方の復号とずれる
+- **Trade-offs**: 先頭から全体を復号するのに比べ、読み取りは直前 4 バイトに限られる
+
+### Decision: テスト補助と共有の骨組みファイルの規則
+- **Context**: 横断レビューで、後続 spec が `amark.h`、`src/CMakeLists.txt`、`tests/CMakeLists.txt`、`tests/cxx_header_test.cpp`、`amark_test_support` に並行して追加すること、テスト補助の名前が spec ごとにばらつくこと、メモリ使用量の検証にバイト数が必要なことが判明した
+- **Selected Approach**: これらの骨組みファイルは foundation が所有し、後続 spec は spec 名のコメント付きブロックを末尾に追記するだけとする（衝突は両ブロックを残して解消）。テスト補助は `tests/support/test_<area>.{h,c}` と `test_<area>_*`。計測アロケータはブロックごとにサイズのヘッダを付け、`bytes_live`・`bytes_total`・`bytes_peak` を数える
+- **Rationale**: 追記専用にすれば並行実装の衝突が機械的に解消でき、命名を揃えればテスト補助の出所が名前から分かる
 
 ### Decision: ソースヘッダ表記の検査は CMake スクリプトで行い CTest に登録する
 - **Context**: 要件 5.3。3 OS で同じ検査を実行したい
@@ -117,7 +128,7 @@
 ### Decision: Generalization / Build vs Adopt / Simplification の結果
 - **Generalization**: バッファへの追記はすべて「バイト列の追記」に集約し、1 バイト、NUL 終端文字列、スライス、コードポイントの追記はその薄い入口とする。容量確保は `reserve` に集約する
 - **Build vs Adopt**: テスト基盤は Naos を採用（steering で決定済み）。export ヘッダは `GenerateExportHeader` を採らず手書き（上記）。UTF-8 処理は外部ライブラリを採らず自作（C 標準ライブラリ以外に依存しない方針、処理量が小さい）。パッケージ設定は CMake 標準の `CMakePackageConfigHelpers` を採用
-- **Simplification**: pkg-config ファイル、2 ターゲット同時ビルド、エラーの X マクロ、スライスのインライン関数化、Unicode 文字分類は採らない。非公開ヘッダは現時点で不要
+- **Simplification**: pkg-config ファイル、2 ターゲット同時ビルド、エラーの X マクロ、スライスのインライン関数化、公開 API としての Unicode 文字分類は採らない（句読点・空白の分類は commonmark の非公開モジュール `src/unicode_class` が持つ）。非公開ヘッダは現時点で不要
 
 ## Risks & Mitigations
 - 動的ライブラリ構成で DLL が見つからずテストの列挙が失敗する — トップレベル時に実行ファイルと DLL の出力先を揃える。CI の Windows 動的ジョブで常に検証する
