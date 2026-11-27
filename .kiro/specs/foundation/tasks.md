@@ -26,7 +26,7 @@
   - 完了状態: 静的・動的の両構成で CTest を実行するとバージョンのテストと C++ のテストが個別のテストとして成功し、公開ヘッダ単独のコンパイル検査がビルドに含まれる
   - _Requirements: 2.4, 2.5, 2.6, 3.1, 3.2, 3.3, 3.5, 3.7, 11.3, 11.4, 11.6_
 
-- [ ] 1.4 ソースヘッダ表記の検査を CTest に登録する
+- [x] 1.4 ソースヘッダ表記の検査を CTest に登録する
   - ライブラリ本体、公開ヘッダ、テストの各ソースについて、先頭付近の著作権表記と SPDX 表記を確認する検査を、全 OS で動く形で用意する
   - 表記を欠くファイルがあれば、そのパスをすべて示して失敗させる
   - 完了状態: CTest でソースヘッダ検査が成功し、表記を消した一時ファイルを置くとそのファイル名を示して失敗する
@@ -111,3 +111,4 @@
 - 1.1: `.clang-format` は `BreakBeforeBraces: Allman` のため `#  define AMARK_BEGIN_DECLS extern "C" {` が 3 行に分割される。1.2 の `export.h` では `AMARK_BEGIN_DECLS` / `AMARK_END_DECLS` の定義ブロックを `/* clang-format off */` / `/* clang-format on */` で囲む。末尾の `/* */` コメントは clang-format が 1 スペースに詰めるため、実コードでは 1 スペースで書く
 - 1.2: `export.h` は単独ではマクロだけの翻訳単位になり、`-Wpedantic -Werror` で「ISO C forbids an empty translation unit」となる。1.3 で生成するヘッダ単独検査の翻訳単位にはダミーの宣言を加える。包括ヘッダ `amark.h` の `/* foundation */` ブロックには、各タスクで追加する公開ヘッダを順に足す
 - 1.3: テストの `NAOS_SUITE` / `NAOS_MAIN` の登録は 1 行 1 項目を保つため `/* clang-format off */` / `/* clang-format on */` で囲む。C++ テストでは `NAOS_CHECK*` だけを使う。`naos_add_executable` の `LIBRARIES` は現状 `Amark::amark` だけで、2.2 で `amark_test_support` を作ったら tests/CMakeLists.txt 冒頭の規約コメントと各登録に追加する。ヘッダ単独検査は `include/amark/*.h` の CONFIGURE_DEPENDS glob なので新しい公開ヘッダは自動で検査される
+- 1.4: `amark.source_headers` は include/、src/、tests/ 配下（tests/package/ を含む）の *.c / *.h / *.cpp の先頭 5 行に定型ヘッダを要求する。新しいソースには必ず定型ヘッダを付ける

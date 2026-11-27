@@ -57,3 +57,10 @@ endforeach()
 add_library(amark_header_check OBJECT ${amark_header_check_sources})
 target_link_libraries(amark_header_check PRIVATE Amark::amark)
 amark_target_warnings(amark_header_check)
+
+# ソースヘッダ表記の検査。include/、src/、tests/ の *.c、*.h、*.cpp の先頭 5 行以内に
+# 著作権表記と SPDX 表記があることを cmake -P で確かめる（コンパイラに依存せず全 OS で動く）。
+# 対象のファイルは実行のたびに列挙するため、後続 spec のソースは自動的に対象になる。
+add_test(NAME amark.source_headers
+    COMMAND "${CMAKE_COMMAND}" "-DAMARK_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
+            -P "${PROJECT_SOURCE_DIR}/cmake/AmarkCheckSourceHeaders.cmake")
