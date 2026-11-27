@@ -97,7 +97,7 @@ graph TB
 |-------|------------------|-----------------|-------|
 | 言語 | C99（foundation の設定を継承） | 本体とテスト | 新しい依存なし |
 | ランタイム API | foundation（エラー、アロケータ、スライス、バッファ） | 出力先、確保、借用文字列 | `amark_buffer_append`、`amark_buffer_truncate` |
-| 木 | node-tree（種別ハンドル、アクセサ、イテレータ） | 入力の走査と値の取得 | `amark_node_iter_*`、`amark_node_kind_is_leaf`、`amark_node_kind_get_content` |
+| 木 | node-tree（種別ハンドル、アクセサ、イテレータ） | 入力の走査と値の取得 | `amark_node_iter_*`、`amark_node_kind_is_leaf` |
 | テスト | Naos v0.4.0、`amark_test_support` | テスト実行ファイル、失敗注入 | foundation の `naos_add_executable` 規約 |
 | 出力規則の基準 | cmark `html.c` / houdini（規則のみ採用、コードは取り込まない） | 期待 HTML との一致 | 詳細は `research.md` |
 

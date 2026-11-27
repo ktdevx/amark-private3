@@ -46,7 +46,7 @@
 - node-tree の公開ヘッダ: `amark/node_kind.h`、`amark/node.h`、`amark/node_iter.h`（`src/node_internal.h` は include しない）
 - 非公開: `src/render_core.h`（html-renderer 所有のレンダラ間の内部契約）、`src/unicode_class.h`（commonmark 所有。`amark_unicode_is_punctuation` / `amark_unicode_is_whitespace`）
 - C 標準ライブラリ: `<stddef.h>`、`<stdint.h>`、`<stdbool.h>`、`<string.h>`
-- テストだけ: `amark/commonmark.h`、`amark/commonmark_html.h`、`amark/html.h`、`tests/support/test_spec_examples.h`、`tests/support/test_tree.h`、`tests/support/test_allocator.h`、Naos
+- テストだけ: `amark/commonmark.h`、`amark/html.h`、`tests/support/test_spec_examples.h`、`tests/support/test_tree.h`、`tests/support/test_allocator.h`、Naos
 - 依存方向（左ほど下位。右から左への include のみ）: `foundation, node-tree, render_core, unicode_class → markdown_internal.h → markdown_writer → markdown_escape → markdown_emphasis → markdown_block, markdown_inline → markdown_context → markdown_renderer`。`amark/markdown.h` は foundation と node-tree の公開ヘッダだけを include する。ライブラリ本体の Markdown のソースは html-renderer・parser-core・commonmark のヘッダを include しない
 
 ### Revalidation Triggers

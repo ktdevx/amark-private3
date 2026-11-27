@@ -56,7 +56,7 @@ Amark はゼロから作る C99 の Markdown ライブラリであり、ビル�
 3. Where 動的ライブラリとしてビルドする, the Amark Build System shall すべての OS でテスト実行ファイルが Amark の動的ライブラリを読み込んでテストの列挙と実行ができるようにする
 4. The Amark Library shall テストのためだけに存在するコード（テスト用のフック、テスト専用の関数、テスト用の条件コンパイル、テスト用アロケータ）をライブラリ本体に含めない
 5. The Amark Test Suite shall ライブラリの振る舞いを公開 API を通して検証する
-6. The Amark Test Suite shall メモリ確保の失敗と確保・解放の釣り合いを、テスト側でグローバルアロケータを差し替えることによって検証できる補助機能を提供する
+6. The Amark Test Suite shall メモリ確保の失敗、確保・解放の釣り合い、確保バイト数（現在量・累計・最大）を、テスト側でグローバルアロケータを差し替えることによって検証できる補助機能を提供する
 7. The Amark Test Suite shall 各公開ヘッダが単独で include でき、C++ からも利用できることを検証する
 
 ### Requirement 4: 継続的インテグレーション

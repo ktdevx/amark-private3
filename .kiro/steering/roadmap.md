@@ -66,12 +66,12 @@ Amark は Markdown テキストをパースする C99 ライブラリである�
 
 ## Specs (dependency order)
 
-- [ ] foundation -- ビルド基盤（CMake、静的/動的、CI/CD、3 OS）、ライセンス、グローバルアロケータ、共通エラーコード、共通ユーティリティ、Naos 導入、コーディング規約の整備. Dependencies: none
-- [ ] node-tree -- 値を木に持つノード、標準ノード種別とアクセサ、拡張ノード種別の登録、木の編集 API、走査. Dependencies: foundation
-- [ ] parser-core -- 構文非依存の 2 フェーズ（ブロック→インライン）パーサエンジン、構文拡張の登録 API、方言（拡張セット）定義. Dependencies: foundation, node-tree
-- [ ] html-renderer -- 木から HTML へのレンダリング、ノード種別ごとのレンダラフック. Dependencies: foundation, node-tree
-- [ ] commonmark -- CommonMark 構文一式を拡張として実装、CommonMark 方言プリセット、仕様適合テスト. Dependencies: parser-core, html-renderer
-- [ ] markdown-renderer -- 木から Markdown へのレンダリング、ノード種別ごとのレンダラフック、往復テスト. Dependencies: node-tree, commonmark, html-renderer
+- [x] foundation -- ビルド基盤（CMake、静的/動的、CI/CD、3 OS）、ライセンス、グローバルアロケータ、共通エラーコード、共通ユーティリティ、Naos 導入、コーディング規約の整備. Dependencies: none
+- [x] node-tree -- 値を木に持つノード、標準ノード種別とアクセサ、拡張ノード種別の登録、木の編集 API、走査. Dependencies: foundation
+- [x] parser-core -- 構文非依存の 2 フェーズ（ブロック→インライン）パーサエンジン、構文拡張の登録 API、方言（拡張セット）定義. Dependencies: foundation, node-tree
+- [x] html-renderer -- 木から HTML へのレンダリング、ノード種別ごとのレンダラフック. Dependencies: foundation, node-tree
+- [x] commonmark -- CommonMark 構文一式を拡張として実装、CommonMark 方言プリセット、仕様適合テスト. Dependencies: parser-core, html-renderer
+- [x] markdown-renderer -- 木から Markdown へのレンダリング、ノード種別ごとのレンダラフック、往復テスト. Dependencies: node-tree, commonmark, html-renderer
 
 ## Future Phases
 

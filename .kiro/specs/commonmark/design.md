@@ -778,10 +778,10 @@ typedef struct test_spec_example
     size_t markdown_length;
     char *html;
     size_t html_length;
-} test_spec_example_t;
+} test_spec_examples_item_t;
 
-int test_spec_examples_load(const char *path, test_spec_example_t **examples, size_t *count);
-void test_spec_examples_free(test_spec_example_t *examples, size_t count);
+int test_spec_examples_load(const char *path, test_spec_examples_item_t **examples, size_t *count);
+void test_spec_examples_free(test_spec_examples_item_t *examples, size_t count);
 ```
 - 32 個の `` ` `` と ` example` の行で例を開始し、`.` だけの行で入力と期待 HTML を分け、32 個の `` ` `` だけの行で終える。例の中の `→`（U+2192）をタブに戻す（8.2）。`#` で始まる行（例の外）で節名を更新する
 - テスト補助のため `malloc` 系を直接使ってよい（ライブラリのアロケータの計測に混ざらないように）
@@ -822,7 +822,7 @@ void test_spec_examples_free(test_spec_example_t *examples, size_t count);
 | reference expansion | `[a]: <` + `x`×50000 + `>` と `[a]`×50000 | 出力長が入力長の定数倍以下（9.4） |
 
 - 各類型の解析と変換を `clock()` で測り、CPU 時間 5 秒以内（9.2）。CTest の TIMEOUT 300 秒を実行ファイル全体の上限とする
-- メモリ（9.6）: 計測アロケータの最大使用量が入力長の定数倍（類型ごとに 64 倍以下）で、終了後 `live == 0`
+- メモリ（9.6）: 計測アロケータの `bytes_peak`が入力長の定数倍（類型ごとに 64 倍以下）で、終了後 `live == 0`
 
 #### 単体テストと失敗注入
 - `commonmark_dialect_test.c`: 17 単位それぞれの生成と名前（1.1、1.6）、2 ビット・0・未定義ビットの拒否（1.3）、一括追加と名前の重複での全か無か（1.2、2.5）、凍結済みで `INVALID_STATE`（2.4）、プリセットの拡張数 17・未凍結・後から追加と取り外しができる（2.1〜2.3）、部分集合（2.2）、外した構文の記法（HTML ブロックなしで `<div>` が段落のテキスト、インデントコードなしで字下げ行が段落、リンク参照定義なしで定義行が段落、強調なしで `*a*` がテキスト、1.4）、新しいノード種別がない（全文書の全ノードが標準種別、1.5）、自作の拡張との混在と優先順位の変更（1.7）、簡易パースと通常のパースの木の同一性（3.6）、簡易パースの文書が方言の破棄後も使える（3.1）、簡易変換の追記と既定の安全性（3.2、3.3）、`NULL` と長さの検査（3.4）、2 つのスレッドで同じ凍結済みの方言を使う解析（スレッドの API が使える環境だけ。C99 の範囲外のため任意、12.2、12.3）
@@ -896,7 +896,7 @@ parser-core の公開 API の追加・変更は不要である。本仕様が依
 | C2 | 意味の明確化 | 「行が空行」は継続判定と開始判定を終えた位置から行末までがスペースとタブだけであること | `> - a\n>\n> - b` の loose（4.5） |
 | C3 | 意味の明確化 | インライン対象は 1 つずつ最後まで解析され、対象ごとに `get_block` のノードが異なる | 内容ごとの記憶の初期化（9.1、9.4） |
 
-- parser-core の簡易解析 API は `amark_parser_parse(dialect, data, length, options, &doc)`（D7）を使う
-- foundation への依存: `amark_utf8_decode_previous`（D3、foundation が追加）を CharClass が使う。新しいエラーコード: なし（foundation の表のコード 0〜7 が唯一の正本）
+- parser-core の簡易解析 API は `amark_parser_parse(dialect, data, length, options, &doc)`を使う
+- foundation への依存: `amark_utf8_decode_previous`（foundation の要件 10.8）を CharClass が使う。新しいエラーコード: なし（foundation の表のコード 0〜7 が唯一の正本）
 - markdown-renderer: UnicodeClass（`src/unicode_class.h`）と抽出器 `tests/support/test_spec_examples.h` の消費側。これらの変更は markdown-renderer の再検証を伴う
 - 適合テストで不一致がレンダラ側の規則に起因すると判明した場合は、html-renderer の組み込み出力の表の修正として html-renderer の spec に戻す（brief の約束）

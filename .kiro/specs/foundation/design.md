@@ -158,7 +158,7 @@ tests/
 生成物: `${PROJECT_BINARY_DIR}/include/amark/version.h`（`cmake/version.h.in` から `configure_file`）。ヘッダ単独 include 検査の翻訳単位は `tests/CMakeLists.txt` がビルドツリーに生成する（公開ヘッダ 1 つにつき 1 つ）。
 
 後続 spec が追加する主なファイルの置き場所（本 spec は作らない。配置の規則だけを定める）:
-- `tests/support/test_<area>.{h,c}` — 後続 spec のテスト補助（例: node-tree の `test_tree`、`test_tree_dump`、commonmark の `test_spec_examples`）
+- `tests/support/test_<area>.{h,c}` — 後続 spec のテスト補助（例: html-renderer の `test_tree`、parser-core の `test_tree_dump`・`test_syntax`、commonmark の `test_spec_examples`）
 - `tests/data/` — テストデータ（例: CommonMark 仕様の例）
 - `tools/` — 生成スクリプト（例: Unicode 分類表、実体参照表）。手で実行し、生成物はリポジトリに含める。ビルドや CI からは実行しない
 
