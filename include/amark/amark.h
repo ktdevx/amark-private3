@@ -18,5 +18,6 @@
 #include <amark/memory.h>
 #include <amark/slice.h>
 #include <amark/utf8.h>
+#include <amark/buffer.h>
 
 #endif /* AMARK_AMARK_H */
