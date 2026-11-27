@@ -532,7 +532,7 @@ const char *amark_error_string(amark_error_t err)
 /* include/amark/memory.h */
 typedef void *(*amark_malloc_fn_t)(size_t size);
 typedef void *(*amark_realloc_fn_t)(void *ptr, size_t size);
-typedef void *(*amark_calloc_fn_t)(size_t count, size_t size);
+typedef void *(*amark_calloc_fn_t)(size_t n, size_t size);
 typedef void (*amark_free_fn_t)(void *ptr);
 
 typedef struct amark_allocator
@@ -545,7 +545,7 @@ typedef struct amark_allocator
 
 AMARK_API void *amark_malloc(size_t size);
 AMARK_API void *amark_realloc(void *ptr, size_t size);
-AMARK_API void *amark_calloc(size_t count, size_t size);
+AMARK_API void *amark_calloc(size_t n, size_t size);
 AMARK_API void amark_free(void *ptr);
 
 AMARK_API amark_error_t amark_allocator_set(const amark_allocator_t *allocator);
@@ -567,8 +567,8 @@ AMARK_API void amark_allocator_get(amark_allocator_t *allocator);
 | `amark_free(NULL)` | 何もしない（`free_fn` を呼ばない） |
 | `amark_free(p)` | `free_fn(p)` |
 
-- 確保系の戻り値 `NULL` は、要求サイズ（`amark_calloc` では `count * size`）が 0 でないときに限り確保失敗を意味する。サイズ 0 の要求は常に `NULL` を返す
-- 利用者関数への事前条件: ラッパが上の表で 0 サイズと `NULL` を処理するため、`size`、`count` は常に 1 以上、`realloc_fn` と `free_fn` の `ptr` は常に非 `NULL` で届く。戻り値はあらゆるオブジェクト型に適切に整列していること。`calloc_fn` は確保領域をゼロで埋めること
+- 確保系の戻り値 `NULL` は、要求サイズ（`amark_calloc` では `n * size`）が 0 でないときに限り確保失敗を意味する。サイズ 0 の要求は常に `NULL` を返す
+- 利用者関数への事前条件: ラッパが上の表で 0 サイズと `NULL` を処理するため、`size`、`n` は常に 1 以上、`realloc_fn` と `free_fn` の `ptr` は常に非 `NULL` で届く。戻り値はあらゆるオブジェクト型に適切に整列していること。`calloc_fn` は確保領域をゼロで埋めること
 - **ライブラリ内の規則**（全 spec に適用）: ライブラリのコードは、戻り値の `NULL` を `AMARK_ERROR_NO_MEMORY` と解釈する箇所で、サイズ 0 の確保（`amark_malloc(0)`、要素数 0 の `amark_calloc`、`amark_realloc(p, 0)`）を要求しない。要素数が 0 になりうる配列・表・スタックは、確保の前に個数を確かめ、空は `NULL` と個数 0 で表す（確保は個数が 1 以上のときだけ行う）。縮めて空にするときは `amark_realloc(p, 0)` ではなく `amark_free` で解放し `NULL` と 0 に戻す
 - 本 spec の確保はこの規則に該当しない: `amark_slice_dup` は `len + 1`（1 以上）、`amark_buffer_reserve` は新容量 + 1（新容量は 16 以上）、`amark_buffer_detach` の空文字列は 1 バイトを要求する
 - `amark_allocator_set(allocator)`:
@@ -602,7 +602,7 @@ typedef struct amark_slice
 
 AMARK_API amark_slice_t amark_slice_make(const char *data, size_t len);
 AMARK_API amark_slice_t amark_slice_from_cstr(const char *cstr);
-AMARK_API bool amark_slice_equal(amark_slice_t left, amark_slice_t right);
+AMARK_API bool amark_slice_equal(amark_slice_t a, amark_slice_t b);
 AMARK_API amark_slice_t amark_slice_sub(amark_slice_t slice, size_t offset, size_t len);
 AMARK_API char *amark_slice_dup(amark_slice_t slice);
 ```
@@ -632,30 +632,30 @@ AMARK_API char *amark_slice_dup(amark_slice_t slice);
 #define AMARK_UTF8_MAX_LENGTH 4
 #define AMARK_UTF8_REPLACEMENT_CHARACTER 0xFFFDu
 
-AMARK_API amark_error_t amark_utf8_decode(amark_slice_t input, uint32_t *cp, size_t *consumed);
-AMARK_API amark_error_t amark_utf8_decode_previous(amark_slice_t input, size_t offset, uint32_t *cp,
+AMARK_API amark_error_t amark_utf8_decode(amark_slice_t src, uint32_t *cp, size_t *consumed);
+AMARK_API amark_error_t amark_utf8_decode_previous(amark_slice_t src, size_t offset, uint32_t *cp,
                                                    size_t *consumed);
-AMARK_API amark_error_t amark_utf8_encode(uint32_t cp, char *output, size_t *written);
-AMARK_API amark_error_t amark_utf8_validate(amark_slice_t input, size_t *error_offset);
+AMARK_API amark_error_t amark_utf8_encode(uint32_t cp, char *dst, size_t *written);
+AMARK_API amark_error_t amark_utf8_validate(amark_slice_t src, size_t *error_offset);
 ```
 - 妥当性の基準は Unicode 標準 Table 3-7（先頭バイト `00–7F`、`C2–DF`、`E0–EF`、`F0–F4`。2 バイト目は `E0` → `A0–BF`、`ED` → `80–9F`、`F0` → `90–BF`、`F4` → `80–8F`、その他 `80–BF`。3・4 バイト目は `80–BF`）。これにより過長表現、サロゲート、U+10FFFF 超、途切れ、不正な先頭・継続バイトを排除する。U+0000 は妥当な 1 バイト文字（10.7）
 - `amark_utf8_decode`:
-  - `cp` または `consumed` が `NULL`、あるいは `input.len == 0`: `AMARK_ERROR_INVALID_ARGUMENT`、出力は変更しない（10.3）
+  - `cp` または `consumed` が `NULL`、あるいは `src.len == 0`: `AMARK_ERROR_INVALID_ARGUMENT`、出力は変更しない（10.3）
   - 妥当: `AMARK_OK`、`*cp` にコードポイント、`*consumed` に 1〜4（10.1）
   - 不正: `AMARK_ERROR_INVALID_UTF8`、`*cp = AMARK_UTF8_REPLACEMENT_CHARACTER`、`*consumed` に最大部分列の長さ（妥当な並びの接頭辞として成立する最長のバイト数。成立しなければ 1）（10.2）
 - `amark_utf8_decode_previous`（10.8）: 位置 `offset` の直前で終わる 1 文字（不正単位）を逆方向に復号する
-  - `cp` または `consumed` が `NULL`、`offset == 0`、`offset > input.len`: `AMARK_ERROR_INVALID_ARGUMENT`、出力は変更しない
-  - 結果の契約: `input` の先頭から `offset` までを `amark_utf8_decode` で前方へ順に復号したときの最後の単位と、戻り値・`*cp`・`*consumed` が一致する。したがって不正バイトの扱い（U+FFFD、最大部分列の長さ）は `amark_utf8_decode` と同じで、`*consumed` は 1〜4、その単位は `input.data[offset - *consumed]` から始まる
-  - 手順: `[max(0, offset - 4), offset)` で継続バイト（`80–BF`）でない最後の位置 `p` を探す。見つからなければ不正（`*consumed = 1`）。見つかれば `input.data[p..offset)` に `amark_utf8_decode` を適用し、`consumed == offset - p` ならその結果を返す。そうでなければ（`p` の後ろに余った継続バイトがある）不正で `*consumed = 1`。継続バイトでないバイトは前方復号で必ず新しい単位を始めるため、この手順は上の契約を満たす
+  - `cp` または `consumed` が `NULL`、`offset == 0`、`offset > src.len`: `AMARK_ERROR_INVALID_ARGUMENT`、出力は変更しない
+  - 結果の契約: `src` の先頭から `offset` までを `amark_utf8_decode` で前方へ順に復号したときの最後の単位と、戻り値・`*cp`・`*consumed` が一致する。したがって不正バイトの扱い（U+FFFD、最大部分列の長さ）は `amark_utf8_decode` と同じで、`*consumed` は 1〜4、その単位は `src.data[offset - *consumed]` から始まる
+  - 手順: `[max(0, offset - 4), offset)` で継続バイト（`80–BF`）でない最後の位置 `p` を探す。見つからなければ不正（`*consumed = 1`）。見つかれば `src.data[p..offset)` に `amark_utf8_decode` を適用し、`consumed == offset - p` ならその結果を返す。そうでなければ（`p` の後ろに余った継続バイトがある）不正で `*consumed = 1`。継続バイトでないバイトは前方復号で必ず新しい単位を始めるため、この手順は上の契約を満たす
   - 読み取るのは `[offset - 4, offset)` の範囲（入力の先頭を下回らない）に限る
 - `amark_utf8_encode`:
-  - `output` は `AMARK_UTF8_MAX_LENGTH` バイト以上の領域。`output` または `written` が `NULL`: `AMARK_ERROR_INVALID_ARGUMENT`
+  - `dst` は `AMARK_UTF8_MAX_LENGTH` バイト以上の領域。`dst` または `written` が `NULL`: `AMARK_ERROR_INVALID_ARGUMENT`
   - `cp` が `0xD800–0xDFFF` または `0x10FFFF` 超: `AMARK_ERROR_INVALID_UTF8`、何も書かない（10.5）
   - 妥当: 1〜4 バイトを書き、`*written` にバイト数、`AMARK_OK`（10.4）。NUL 終端は書かない
 - `amark_utf8_validate`:
   - 全体が妥当（空を含む）: `AMARK_OK`
   - 不正: `AMARK_ERROR_INVALID_UTF8`、`error_offset` が非 `NULL` なら最初の不正単位の先頭バイト位置を書く（10.6）
-  - `input.len > 0` かつ `input.data == NULL` はスライスの不変条件違反として `AMARK_ERROR_INVALID_ARGUMENT`
+  - `src.len > 0` かつ `src.data == NULL` はスライスの不変条件違反として `AMARK_ERROR_INVALID_ARGUMENT`
 
 #### Buffer
 

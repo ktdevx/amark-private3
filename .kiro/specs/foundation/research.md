@@ -138,7 +138,7 @@
 
 ### Decision: UTF-8 の逆方向復号を foundation に置く
 - **Context**: 要件 10.8。commonmark の強調の flanking 判定（直前の文字の分類）と markdown-renderer の出力末尾の文字の分類が、ある位置の直前の 1 文字を必要とする（横断レビューで判明）
-- **Selected Approach**: `amark_utf8_decode_previous(input, offset, &cp, &consumed)`。結果は「先頭から `offset` までを前方へ復号したときの最後の単位」と一致させる。継続バイトでないバイトは前方復号で必ず新しい単位を始めるので、直前 4 バイト内の最後の非継続バイトから前方の復号を再利用すれば足りる
+- **Selected Approach**: `amark_utf8_decode_previous(src, offset, &cp, &consumed)`。結果は「先頭から `offset` までを前方へ復号したときの最後の単位」と一致させる。継続バイトでないバイトは前方復号で必ず新しい単位を始めるので、直前 4 バイト内の最後の非継続バイトから前方の復号を再利用すれば足りる
 - **Rationale**: 各 spec が独自に逆方向の走査を書くと、不正バイトの扱いが前方の復号とずれる
 - **Trade-offs**: 先頭から全体を復号するのに比べ、読み取りは直前 4 バイトに限られる
 

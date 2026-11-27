@@ -294,10 +294,10 @@ AMARK_API amark_error_t amark_markdown_renderer_set_hook(amark_markdown_renderer
                                                          const amark_node_kind_t *kind,
                                                          amark_markdown_render_fn_t render, void *user_data);
 AMARK_API amark_error_t amark_markdown_renderer_render(const amark_markdown_renderer_t *renderer,
-                                                       const amark_node_t *root, amark_buffer_t *output);
+                                                       const amark_node_t *root, amark_buffer_t *out);
 
 AMARK_API amark_error_t amark_markdown_render(const amark_node_t *root, const amark_markdown_options_t *options,
-                                              amark_buffer_t *output);
+                                              amark_buffer_t *out);
 
 /* html-renderer と同じ意味の操作 */
 AMARK_API amark_error_t amark_markdown_context_write(amark_markdown_context_t *context, amark_slice_t raw);
@@ -365,7 +365,7 @@ typedef enum amark_md_line_state { AMARK_MD_LINE_START, AMARK_MD_LINE_MARKERS, A
 
 typedef struct amark_md_writer
 {
-    amark_buffer_t *output;
+    amark_buffer_t *out;
     size_t start;   /* 描画開始時の output->len（巻き戻しの基準） */
     bool wrote_any; /* この描画で内容を書いたか */
     amark_md_line_state_t line;
@@ -417,7 +417,7 @@ struct amark_markdown_context
 - **区切り**: `ensure(1)`（行頭保証）: `line == CONTENT` なら `pending = max(pending, 1)`。`ensure(2)`（空行保証）: `wrote_any` が偽、または `line == MARKERS` なら何もしない。`CONTENT` なら `pending = 2`、`START` なら `pending = max(pending, 1)`。保留は内容を書くときにだけ書き出す（1.7: 末尾に空行を残さない）
 - **終了処理**（`flush_end`）: 保留を捨て、起点がブロックの種別で `line != START` なら行末処理を 1 回行う（1.7）。インラインの起点では何もしない（1.8）
 - **プレフィックス**: `push_prefix(p)`（`p` が `\n` を含めば `AMARK_ERROR_INVALID_ARGUMENT`）は `prefix` に連結して段を積む。以後 `START` から始まる行に付く（11.6）。`pop_prefix` は現在のノードのフレームの `prefix_depth` より深い段がなければ `AMARK_ERROR_INVALID_STATE`（11.7）。`restore_prefix(depth)` は訪問関数が EXIT（葉では呼び出しの後）で呼ぶ。プレフィックスは出力の最初の行にも付くが、ブロック引用・リスト項目の最初の行の印（`> `、`- `）は組み込みが `marker` で書き、プレフィックスは継続行だけのために積む（3.9: すべての行に付き、遅延継続行に頼らない）
-- **行頭の判定**（1.9）: 状態はこの描画の書き込みだけで決まり、`output` の `start` より前の内容を見ない
+- **行頭の判定**（1.9）: 状態はこの描画の書き込みだけで決まり、`out` の `start` より前の内容を見ない
 - **数値文字参照**（`entity(c)`）: `&#` と 10 進の `c` と `;` を内容として書く
 - **直前の文字の置換**（`replace_last_text_char`）: `last_text_char != SIZE_MAX` のとき、その位置の 1 文字を `amark_utf8_decode` で復号し、出力をその位置へ切り詰めて `entity` で書き直す。強調の計画だけが使う
 - **折り返し**（8.2〜8.5）: `wrap_enabled` のとき、組み込みの text が折り返し候補の空白を書いたら `break_at` に位置を記録する。内容の書き込みで `column > wrap_width` かつ `break_at` があれば、`break_at` の後ろを `scratch` へ移し、`break_at` まで切り詰めて行末処理、プレフィックス、`scratch` の内容の順に書き直す（空白は消える）。候補の後ろには候補がないため各バイトは高々 1 回だけ移され、線形時間を保つ。候補がなければ幅を超えたまま書く（8.5）
@@ -481,7 +481,7 @@ struct amark_markdown_context
 
 **分類**（`amark_md_classify(c)`）: `amark_unicode_is_whitespace` なら W、`amark_unicode_is_punctuation` なら P、それ以外 O。行頭・出力の先頭・行末・出力の終わりは W（6.5）
 
-**直前の文字の分類 B**: Writer が `MARKERS` / `START`、または `wrote_any` が偽なら W。それ以外は出力の最後の 1 文字を foundation の `amark_utf8_decode_previous(input, offset, &cp, &consumed)` で後方から復号して分類する。`input` はこの描画で書いた範囲 `output->data[start..len)` のスライス、`offset` はその長さ（4 バイトを超えて遡らない）。`AMARK_ERROR_INVALID_UTF8` のときは foundation の規則どおり U+FFFD として分類する（O）。置換可能なのは `last_text_char` がその文字を指し、分類が O のとき
+**直前の文字の分類 B**: Writer が `MARKERS` / `START`、または `wrote_any` が偽なら W。それ以外は出力の最後の 1 文字を foundation の `amark_utf8_decode_previous(src, offset, &cp, &consumed)` で後方から復号して分類する。`src` はこの描画で書いた範囲 `output->data[start..len)` のスライス、`offset` はその長さ（4 バイトを超えて遡らない）。`AMARK_ERROR_INVALID_UTF8` のときは foundation の規則どおり U+FFFD として分類する（O）。置換可能なのは `last_text_char` がその文字を指し、分類が O のとき
 
 **内容の最初の出力文字の分類**（`amark_md_first_class(node)`。反復で下りる）
 
@@ -635,13 +635,13 @@ struct amark_markdown_context
 - `amark_markdown_renderer_create(options, renderer)`: `renderer == NULL`、非 `NULL` の `options` が無効なら `AMARK_ERROR_INVALID_ARGUMENT`。`options == NULL` は既定値。1 回の `amark_malloc`（失敗で `AMARK_ERROR_NO_MEMORY`、`*renderer` は変更しない、12.4）、設定の複製、フック表の初期化（7.4、10.9）
 - `amark_markdown_renderer_destroy`: フック表を deinit して解放。`NULL` は何もしない（12.5）
 - `amark_markdown_renderer_set_hook(renderer, kind, render, user_data)`: `renderer` / `kind` の `NULL` は `AMARK_ERROR_INVALID_ARGUMENT`（10.7）。`amark_node_walk_table_set` の結果を返す（置き換え・解除・追加の規則は html-renderer と同じ、10.1〜10.6）
-- `amark_markdown_renderer_render(renderer, root, output)`（1.5: いずれかの `NULL` は `AMARK_ERROR_INVALID_ARGUMENT`）:
+- `amark_markdown_renderer_render(renderer, root, out)`（1.5: いずれかの `NULL` は `AMARK_ERROR_INVALID_ARGUMENT`）:
   1. コンテキストをスタック上に用意し、Writer を初期化（`start = output->len`）。起点のフレームの外側に、強調のスコープとなる番兵のフレームを 1 つ置く
   2. `amark_node_walk_run(&walk, root, &renderer->hooks, visit, &context)`
   3. 成功なら `flush_end`
   4. 作業領域（フレーム、プレフィックス、`scratch`）を解放する（12.6）
-  5. 2・3 が失敗なら `amark_buffer_truncate(output, start)` してその結果を返す（12.3）
-- `amark_markdown_render(root, options, output)`: 引数と設定の検証は同上。空のフック表を持つスタック上の一時レンダラで同じ手順（1.1）
+  5. 2・3 が失敗なら `amark_buffer_truncate(out, start)` してその結果を返す（12.3）
+- `amark_markdown_render(root, options, out)`: 引数と設定の検証は同上。空のフック表を持つスタック上の一時レンダラで同じ手順（1.1）
 - 訪問関数 `visit(ctx, walk, hook)`（`static`）: 「1 イベントの処理」の図どおり。フレームの積み増しの確保失敗は `AMARK_ERROR_NO_MEMORY`。フックがあれば `((amark_markdown_render_fn_t)hook->fn)(ctx, walk->node, walk->event, hook->user_data)`、なければ `amark_md_standard_render(ctx)`。フックのない拡張種別は、ブロックなら区切りだけを行い、インラインなら何もしない（11.8）。エラーは直ちに返す（11.9）
 - 決定性（1.6）: 出力は木・設定・フックだけで決まる
 

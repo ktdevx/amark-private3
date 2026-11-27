@@ -394,7 +394,7 @@ AMARK_API amark_error_t amark_commonmark_parse(const char *data, size_t len, con
 AMARK_API amark_error_t amark_commonmark_convert_to_html(const char *data, size_t len,
                                                          const amark_parser_options_t *parse_options,
                                                          const amark_html_options_t *html_options,
-                                                         amark_buffer_t *output);
+                                                         amark_buffer_t *out);
 ```
 - ヘッダ冒頭のコメント: HTML の既定値は生 HTML と危険な URL を出力しないこと、繰り返し変換する場合は方言を再利用し `amark_parser_parse` と `amark_html_render` を使うべきこと
 - 包括ヘッダ `amark/amark.h` は `amark/commonmark.h` と `amark/commonmark_html.h` の両方を include する（追記）
@@ -746,7 +746,7 @@ amark_slice_t amark_commonmark_rest_of_line(const amark_block_context_t *ctx);
 | Requirements | 3.2, 3.3, 3.4, 3.5 |
 
 **Contracts**: Service [x]
-- `amark_commonmark_convert_to_html(data, len, parse_options, html_options, output)`: `output == NULL`、`len > 0 && data == NULL`: `AMARK_ERROR_INVALID_ARGUMENT`。宣言は `amark/commonmark_html.h`。手順は 方言の生成（`AMARK_COMMONMARK_ALL`）→ `amark_parser_parse(dialect, data, len, parse_options, &doc)` → `amark_html_render(doc, html_options, output)` → 文書の破棄 → 方言の破棄。`html_options` の検証は `amark_html_render` に委ね、不正なら `AMARK_ERROR_INVALID_ARGUMENT` が返る（出力先は変わらない）
+- `amark_commonmark_convert_to_html(data, len, parse_options, html_options, out)`: `out == NULL`、`len > 0 && data == NULL`: `AMARK_ERROR_INVALID_ARGUMENT`。宣言は `amark/commonmark_html.h`。手順は 方言の生成（`AMARK_COMMONMARK_ALL`）→ `amark_parser_parse(dialect, data, len, parse_options, &doc)` → `amark_html_render(doc, html_options, out)` → 文書の破棄 → 方言の破棄。`html_options` の検証は `amark_html_render` に委ね、不正なら `AMARK_ERROR_INVALID_ARGUMENT` が返る（出力先は変わらない）
 - 出力先は html-renderer が失敗時に呼び出し前の長さへ戻す。解析の失敗では出力先に何も書かない（3.5）
 - `html_options == NULL` は html-renderer の既定値（生 HTML と危険な URL を出力しない、3.3）
 - 本体のソースで `amark/html.h`（`amark/commonmark_html.h` 経由を含む）を include するのはこのファイルだけ
