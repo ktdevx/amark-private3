@@ -24,7 +24,7 @@ NAOS_TEST(calls_public_api)
 
         NAOS_CHECK_UINT_EQ(AMARK_VERSION_NUMBER, amark_version_number());
         NAOS_CHECK_TRUE(version != nullptr);
-        NAOS_CHECK_TRUE(version != nullptr && std::strcmp(version, AMARK_VERSION_STRING) == 0);
+        NAOS_CHECK_TRUE((version != nullptr) && (std::strcmp(version, AMARK_VERSION_STRING) == 0));
     }
 }
 
