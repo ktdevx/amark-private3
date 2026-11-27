@@ -30,6 +30,9 @@ amark_target_warnings(amark_version_test)
 # ビルド定義が version.h から読んだバージョンをテストへ渡し、ヘッダの値と一致することを確かめる
 target_compile_definitions(amark_version_test PRIVATE TEST_PROJECT_VERSION="${PROJECT_VERSION}")
 
+naos_add_executable(amark_error_test SOURCES error_test.c LIBRARIES Amark::amark)
+amark_target_warnings(amark_error_test)
+
 # C++ から包括ヘッダを include して公開 API を呼べることを確かめる（後続 spec は
 # cxx_header_test.cpp に自分のブロックを追記する。ここの登録は変えない）
 naos_add_executable(amark_cxx_header_test SOURCES cxx_header_test.cpp LIBRARIES Amark::amark)

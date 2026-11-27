@@ -14,5 +14,6 @@
 /* foundation */
 #include <amark/export.h>
 #include <amark/version.h>
+#include <amark/error.h>
 
 #endif /* AMARK_AMARK_H */

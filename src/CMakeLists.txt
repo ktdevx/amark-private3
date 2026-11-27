@@ -43,4 +43,5 @@ amark_target_warnings(amark)
 # foundation
 target_sources(amark PRIVATE
     base/version.c
+    base/error.c
 )
