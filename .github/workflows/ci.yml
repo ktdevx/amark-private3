@@ -1,0 +1,112 @@
+# 継続的インテグレーション。既定ブランチへの push、プルリクエスト、他のワークフロー（release.yml）からの
+# 呼び出しで起動する。{linux-gcc, linux-clang, macos-clang, windows-msvc} × {static, shared} の 8 ジョブで
+# 警告をエラーとする構成、ビルド、テスト、インストール、利用者プロジェクトのビルドと実行を行い、
+# format ジョブで整形規則への準拠を検査する。いずれかのステップが失敗すれば実行全体が失敗する。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+# Windows を含む全ジョブで bash を明示する。shell: bash を明示したステップは bash -e -o pipefail で
+# 実行されるため、失敗したコマンド（パイプの途中を含む）の終了コードがそのままステップとジョブの失敗になる
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    name: ${{ matrix.config.name }} (${{ matrix.shared == 'ON' && 'shared' || 'static' }})
+    runs-on: ${{ matrix.config.runner }}
+    strategy:
+      # 1 つのジョブの失敗で他のジョブを止めず、全構成の結果を得る（実行全体は失敗として報告される）
+      fail-fast: false
+      matrix:
+        config:
+          - { name: linux-gcc, runner: ubuntu-24.04, cc: gcc, cxx: g++ }
+          - { name: linux-clang, runner: ubuntu-24.04, cc: clang, cxx: clang++ }
+          # AppleClang と MSVC はランナーの既定のコンパイラを使う
+          - { name: macos-clang, runner: macos-latest, cc: '', cxx: '' }
+          - { name: windows-msvc, runner: windows-latest, cc: '', cxx: '' }
+        shared: ['OFF', 'ON']
+    env:
+      CC: ${{ matrix.config.cc }}
+      CXX: ${{ matrix.config.cxx }}
+      AMARK_INSTALL_PREFIX: ${{ github.workspace }}/install
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure
+        run: >-
+          cmake -S . -B build
+          -DCMAKE_BUILD_TYPE=Release
+          -DBUILD_SHARED_LIBS=${{ matrix.shared }}
+          -DAMARK_WARNINGS_AS_ERRORS=ON
+
+      # マルチコンフィグのジェネレータ（Visual Studio）に備えて --config / -C Release を常に指定する
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Test
+        run: ctest --test-dir build -C Release --output-on-failure
+
+      - name: Install
+        run: cmake --install build --config Release --prefix "$AMARK_INSTALL_PREFIX"
+
+      - name: Configure package consumer
+        run: >-
+          cmake -S tests/package -B build-package
+          -DCMAKE_PREFIX_PATH="$AMARK_INSTALL_PREFIX"
+          -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build package consumer
+        run: cmake --build build-package --config Release
+
+      # Linux / macOS の動的構成では、インストール先の lib を実行時の検索パスに加える。
+      # macOS の SIP はシステムの bash を起動するときに DYLD_* を取り除くため、ステップの env ではなく
+      # スクリプトの中で export する。Windows の動的構成では tests/package が DLL を実行ファイルの隣へ
+      # コピーし、Visual Studio ジェネレータの出力は Release/ の下に置かれる
+      - name: Run package consumer
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+              consumer="build-package/Release/amark_package_consumer.exe"
+          else
+              consumer="build-package/amark_package_consumer"
+          fi
+          if [ "${{ matrix.shared }}" = "ON" ]; then
+              case "$RUNNER_OS" in
+                  Linux) export LD_LIBRARY_PATH="$AMARK_INSTALL_PREFIX/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" ;;
+                  macOS) export DYLD_LIBRARY_PATH="$AMARK_INSTALL_PREFIX/lib${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}" ;;
+              esac
+          fi
+          "$consumer"
+
+  format:
+    name: format
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 整形結果が版によって変わらないよう clang-format 18 に固定する
+      - name: Install clang-format 18
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends clang-format-18
+          clang-format-18 --version
+
+      # 公開ヘッダ、ライブラリ本体、テスト（tests/package/ を含む）の *.c、*.h、*.cpp を検査する。
+      # 整形規則に従わないファイルが 1 つでもあれば非 0 で終了し、ジョブが失敗する
+      - name: Check formatting
+        run: >-
+          git ls-files -z --
+          'include/*.c' 'include/*.h' 'include/*.cpp'
+          'src/*.c' 'src/*.h' 'src/*.cpp'
+          'tests/*.c' 'tests/*.h' 'tests/*.cpp'
+          | xargs -0 -r clang-format-18 --dry-run --Werror
