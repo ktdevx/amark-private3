@@ -44,7 +44,7 @@
 
 エラーコードはライブラリ全体で単一の列挙 `amark_error_t` とする。モジュールや spec ごとの独自体系を作らず、必要なコードは共通の列挙に追加する。
 
-- 失敗しうる公開関数は `amark_error_t` を返し、結果は出力引数で返す。成功は `AMARK_OK`（一覧の先頭なので 0。`if (error)` で判定できる）
+- 失敗しうる公開関数は `amark_error_t` を返し、結果は出力引数で返す。成功は `AMARK_OK`（一覧の先頭なので 0。`if (err)` で判定できる）
 - 全コードは `include/amark/error.h` の X マクロ `AMARK_ERROR_LIST(X)` に `X(名前, 文字列)` として 1 回だけ書き、列挙と `amark_error_string` はそこから生成する。列挙子に明示的な数値を書かない（値は並び順で決まる）。一覧の中に spec ごとの区切りコメントを置かない
 - **各コードの追加した spec・文字列・意味の正本は `foundation` spec の設計にあるエラーコード一覧表**（`AMARK_ERROR_LIST` と同じ並び）。他の spec の設計は表を参照し、文字列や意味を定義し直さない
 - 追加は末尾のみ。並べ替え・削除・再利用は禁止（これで公開済みの値が変わらない）。新しいコードが必要な spec は一覧表の末尾へ行を追記し、`AMARK_ERROR_LIST` の末尾へ `X(...)` を 1 項目追記する。`src/base/error.c` と `tests/error_test.c` は一覧から生成・走査するため変更しない
@@ -60,8 +60,8 @@
 ```c
 typedef struct amark_buffer amark_buffer_t;
 
-void amark_buffer_init(amark_buffer_t *buffer);   /* 確保しないので失敗しない */
-void amark_buffer_deinit(amark_buffer_t *buffer);
+void amark_buffer_init(amark_buffer_t *buf);   /* 確保しないので失敗しない */
+void amark_buffer_deinit(amark_buffer_t *buf);
 
 amark_error_t amark_node_create(amark_node_type_t type, amark_node_t **node);   /* 結果は出力引数 */
 void amark_node_destroy(amark_node_t *node);
@@ -77,11 +77,11 @@ void amark_node_destroy(amark_node_t *node);
 - 処理のまとまり（ステップ）が変わるところに空行を 1 つ入れる。1 つのステップの文は空行を挟まずに続ける
 
 ```c
-amark_error_t amark_buffer_append(amark_buffer_t *buffer, const char *data, size_t len)
+amark_error_t amark_buffer_append(amark_buffer_t *buf, const char *data, size_t len)
 {
-    amark_error_t error;
+    amark_error_t err;
 
-    if (!buffer || ((len > 0) && !data))
+    if (!buf || ((len > 0) && !data))
     {
         return AMARK_ERROR_INVALID_ARGUMENT;
     }
@@ -91,21 +91,21 @@ amark_error_t amark_buffer_append(amark_buffer_t *buffer, const char *data, size
         return AMARK_OK;
     }
 
-    error = amark_buffer_reserve(buffer, len);   /* あふれ・確保失敗ではバッファを変えない */
-    if (error)
+    err = amark_buffer_reserve(buf, len);   /* あふれ・確保失敗ではバッファを変えない */
+    if (err)
     {
-        return error;
+        return err;
     }
 
-    memcpy(buffer->data + buffer->len, data, len);
-    buffer->len += len;
-    buffer->data[buffer->len] = '\0';
+    memcpy(buf->data + buf->len, data, len);
+    buf->len += len;
+    buf->data[buf->len] = '\0';
 
     return AMARK_OK;
 }
 ```
 
-比較の左右に算術式がある場合の例: `if (additional > (SIZE_MAX - buffer->len - 1))`
+比較の左右に算術式がある場合の例: `if (additional > (SIZE_MAX - buf->len - 1))`
 
 ### 機械的に検査する規約と検査しない規約
 

@@ -128,17 +128,17 @@
 
 ### Decision: バッファの取り出しはエラーコードで結果を返す
 - **Context**: 要件 9.7。空のバッファ（領域なし）からの取り出しでも所有権のある文字列を返す必要がある
-- **Selected Approach**: `amark_buffer_detach(buffer, &data, &len)`。領域がなければ 1 バイトの空文字列を確保する。確保に失敗したら `AMARK_ERROR_NO_MEMORY` を返しバッファは変更しない
+- **Selected Approach**: `amark_buffer_detach(buf, &data, &len)`。領域がなければ 1 バイトの空文字列を確保する。確保に失敗したら `AMARK_ERROR_NO_MEMORY` を返しバッファは変更しない
 - **Rationale**: 呼び出し側は常に `amark_free` で解放でき、空と失敗を区別できる
 
 ### Decision: `amark_buffer_init` は値を返さない
 - **Context**: steering（tech.md）の命名例では `amark_error_t amark_buffer_init(...)` としているが、初期化は確保を伴わず失敗しない
-- **Selected Approach**: `void amark_buffer_init(amark_buffer_t *buffer)`。「失敗しうる関数はエラーコードを返す」という規約（要件 7.7）を優先する
+- **Selected Approach**: `void amark_buffer_init(amark_buffer_t *buf)`。「失敗しうる関数はエラーコードを返す」という規約（要件 7.7）を優先する
 - **Follow-up**: tech.md の例はこの形に修正済み（横断レビューでの是正）。実装時は 5.1 で実際の宣言と突き合わせる
 
 ### Decision: UTF-8 の逆方向復号を foundation に置く
 - **Context**: 要件 10.8。commonmark の強調の flanking 判定（直前の文字の分類）と markdown-renderer の出力末尾の文字の分類が、ある位置の直前の 1 文字を必要とする（横断レビューで判明）
-- **Selected Approach**: `amark_utf8_decode_previous(input, offset, &codepoint, &consumed)`。結果は「先頭から `offset` までを前方へ復号したときの最後の単位」と一致させる。継続バイトでないバイトは前方復号で必ず新しい単位を始めるので、直前 4 バイト内の最後の非継続バイトから前方の復号を再利用すれば足りる
+- **Selected Approach**: `amark_utf8_decode_previous(input, offset, &cp, &consumed)`。結果は「先頭から `offset` までを前方へ復号したときの最後の単位」と一致させる。継続バイトでないバイトは前方復号で必ず新しい単位を始めるので、直前 4 バイト内の最後の非継続バイトから前方の復号を再利用すれば足りる
 - **Rationale**: 各 spec が独自に逆方向の走査を書くと、不正バイトの扱いが前方の復号とずれる
 - **Trade-offs**: 先頭から全体を復号するのに比べ、読み取りは直前 4 バイトに限られる
 
