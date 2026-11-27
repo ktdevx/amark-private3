@@ -312,7 +312,7 @@ project(amark VERSION ${AMARK_VERSION} LANGUAGES C)
 - トップレベル時に `CMAKE_RUNTIME_OUTPUT_DIRECTORY` が未定義なら `${PROJECT_BINARY_DIR}/bin` とする（3.3）
 - `src/CMakeLists.txt` のターゲット `amark`:
   - ソース: `src/<dir>/*.c` を `src/` からの相対パス（例: `base/buffer.c`）で列挙する。glob は使わない。本 spec では `base/` の error、memory、slice、utf8、buffer、version。テスト用のソースは含めない（3.4）
-  - サブディレクトリ: モジュール群ごとに `src/base/`（基盤）、`src/tree/`（node-tree）、`src/parser/`（parser-core）、`src/html/`、`src/markdown/`、`src/commonmark/`。新しい構文群（例: 将来の GFM）は `src/<name>/` を足す。`src/` 全体でファイルのベース名を一意に保つ（静的ライブラリのメンバ名とオブジェクト名の衝突を避け、grep で所属が分かるようにする）
+  - サブディレクトリ: モジュール群ごとに `src/base/`（基盤）、`src/tree/`（node-tree）、`src/parser/`（parser-core）、`src/html/`、`src/markdown/`、`src/cmark/`。新しい構文群（例: 将来の GFM）は `src/<name>/` を足す。`src/` 全体でファイルのベース名を一意に保つ（静的ライブラリのメンバ名とオブジェクト名の衝突を避け、grep で所属が分かるようにする）
   - 非公開の include ディレクトリ: `${PROJECT_SOURCE_DIR}/src`（PRIVATE）。非公開ヘッダは `src/` からの相対パスで include する（例: `#include "tree/node_internal.h"`）。同じディレクトリ内でも同じ書き方にする
   - プロパティ: `C_STANDARD 99`、`C_STANDARD_REQUIRED ON`、`C_EXTENSIONS OFF`、`C_VISIBILITY_PRESET hidden`、`VISIBILITY_INLINES_HIDDEN ON`、`DEBUG_POSTFIX d`、`OUTPUT_NAME amark`、`VERSION ${PROJECT_VERSION}`、`SOVERSION`（1.0 前は `0.<minor>`、以後 `<major>`）、`EXPORT_NAME amark`
   - include ディレクトリ: `$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>`、`$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>`（生成する公開ヘッダがないため、ビルドツリーの include ディレクトリは持たない）

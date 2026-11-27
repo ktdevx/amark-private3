@@ -46,7 +46,7 @@
 - node-tree の公開ヘッダ: `amark/node_kind.h`、`amark/node.h`、`amark/node_iter.h`（`src/tree/node_internal.h` は include しない）
 - 非公開: `src/tree/node_walk.h`（node-tree 所有のレンダラ間の内部契約）、`src/base/unicode_class.h`（commonmark 所有。`amark_unicode_is_punctuation` / `amark_unicode_is_whitespace`）
 - C 標準ライブラリ: `<stddef.h>`、`<stdint.h>`、`<stdbool.h>`、`<string.h>`
-- テストだけ: `amark/commonmark.h`、`amark/html.h`、`tests/support/test_spec_examples.h`、`tests/support/test_tree.h`、`tests/support/test_allocator.h`、Naos
+- テストだけ: `amark/cmark.h`、`amark/html.h`、`tests/support/test_spec_examples.h`、`tests/support/test_tree.h`、`tests/support/test_allocator.h`、Naos
 - 依存方向（左ほど下位。右から左への include のみ）: `foundation, node-tree（node_walk を含む）, unicode_class → markdown_internal.h → markdown_writer → markdown_escape → markdown_emphasis → markdown_block, markdown_inline → markdown_context → markdown_renderer`。`amark/markdown.h` は foundation と node-tree の公開ヘッダだけを include する。ライブラリ本体の Markdown のソースは html-renderer・parser-core・commonmark のヘッダを include しない
 
 ### Revalidation Triggers
@@ -106,7 +106,7 @@ graph TB
 | ランタイム API | foundation（バッファ、スライス、UTF-8、アロケータ） | 出力先、作業領域、復号 | `amark_buffer_truncate`、`amark_utf8_decode`、`amark_utf8_decode_previous`（出力の最後の文字の後方復号） |
 | 木と走査 | node-tree（公開 API と非公開の NodeWalk） | 入力の走査、フック表 | 子を省略したノードの EXIT も訪問される |
 | 文字分類 | `unicode_class`（commonmark 所有、Unicode 16.0.0 の表） | flanking の判定 | 本仕様は使うだけ |
-| テスト | Naos v0.4.0、`amark_test_support`、commonmark、html-renderer、spec 0.31.2 | 往復・冪等性・単体・失敗注入 | `AMARK_COMMONMARK_SPEC_PATH` |
+| テスト | Naos v0.4.0、`amark_test_support`、commonmark、html-renderer、spec 0.31.2 | 往復・冪等性・単体・失敗注入 | `AMARK_CMARK_SPEC_PATH` |
 | 出力規則の基準 | cmark `commonmark.c`（規則の一部のみ採用、コードは取り込まない） | エスケープ、フェンス、コードスパン | 詳細は `research.md` |
 
 ## File Structure Plan
@@ -140,7 +140,7 @@ tests/
 実装時に本仕様のタスクとして変更する（本 spec の作成時には変更しない）。
 - `include/amark/amark.h` — `amark/markdown.h` を include に追加
 - `src/CMakeLists.txt` — `markdown/markdown_*.c` 7 ファイルを追加（`base/unicode_class.c` / `base/unicode_class_data.c` は commonmark が追加済み）
-- `tests/CMakeLists.txt` — 8 つのテスト実行ファイル `amark_markdown_escape_test` ほかを `naos_add_executable` で登録。往復テストに `AMARK_COMMONMARK_SPEC_PATH` のコンパイル定義を与える
+- `tests/CMakeLists.txt` — 8 つのテスト実行ファイル `amark_markdown_escape_test` ほかを `naos_add_executable` で登録。往復テストに `AMARK_CMARK_SPEC_PATH` のコンパイル定義を与える
 - `tests/cxx_header_test.cpp` — C++ から木を組んで `amark_markdown_render` とフック登録を呼ぶ確認を追加
 - `include/amark/amark.h`、`src/CMakeLists.txt`、`tests/CMakeLists.txt`、`tests/cxx_header_test.cpp` は foundation が所有する追記専用のファイルで、本仕様は自分のブロックを追記するだけで既存の行を変更しない
 - html-renderer・commonmark・foundation のファイルは変更しない
@@ -690,9 +690,9 @@ struct amark_markdown_context
 ### Integration Tests
 - `markdown_roundtrip_test.c`（RoundTripTest、Batch）:
   - Trigger: `ctest` の `amark_markdown_roundtrip_test.*`
-  - Input: `test_spec_examples_load(AMARK_COMMONMARK_SPEC_PATH)` の全 652 例
+  - Input: `test_spec_examples_load(AMARK_CMARK_SPEC_PATH)` の全 652 例
   - 設定 4 組: 既定 / 別記法 A（`*`、`)`、`_`、`_`、`~`、`*`、Setext、SPACES、オートリンクなし）/ 別記法 B（`+`、`_` の区切り線）/ 折り返し（既定 + `wrap_width = 20`）
-  - 各例: `amark_commonmark_parse` → `amark_markdown_render` → `amark_commonmark_parse` → 両方の木を `allow_raw_html = allow_dangerous_urls = true`（折り返しの組では `softbreak = AMARK_HTML_SOFTBREAK_SPACE`）で `amark_html_render` してバイト比較（9.1、9.2、14.1、14.2）。再パースした木を同じ設定で再びレンダリングし 1 回目とバイト比較（9.3、14.3）
+  - 各例: `amark_cmark_parse` → `amark_markdown_render` → `amark_cmark_parse` → 両方の木を `allow_raw_html = allow_dangerous_urls = true`（折り返しの組では `softbreak = AMARK_HTML_SOFTBREAK_SPACE`）で `amark_html_render` してバイト比較（9.1、9.2、14.1、14.2）。再パースした木を同じ設定で再びレンダリングし 1 回目とバイト比較（9.3、14.3）
   - 失敗は例の番号・節・入力・出力した Markdown・比較した 2 つの出力を表示し、件数が 1 以上ならテストを失敗させる（14.4）
   - 除外一覧: 例の番号と理由の静的な表（初期は空）。載った例だけを比較から外し、外した数を表示する（14.5）。除外を加えるときは本書の「表現できない木」に理由を記す
   - 全例の処理後、計測アロケータで `live == 0`

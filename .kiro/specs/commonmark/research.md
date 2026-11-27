@@ -46,7 +46,7 @@
   - 空項目の空行の例外（cmark の「子がなくこの行で開いた項目は空行を記録しない」）は、項目の状態のフラグ（開始で真、`continue_line` で偽）と `record_blank` で表せる
   - 空行の記録・段落の継続・遅延継続で「行が空行」が「継続と開始の後の位置から行末まで空白」を意味することが必要（`> - a\n>\n> - b` を loose にするため）。parser-core の設計は BlockLine の `blank`（現在位置からの判定）を使っており整合するが、要件の文言は「行が空行」なので意味の明確化を依頼する
   - コードスパンの `` ` `` の位置の記憶、生 HTML の閉じのない構造の記憶、参照展開の量は「インライン対象ごと」にやり直す必要がある。インライン対象の切り替わりは `amark_inline_context_get_block` のノードの変化で検出できる（対象は順に 1 つずつ最後まで処理される）。この保証を `inline_syntax.h` の契約として明記するよう依頼する
-  - 簡易パース `amark_commonmark_parse` は内部で方言を作って破棄し、文書だけを返す。parser-core の要件 13.8・14.9 は「方言は文書より後に破棄」と定めるが、CommonMark の拡張はノード種別を定義せず、文書は方言を参照しない。拡張種別のノードを含まない文書には寿命の義務が及ばないことを契約として明記するよう依頼する
+  - 簡易パース `amark_cmark_parse` は内部で方言を作って破棄し、文書だけを返す。parser-core の要件 13.8・14.9 は「方言は文書より後に破棄」と定めるが、CommonMark の拡張はノード種別を定義せず、文書は方言を参照しない。拡張種別のノードを含まない文書には寿命の義務が及ばないことを契約として明記するよう依頼する
 - **Implications**: parser-core への API の追加・変更は不要。3 件（契約の緩和 1、意味の明確化 2）は parser-core の要件・設計に適用済みで、本仕様は依存する振る舞いを確かめるだけ
 
 ### 参照展開の量の上限
@@ -68,7 +68,7 @@
 ### Decision: 拡張の粒度と名前
 - **Context**: 要件 1.1、1.4、1.6
 - **Alternatives Considered**: 上表
-- **Selected Approach**: 17 単位。拡張名と構文名は `commonmark_` で始める（例: `commonmark_html_block`）。単位はビットフラグの `#define` 定数（`uint32_t`）で指定し、集合はビットの論理和
+- **Selected Approach**: 17 単位。拡張名と構文名は `cmark_` で始める（例: `cmark_html_block`）。単位はビットフラグの `#define` 定数（`uint32_t`）で指定し、集合はビットの論理和
 - **Rationale**: 取り外したい単位と仕様の構文が一致する。名前の接頭辞で将来の gfm や第三者の拡張と衝突しない
 - **Trade-offs**: リンクと画像は分けない（`]` の処理が共有で、画像だけを外す用途が乏しい）。リンク参照定義はリンクと別にする（定義を外すと参照リンクが成立しない方言を作れる）
 - **Follow-up**: GFM が優先順位を挟めるよう、ブロックの開始判定の優先順位を 10 刻みにする
@@ -78,10 +78,10 @@
 - **Alternatives Considered**:
   1. プロセス全体で共有する静的な方言 — 可変のグローバル状態と初期化の競合を生むため不採用
   2. 呼び出しごとに方言を作る — 生成の費用はかかるが状態を持たない
-- **Selected Approach**: 2。`amark_commonmark_parse` と `amark_commonmark_convert_to_html`。繰り返し使う利用者には方言の再利用を案内する
+- **Selected Approach**: 2。`amark_cmark_parse` と `amark_cmark_convert_to_html`。繰り返し使う利用者には方言の再利用を案内する
 - **Rationale**: 要件 12 の並行利用とスレッド安全を単純に満たす
 - **Trade-offs**: 呼び出しごとに 17 拡張の生成と凍結が起きる
-- **Follow-up**: parser-core の寿命の義務の緩和（C1、適用済み）。HTML への簡易変換は `amark/commonmark_html.h` に分け、`amark/commonmark.h` をレンダラに依存させない
+- **Follow-up**: parser-core の寿命の義務の緩和（C1、適用済み）。HTML への簡易変換は `amark/cmark_html.h` に分け、`amark/cmark.h` をレンダラに依存させない
 
 ### Decision: データの生成方式
 - **Context**: 要件 10
@@ -106,7 +106,7 @@
 
 ### Decision: 句読点・空白の分類を共有の非公開モジュールにする
 - **Context**: 要件 7.1、10.2。markdown-renderer も出力側の flanking で同じ分類を必要とする
-- **Selected Approach**: 最初から `src/base/unicode_class.{h,c}` と生成物 `src/base/unicode_class_data.c` に `amark_unicode_is_punctuation` / `amark_unicode_is_whitespace` を置く（非公開、export しない）。畳み込みの表はラベルの正規化だけが使うため `src/commonmark/commonmark_unicode_data.c` に commonmark 専用として残す。生成器は 2 つのファイルを出力する。直前の文字の復号は foundation の `amark_utf8_decode_previous` を使う
+- **Selected Approach**: 最初から `src/base/unicode_class.{h,c}` と生成物 `src/base/unicode_class_data.c` に `amark_unicode_is_punctuation` / `amark_unicode_is_whitespace` を置く（非公開、export しない）。畳み込みの表はラベルの正規化だけが使うため `src/cmark/cmark_unicode_data.c` に commonmark 専用として残す。生成器は 2 つのファイルを出力する。直前の文字の復号は foundation の `amark_utf8_decode_previous` を使う
 - **Rationale**: レンダラがパーサの非公開ヘッダに依存せず、同一の表と判定を共有できる
 
 ## Risks & Mitigations

@@ -9,7 +9,7 @@
 - [ ] 1. 基盤: 公開ヘッダ、拡張の骨組み、上流の契約の確認、適合テストの土台
 - [ ] 1.1 公開ヘッダと内部ヘッダを宣言する
   - 構文の単位のビットフラグ（17 個の `#define` 定数、型は `uint32_t`）、全構文の定数、単位の数、対象の仕様の版の定数、拡張の生成・名前・一括追加・方言の生成・簡易パースの関数を、HTML のヘッダを include しない CommonMark の公開ヘッダに設計どおりに宣言する
-  - HTML への簡易変換の関数は、CommonMark の公開ヘッダと HTML のヘッダを include する別の公開ヘッダ（`amark/commonmark_html.h`）に宣言し、HTML の既定値が安全側であることを冒頭のコメントに記す
+  - HTML への簡易変換の関数は、CommonMark の公開ヘッダと HTML のヘッダを include する別の公開ヘッダ（`amark/cmark_html.h`）に宣言し、HTML の既定値が安全側であることを冒頭のコメントに記す
   - CommonMark の公開ヘッダの冒頭のコメントに、対象の版、単位と拡張名の一覧、プリセットが凍結されていないこと、繰り返し解析では方言を再利用して `amark_parser_parse` を使うべきこと、簡易パースの文書が方言の破棄後も有効なこと、HTML への簡易変換は別のヘッダにあることを記す
   - 内部ヘッダに 17 個の記述子の宣言、定義テーブルの名前空間、ラベル長・括弧の入れ子・展開量の下限の定数、リンク参照定義の値の型を置く
   - 2 つの公開ヘッダを包括ヘッダに追記する（包括ヘッダは foundation の所有で、追記だけを行う）
@@ -39,7 +39,7 @@
 
 - [ ] 2. データと文字
 - [ ] 2.1 Unicode の表の生成器、共有の文字分類モジュール、文字の分類を実装する
-  - Unicode 16.0.0 の UnicodeData.txt と CaseFolding.txt から、句読点（一般カテゴリ P と S）の範囲と Zs の表を `src/base/unicode_class_data.c` に、畳み込み（状態 C と F）の表を commonmark 専用の `src/commonmark/commonmark_unicode_data.c` に、それぞれ定型ヘッダ・生成物である旨・出典の URL・版・SHA-256・Unicode License の表示付きで出力する生成器を開発用ツールとして置き、生成物をコミットする
+  - Unicode 16.0.0 の UnicodeData.txt と CaseFolding.txt から、句読点（一般カテゴリ P と S）の範囲と Zs の表を `src/base/unicode_class_data.c` に、畳み込み（状態 C と F）の表を commonmark 専用の `src/cmark/cmark_unicode_data.c` に、それぞれ定型ヘッダ・生成物である旨・出典の URL・版・SHA-256・Unicode License の表示付きで出力する生成器を開発用ツールとして置き、生成物をコミットする
   - markdown-renderer と共有する非公開モジュール `src/base/unicode_class.{h,c}` に `amark_unicode_is_punctuation` / `amark_unicode_is_whitespace`（ASCII は表を引かず、0x80 以上は二分探索）を実装する。`include/` に置かず export しない
   - CharClass に ASCII 句読点の判定、内容の位置の直前・直後の文字の復号（直後は foundation の `amark_utf8_decode`、直前は `amark_utf8_decode_previous` を使い独自の後方の復号を持たない。先頭と末尾は行末として扱う）、畳み込みの二分探索を実装し、Unicode の句読点・空白は共有モジュールを呼ぶ
   - データのテスト実行ファイルを登録する
@@ -49,7 +49,7 @@
 - [ ] 2.2 エンティティ表の生成器、文字参照の復号、エスケープの解決を実装する
   - entities.json から `;` で終わる名前だけを名前の昇順に並べた表を、出典・取得日・SHA-256・CC BY 4.0 の帰属付きで出力する生成器を置き、生成物をコミットする
   - 名前付き・10 進（1〜7 桁）・16 進（1〜6 桁）の文字参照の照合と復号（0、サロゲート、範囲外は U+FFFD）と、バックスラッシュエスケープと文字参照をまとめて解決する処理を実装する
-  - 第三者のライセンス表記の一覧に、エンティティ表（`src/commonmark/commonmark_entity_data.c`）と Unicode データ（`src/base/unicode_class_data.c`、`src/commonmark/commonmark_unicode_data.c`）の対象ファイル・出典・ライセンスを記し、インストール対象に加える
+  - 第三者のライセンス表記の一覧に、エンティティ表（`src/cmark/cmark_entity_data.c`）と Unicode データ（`src/base/unicode_class_data.c`、`src/cmark/cmark_unicode_data.c`）の対象ファイル・出典・ライセンスを記し、インストール対象に加える
   - インラインのテスト実行ファイルを登録する
   - 完了状態: データとインラインのテストで `amp`・`ngE`・最長の名前の照合、`;` なしの名前の不成立、`&#0;`・`&#xD800;`・`&#x110000;`・8 桁の 10 進の扱い、エスケープの解決結果が確認され、出力がすべて妥当な UTF-8 である
   - _Requirements: 6.2, 6.3, 10.1, 10.3, 10.5, 11.4_
@@ -134,8 +134,8 @@
 
 - [ ] 6. 統合と検証
 - [ ] 6.1 簡易パースと HTML への簡易変換を実装し、ビルドとインストールに結線する
-  - 全構文の方言を作り `amark_parser_parse` で解析して文書だけを返す簡易パースと、解析・HTML 変換・後片付けを行う簡易変換（`amark/commonmark_html.h` で宣言）を実装する（HTML のヘッダを include する本体のソースは簡易変換の実装の 1 つだけ）
-  - C++ の検査にプリセットの生成（`amark/commonmark.h`）と簡易変換（`amark/commonmark_html.h`）の呼び出しを追記し、第三者のライセンス表記がインストールされることを確かめ、steering の構成の文書に開発用ツールと固定したテストデータの置き場所を追記する
+  - 全構文の方言を作り `amark_parser_parse` で解析して文書だけを返す簡易パースと、解析・HTML 変換・後片付けを行う簡易変換（`amark/cmark_html.h` で宣言）を実装する（HTML のヘッダを include する本体のソースは簡易変換の実装の 1 つだけ）
+  - C++ の検査にプリセットの生成（`amark/cmark.h`）と簡易変換（`amark/cmark_html.h`）の呼び出しを追記し、第三者のライセンス表記がインストールされることを確かめ、steering の構成の文書に開発用ツールと固定したテストデータの置き場所を追記する
   - 完了状態: 方言のテストで簡易パースと通常のパースの木の同一性、方言の破棄後に文書が使えること、簡易変換の追記と既定の安全性、空ポインタと長さの検査、失敗時に出力先が変わらないことが確認され、静的・動的の両方で C++ の検査とインストールの確認が成功する
   - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 10.5, 12.1, 12.2, 12.3_
 

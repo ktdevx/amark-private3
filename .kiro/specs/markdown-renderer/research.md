@@ -95,7 +95,7 @@
 - **Context**: 要件 6.5。日本語の文の強調は置換なしで出力したいが、非 ASCII の句読点（`「` `。`）の隣では分類を誤ると開きにならない
 - **Alternatives Considered**:
   1. 非 ASCII を常に参照にする — 日本語が読めなくなる
-  2. markdown-renderer が commonmark_internal.h を include — レンダラがパーサに依存する（structure.md 違反）
+  2. markdown-renderer が cmark_internal.h を include — レンダラがパーサに依存する（structure.md 違反）
   3. commonmark が最初から作る非公開モジュール `src/base/unicode_class.{h,c}`（生成物 `src/base/unicode_class_data.c`）を include して使う（採用）
 - **Rationale**: パーサとレンダラが同一の分類を使い、表の重複がない。本仕様が commonmark のファイルを移設・変更する必要がない（横断レビューで決定）
 - **Follow-up**: commonmark の分類の表の版が変わったら本仕様の往復テストを再実行する（Revalidation Trigger）
@@ -107,7 +107,7 @@
 
 ### Decision: 往復テストの比較方法
 - **Context**: 要件 9、14
-- **Selected Approach**: 例ごとに `amark_commonmark_parse` → 本レンダラ → 再パース → 両方の木を html-renderer（`allow_raw_html`・`allow_dangerous_urls` を真、折り返しの設定では soft break を SPACE）で HTML にしてバイト比較し、さらに再レンダリングの冪等性を比べる。設定は 4 組（既定、別記法 A、別記法 B、折り返し幅 20）
+- **Selected Approach**: 例ごとに `amark_cmark_parse` → 本レンダラ → 再パース → 両方の木を html-renderer（`allow_raw_html`・`allow_dangerous_urls` を真、折り返しの設定では soft break を SPACE）で HTML にしてバイト比較し、さらに再レンダリングの冪等性を比べる。設定は 4 組（既定、別記法 A、別記法 B、折り返し幅 20）
 - **Rationale**: 木の同一性ではなく HTML の一致を基準にすることで、正規化（文字参照で書いた文字、空白と soft break）を許しつつ意味の一致を検証できる
 
 ## Risks & Mitigations

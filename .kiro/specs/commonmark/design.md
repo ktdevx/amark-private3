@@ -6,7 +6,7 @@
 
 **Users**: ライブラリ利用者は簡易 API またはプリセットの方言で CommonMark を解析する。方言を組み立てる利用者は構文の単位を選んで方言を作る（例: 生 HTML なし）。将来の gfm はプリセットに拡張を足して GFM 方言を作り、markdown-renderer は本方言の解析結果で往復テストを行う。
 
-**Impact**: 公開ヘッダ `amark/commonmark.h` と `amark/commonmark_html.h`、`src/commonmark/commonmark_*.c` 群、共有の非公開モジュール `src/base/unicode_class.{h,c}`、生成した表 3 つ、生成器 2 つ、テストとテストデータを追加する。parser-core の契約の緩和 1 件と意味の明確化 2 件（C1〜C3）は parser-core の文書に適用済みで、本仕様はそれに依存する振る舞いを確かめるだけである（API の追加・変更なし）。エラーコード（foundation の `AMARK_ERROR_LIST` とエラーコード一覧表が正本）とノード種別は追加しない。
+**Impact**: 公開ヘッダ `amark/cmark.h` と `amark/cmark_html.h`、`src/cmark/cmark_*.c` 群、共有の非公開モジュール `src/base/unicode_class.{h,c}`、生成した表 3 つ、生成器 2 つ、テストとテストデータを追加する。parser-core の契約の緩和 1 件と意味の明確化 2 件（C1〜C3）は parser-core の文書に適用済みで、本仕様はそれに依存する振る舞いを確かめるだけである（API の追加・変更なし）。エラーコード（foundation の `AMARK_ERROR_LIST` とエラーコード一覧表が正本）とノード種別は追加しない。
 
 ### Goals
 - 0.31.2 の spec.txt の全 652 例で、生 HTML と危険な URL を許可した html-renderer の出力が期待 HTML とバイト単位で一致する
@@ -20,13 +20,15 @@
 - GFM の構文、smart punctuation、ソース位置、HTML のサニタイズ
 - 生成器の CI での自動実行と、生データ（entities.json、UnicodeData.txt）のリポジトリへの格納
 
+
+**用語**: 本仕様のモジュールの識別子・ファイル・ヘッダは `cmark` を使う（`amark_cmark_*`、`AMARK_CMARK_*`、拡張名 `cmark_*`、`src/cmark/`、`amark/cmark.h`）。接頭辞やパスを伴わない単独の「cmark」は参照実装 commonmark/cmark を指す。
 ## Boundary Commitments
 
 ### This Spec Owns
-- 公開ヘッダ `amark/commonmark.h`: 構文の単位の列挙、拡張の生成、拡張名の取得、方言への一括追加、方言プリセットの生成、簡易パース（レンダラのヘッダを include しない）
-- 公開ヘッダ `amark/commonmark_html.h`: HTML への簡易変換（`amark/commonmark.h` と `amark/html.h` を include する）
+- 公開ヘッダ `amark/cmark.h`: 構文の単位のフラグ、拡張の生成、拡張名の取得、方言への一括追加、方言プリセットの生成、簡易パース（レンダラのヘッダを include しない）
+- 公開ヘッダ `amark/cmark_html.h`: HTML への簡易変換（`amark/cmark.h` と `amark/html.h` を include する）
 - CommonMark 0.31.2 の各構文の規則（開始・継続・終了・flanking・rule of 3・リンクの宛先と title・ラベルの正規化・HTML ブロックの 7 種類・文字参照・コードスパンの規則）と、その拡張の記述子・名前・優先順位
-- 拡張間の内部の約束: リンク参照定義の値の型と定義テーブルの名前空間 `commonmark.link`
+- 拡張間の内部の約束: リンク参照定義の値の型と定義テーブルの名前空間 `cmark.link`
 - CommonMark が必要とするデータの表（エンティティ、Unicode の句読点・空白・畳み込み）、その生成器、出典とライセンスの表記
 - 非公開の共有モジュール UnicodeClass（`src/base/unicode_class.h`、`src/base/unicode_class.c`、生成物 `src/base/unicode_class_data.c`）: `amark_unicode_is_punctuation` / `amark_unicode_is_whitespace`。`include/` に置かず export しない。markdown-renderer も利用者（消費側）である
 - 病的入力への構文側の対策（内容ごとの記憶、ラベル長の打ち切り、宛先の括弧の入れ子の上限、参照展開の量の上限）
@@ -46,14 +48,14 @@
 - 本仕様が所有する非公開ヘッダ `src/base/unicode_class.h`: `<stdint.h>`・`<stdbool.h>` だけに依存する基盤層の部品。commonmark の CharClass と markdown-renderer が include する
 - node-tree の公開ヘッダ: `node_kind.h`、`node.h`
 - parser-core の公開ヘッダ: `parse_shared.h`、`block_syntax.h`、`inline_syntax.h`、`extension.h`、`dialect.h`、`parser.h`
-- html-renderer の公開ヘッダ `html.h`: 公開ヘッダ `amark/commonmark_html.h`、簡易変換の実装 `commonmark_convert.c`、テストだけが include する。`amark/commonmark.h` と構文のソースは include しない
+- html-renderer の公開ヘッダ `html.h`: 公開ヘッダ `amark/cmark_html.h`、簡易変換の実装 `cmark_convert.c`、テストだけが include する。`amark/cmark.h` と構文のソースは include しない
 - C 標準ライブラリ: `<stddef.h>`、`<stdint.h>`、`<stdbool.h>`、`<string.h>`
 - テスト: Naos、`amark_test_support`（差し替えアロケータ）。生成器: Python 3（標準ライブラリのみ、開発時だけ）
-- 依存方向（左ほど下位。右から左への include のみ）: `上流の公開ヘッダ, unicode_class.h → commonmark_internal.h（データ・文字・走査の共通部品） → 各構文のソース → commonmark_dialect.c → commonmark_convert.c`（公開ヘッダは `commonmark.h → commonmark_html.h`）。構文のソース同士は互いを include・呼び出しせず、共通部品だけを使う。parser-core の `src/parser/parser_internal.h` と node-tree の `src/tree/node_internal.h` は include しない
+- 依存方向（左ほど下位。右から左への include のみ）: `上流の公開ヘッダ, unicode_class.h → cmark_internal.h（データ・文字・走査の共通部品） → 各構文のソース → cmark_dialect.c → cmark_convert.c`（公開ヘッダは `cmark.h → cmark_html.h`）。構文のソース同士は互いを include・呼び出しせず、共通部品だけを使う。parser-core の `src/parser/parser_internal.h` と node-tree の `src/tree/node_internal.h` は include しない
 
 ### Revalidation Triggers
 - 対象の仕様の版の変更（期待 HTML と構文の規則が変わる。html-renderer も再検証）
-- 構文の単位の列挙の値、拡張名・構文名、優先順位の変更（方言を組み立てる利用者と gfm に影響）
+- 構文の単位のフラグの値、拡張名・構文名、優先順位の変更（方言を組み立てる利用者と gfm に影響）
 - リンク参照定義の値の型と名前空間の変更
 - 簡易 API の引数・所有規則の変更
 - 生成した表の出典の版の変更（Unicode の版、entities.json）
@@ -131,44 +133,44 @@ graph TB
 ### Directory Structure
 ```
 include/amark/
-├── commonmark.h                     # 単位の列挙、拡張の生成・名前、方言への追加・生成、簡易パース（レンダラのヘッダを含まない）
-└── commonmark_html.h                # HTML への簡易変換（commonmark.h と html.h を include）
+├── cmark.h                     # 単位のフラグ、拡張の生成・名前、方言への追加・生成、簡易パース（レンダラのヘッダを含まない）
+└── cmark_html.h                # HTML への簡易変換（cmark.h と html.h を include）
 src/
 ├── base/
 │   ├── unicode_class.h                  # 非公開（基盤層、markdown-renderer と共有）: amark_unicode_is_punctuation / amark_unicode_is_whitespace
 │   ├── unicode_class.c                  # 非公開: ASCII は表を引かず、0x80 以上は unicode_class_data.c の表を二分探索
 │   └── unicode_class_data.c             # 生成物: 句読点（P・S）の範囲表、Zs の表。先頭に出典・版・SHA-256・ライセンス
-└── commonmark/
-    ├── commonmark_internal.h            # 非公開: 記述子の extern 宣言、共通部品の宣言、定義の値の型、名前空間
-    ├── commonmark_entity_data.c         # 生成物: 名前付き文字参照の表（名前の昇順）。先頭に出典・SHA-256・ライセンス
-    ├── commonmark_unicode_data.c        # 生成物: 大文字小文字の畳み込みの表だけ（commonmark 専用）。先頭に出典・版・SHA-256・ライセンス
-    ├── commonmark_chars.c               # ASCII 句読点の判定、前後の文字の復号（後方は amark_utf8_decode_previous）、畳み込み。Unicode の句読点・空白は unicode_class に委ねる
-    ├── commonmark_entity.c              # 文字参照の照合と復号（名前付き・10 進・16 進）、エスケープと文字参照の解決（unescape）
-    ├── commonmark_scan.c                # ラベルの走査と正規化、リンクの宛先・title の走査
-    ├── commonmark_html_scan.c           # HTML の開き・閉じタグ、コメント、処理命令、宣言、CDATA の走査、HTML ブロックの開始・終了条件
-    ├── commonmark_block_util.c          # 字下げの桁の先読み、指定桁までの空白の読み飛ばし、行の残りの取り出し
-    ├── commonmark_thematic_break.c      # 拡張: 区切り線
-    ├── commonmark_atx_heading.c         # 拡張: ATX 見出し
-    ├── commonmark_setext_heading.c      # 拡張: Setext 見出し
-    ├── commonmark_indented_code.c       # 拡張: インデントコードブロック
-    ├── commonmark_fenced_code.c         # 拡張: フェンスコードブロック
-    ├── commonmark_html_block.c          # 拡張: HTML ブロック
-    ├── commonmark_link_reference.c      # 拡張: リンク参照定義（段落の内容の処理器）
-    ├── commonmark_block_quote.c         # 拡張: ブロック引用
-    ├── commonmark_list.c                # 拡張: リストとリスト項目（解析状態に開いているリストの記録）
-    ├── commonmark_backslash_escape.c    # 拡張: バックスラッシュエスケープ
-    ├── commonmark_entity_inline.c       # 拡張: 文字参照（インライン）
-    ├── commonmark_code_span.c           # 拡張: コードスパン（解析状態に `` ` `` の位置の記憶）
-    ├── commonmark_emphasis.c            # 拡張: 強調・強い強調（デリミタ処理器）
-    ├── commonmark_link.c                # 拡張: リンクと画像（ブラケット、参照の解決、展開量の上限）
-    ├── commonmark_autolink.c            # 拡張: オートリンク
-    ├── commonmark_html_inline.c         # 拡張: 生 HTML（解析状態に閉じのない構造の記憶）
-    ├── commonmark_line_break.c          # 拡張: ハード改行・ソフト改行
-    ├── commonmark_dialect.c             # 単位と記述子の表、拡張の生成、名前、方言への追加・生成、簡易パース
-    └── commonmark_convert.c             # HTML への簡易変換（html.h を include する唯一の本体ソース）
+└── cmark/
+    ├── cmark_internal.h            # 非公開: 記述子の extern 宣言、共通部品の宣言、定義の値の型、名前空間
+    ├── cmark_entity_data.c         # 生成物: 名前付き文字参照の表（名前の昇順）。先頭に出典・SHA-256・ライセンス
+    ├── cmark_unicode_data.c        # 生成物: 大文字小文字の畳み込みの表だけ（commonmark 専用）。先頭に出典・版・SHA-256・ライセンス
+    ├── cmark_chars.c               # ASCII 句読点の判定、前後の文字の復号（後方は amark_utf8_decode_previous）、畳み込み。Unicode の句読点・空白は unicode_class に委ねる
+    ├── cmark_entity.c              # 文字参照の照合と復号（名前付き・10 進・16 進）、エスケープと文字参照の解決（unescape）
+    ├── cmark_scan.c                # ラベルの走査と正規化、リンクの宛先・title の走査
+    ├── cmark_html_scan.c           # HTML の開き・閉じタグ、コメント、処理命令、宣言、CDATA の走査、HTML ブロックの開始・終了条件
+    ├── cmark_block_util.c          # 字下げの桁の先読み、指定桁までの空白の読み飛ばし、行の残りの取り出し
+    ├── cmark_thematic_break.c      # 拡張: 区切り線
+    ├── cmark_atx_heading.c         # 拡張: ATX 見出し
+    ├── cmark_setext_heading.c      # 拡張: Setext 見出し
+    ├── cmark_indented_code.c       # 拡張: インデントコードブロック
+    ├── cmark_fenced_code.c         # 拡張: フェンスコードブロック
+    ├── cmark_html_block.c          # 拡張: HTML ブロック
+    ├── cmark_link_reference.c      # 拡張: リンク参照定義（段落の内容の処理器）
+    ├── cmark_block_quote.c         # 拡張: ブロック引用
+    ├── cmark_list.c                # 拡張: リストとリスト項目（解析状態に開いているリストの記録）
+    ├── cmark_backslash_escape.c    # 拡張: バックスラッシュエスケープ
+    ├── cmark_entity_inline.c       # 拡張: 文字参照（インライン）
+    ├── cmark_code_span.c           # 拡張: コードスパン（解析状態に `` ` `` の位置の記憶）
+    ├── cmark_emphasis.c            # 拡張: 強調・強い強調（デリミタ処理器）
+    ├── cmark_link.c                # 拡張: リンクと画像（ブラケット、参照の解決、展開量の上限）
+    ├── cmark_autolink.c            # 拡張: オートリンク
+    ├── cmark_html_inline.c         # 拡張: 生 HTML（解析状態に閉じのない構造の記憶）
+    ├── cmark_line_break.c          # 拡張: ハード改行・ソフト改行
+    ├── cmark_dialect.c             # 単位と記述子の表、拡張の生成、名前、方言への追加・生成、簡易パース
+    └── cmark_convert.c             # HTML への簡易変換（html.h を include する唯一の本体ソース）
 tools/
-├── generate_entity_table.py         # entities.json → src/commonmark/commonmark_entity_data.c
-└── generate_unicode_tables.py       # UnicodeData.txt → src/base/unicode_class_data.c、CaseFolding.txt → src/commonmark/commonmark_unicode_data.c
+├── generate_entity_table.py         # entities.json → src/cmark/cmark_entity_data.c
+└── generate_unicode_tables.py       # UnicodeData.txt → src/base/unicode_class_data.c、CaseFolding.txt → src/cmark/cmark_unicode_data.c
 tests/
 ├── data/commonmark/
 │   ├── spec-0.31.2.txt              # 改変しない spec.txt
@@ -176,23 +178,23 @@ tests/
 ├── support/
 │   ├── test_spec_examples.h         # 抽出器の宣言（例の構造体、読み込み、解放）
 │   └── test_spec_examples.c         # spec.txt の読み込みと例の抽出（`→` をタブへ、節名と番号の記録）
-├── commonmark_spec_test.c           # 全例のバイト比較、1 バイトずつの供給の同一性、例の数の確認、失敗の報告
-├── commonmark_pathological_test.c   # 病的入力の類型ごとの入力生成・出力検査・CPU 時間の上限
-├── commonmark_dialect_test.c        # 単位の生成・名前・一括追加・プリセット・取り外し・凍結・簡易 API
-├── commonmark_block_test.c          # ブロック構文の境界（仕様の例にない上限と組み合わせ）
-├── commonmark_inline_test.c         # インライン構文の境界（数値参照の範囲、ラベル長、括弧 32 段、展開量）
-├── commonmark_data_test.c           # 生成した表の件数と代表値、文字の分類、畳み込み
-└── commonmark_error_test.c          # 方言の生成・解析・簡易 API の失敗注入、資源の解放
-THIRD_PARTY_NOTICES.md               # エンティティ表 src/commonmark/commonmark_entity_data.c（CC BY 4.0）、Unicode データ src/base/unicode_class_data.c と src/commonmark/commonmark_unicode_data.c（Unicode License v3）、spec.txt（テストのみ、CC BY-SA 4.0）
+├── cmark_spec_test.c           # 全例のバイト比較、1 バイトずつの供給の同一性、例の数の確認、失敗の報告
+├── cmark_pathological_test.c   # 病的入力の類型ごとの入力生成・出力検査・CPU 時間の上限
+├── cmark_dialect_test.c        # 単位の生成・名前・一括追加・プリセット・取り外し・凍結・簡易 API
+├── cmark_block_test.c          # ブロック構文の境界（仕様の例にない上限と組み合わせ）
+├── cmark_inline_test.c         # インライン構文の境界（数値参照の範囲、ラベル長、括弧 32 段、展開量）
+├── cmark_data_test.c           # 生成した表の件数と代表値、文字の分類、畳み込み
+└── cmark_error_test.c          # 方言の生成・解析・簡易 API の失敗注入、資源の解放
+THIRD_PARTY_NOTICES.md               # エンティティ表 src/cmark/cmark_entity_data.c（CC BY 4.0）、Unicode データ src/base/unicode_class_data.c と src/cmark/cmark_unicode_data.c（Unicode License v3）、spec.txt（テストのみ、CC BY-SA 4.0）
 ```
 
 ### Modified Files
 実装時に本 spec のタスクとして変更する（本 spec の作成時には変更しない）。
 シェルのファイル（`amark.h`、`src/CMakeLists.txt`、`tests/CMakeLists.txt`、`tests/cxx_header_test.cpp`、`amark_test_support` のソース一覧）は foundation が所有し、本仕様は追記だけを行う。
-- `include/amark/amark.h` — `amark/commonmark.h` と `amark/commonmark_html.h` の include を追記
-- `src/CMakeLists.txt` — `src/commonmark/commonmark_*.c`（生成物 2 つを含む 26 個）と `src/base/unicode_class.c`、`src/base/unicode_class_data.c`（生成物）をソース一覧に追記
-- `tests/CMakeLists.txt` — `support/test_spec_examples.c` を `amark_test_support` に追記、7 つのテスト実行ファイルを `naos_add_executable` で登録、spec.txt のパスをコンパイル定義 `AMARK_COMMONMARK_SPEC_PATH` で渡す、病的入力テストに CTest の `TIMEOUT 300` を設定
-- `tests/cxx_header_test.cpp` — C++ から `amark_commonmark_dialect_create`（`amark/commonmark.h`）、`amark_commonmark_convert_to_html`（`amark/commonmark_html.h`）を呼ぶ確認を追記
+- `include/amark/amark.h` — `amark/cmark.h` と `amark/cmark_html.h` の include を追記
+- `src/CMakeLists.txt` — `src/cmark/cmark_*.c`（生成物 2 つを含む 26 個）と `src/base/unicode_class.c`、`src/base/unicode_class_data.c`（生成物）をソース一覧に追記
+- `tests/CMakeLists.txt` — `support/test_spec_examples.c` を `amark_test_support` に追記、7 つのテスト実行ファイルを `naos_add_executable` で登録、spec.txt のパスをコンパイル定義 `AMARK_CMARK_SPEC_PATH` で渡す、病的入力テストに CTest の `TIMEOUT 300` を設定
+- `tests/cxx_header_test.cpp` — C++ から `amark_cmark_dialect_create`（`amark/cmark.h`）、`amark_cmark_convert_to_html`（`amark/cmark_html.h`）を呼ぶ確認を追記
 - `CMakeLists.txt`（インストール規則）— `THIRD_PARTY_NOTICES.md` を `LICENSE` と同じ場所にインストール
 - `.kiro/steering/structure.md` — `tools/`（開発時だけの生成器）と `tests/data/`（固定したテストデータ）のディレクトリの約束を追記
 
@@ -220,7 +222,7 @@ sequenceDiagram
 ```
 
 - 一括追加は表の順（列挙の値の昇順）に行い、途中の失敗では、この呼び出しで追加した拡張を逆順に `amark_dialect_remove_extension` で外して破棄し、未追加の拡張を破棄する（2.6、1.2）
-- `amark_commonmark_parse` は文書を返してから方言を破棄する。CommonMark の拡張はノード種別を定義しないため、文書は方言を参照しない（parser-core に適用済みの C1）
+- `amark_cmark_parse` は文書を返してから方言を破棄する。CommonMark の拡張はノード種別を定義しないため、文書は方言を参照しない（parser-core に適用済みの C1）
 
 ### 1 行のブロック開始判定（CommonMark の優先順位）
 
@@ -246,18 +248,18 @@ graph TB
 
 | Requirement | Summary | Components | Interfaces | Flows |
 |-------------|---------|------------|------------|-------|
-| 1.1, 1.5, 1.7 | 17 単位、標準種別だけ、同じ API | CommonmarkDialect, 全構文の拡張 | `amark_commonmark_extension_create`、記述子の表 | 方言の生成 |
-| 1.2, 1.3 | 一括追加の全か無か、未定義の単位 | CommonmarkDialect | `amark_commonmark_add_extensions` | 方言の生成 |
+| 1.1, 1.5, 1.7 | 17 単位、標準種別だけ、同じ API | CommonmarkDialect, 全構文の拡張 | `amark_cmark_extension_create`、記述子の表 | 方言の生成 |
+| 1.2, 1.3 | 一括追加の全か無か、未定義の単位 | CommonmarkDialect | `amark_cmark_add_extensions` | 方言の生成 |
 | 1.4 | 外した構文の記法 | 全構文の拡張（相互に依存しない） | 構文のソースの独立 | 開始判定 |
-| 1.6 | 拡張名 | CommonmarkDialect | `amark_commonmark_get_extension_name` | — |
-| 2.1, 2.2, 2.3, 2.6 | プリセット、部分集合、未凍結、失敗時の解放 | CommonmarkDialect | `amark_commonmark_dialect_create` | 方言の生成 |
+| 1.6 | 拡張名 | CommonmarkDialect | `amark_cmark_get_extension_name` | — |
+| 2.1, 2.2, 2.3, 2.6 | プリセット、部分集合、未凍結、失敗時の解放 | CommonmarkDialect | `amark_cmark_dialect_create` | 方言の生成 |
 | 2.4, 2.5 | 凍結済み・名前の重複 | CommonmarkDialect | `amark_dialect_add_extension` のエラーの伝播 | — |
-| 3.1, 3.3, 3.4, 3.5, 3.6 | 簡易パース | CommonmarkDialect | `amark_commonmark_parse` | 方言の生成と簡易 API |
-| 3.2 | HTML への簡易変換 | CommonmarkHtmlHeader, CommonmarkConvert | `amark_commonmark_convert_to_html` | 方言の生成と簡易 API |
-| 4.1 | ブロック引用 | BlockQuoteExtension, BlockUtil | 記述子 `commonmark_block_quote` | 開始判定 |
-| 4.2, 4.3, 4.4, 4.5, 4.6 | リスト | ListExtension, BlockUtil | 記述子 `commonmark_list`、リストの記録 | 開始判定 |
+| 3.1, 3.3, 3.4, 3.5, 3.6 | 簡易パース | CommonmarkDialect | `amark_cmark_parse` | 方言の生成と簡易 API |
+| 3.2 | HTML への簡易変換 | CommonmarkHtmlHeader, CommonmarkConvert | `amark_cmark_convert_to_html` | 方言の生成と簡易 API |
+| 4.1 | ブロック引用 | BlockQuoteExtension, BlockUtil | 記述子 `cmark_block_quote` | 開始判定 |
+| 4.2, 4.3, 4.4, 4.5, 4.6 | リスト | ListExtension, BlockUtil | 記述子 `cmark_list`、リストの記録 | 開始判定 |
 | 4.7 | 継続しない行 | BlockQuoteExtension, ListExtension | `continue_line` | 開始判定 |
-| 5.1 | 区切り線 | ThematicBreakExtension | 記述子 `commonmark_thematic_break` | 開始判定 |
+| 5.1 | 区切り線 | ThematicBreakExtension | 記述子 `cmark_thematic_break` | 開始判定 |
 | 5.2 | ATX 見出し | AtxHeadingExtension | `add_content` | 開始判定 |
 | 5.3 | Setext 見出し | SetextHeadingExtension | `get_paragraph`、`open_from_paragraph` | 開始判定 |
 | 5.4 | インデントコード | IndentedCodeExtension, BlockUtil | `maybe_lazy`、`interrupts_paragraph` | 開始判定 |
@@ -272,14 +274,14 @@ graph TB
 | 6.8 | オートリンク | AutolinkExtension | インライン構文 `<` | — |
 | 7.1, 7.2 | 強調 | EmphasisExtension, CharClass, UnicodeClass | デリミタ処理器 | — |
 | 7.3, 7.4, 7.5, 7.6 | リンク・画像 | LinkExtension, LinkScan | ブラケット API | — |
-| 7.7 | ラベルの正規化 | LinkScan, CharClass, UnicodeTables | `amark_commonmark_normalize_label` | — |
+| 7.7 | ラベルの正規化 | LinkScan, CharClass, UnicodeTables | `amark_cmark_normalize_label` | — |
 | 7.8 | 優先順位 | CodeSpanExtension, AutolinkExtension, HtmlInlineExtension, LinkExtension | 左から順の呼び出しと優先順位 | — |
 | 8.1, 8.2, 8.5, 8.7 | spec.txt と抽出・報告 | SpecFixture, SpecExamples | `test_spec_examples_load` | — |
 | 8.3, 8.4, 8.6 | バイト比較と分割供給 | ConformanceTest | html-renderer の設定 | — |
 | 9.1, 9.6 | 線形時間とメモリ | 全構文の拡張, CodeSpanExtension, HtmlInlineExtension, LinkScan | 計算量の規則 | — |
 | 9.2, 9.3 | 病的入力の類型と上限 | PathologicalTest | parser-core の上限 | — |
 | 9.4 | 参照展開の量 | LinkExtension | 解析状態の展開量 | — |
-| 9.5 | 括弧の入れ子 32 段 | LinkScan | `amark_commonmark_scan_link_destination` | — |
+| 9.5 | 括弧の入れ子 32 段 | LinkScan | `amark_cmark_scan_link_destination` | — |
 | 10.1, 10.3, 10.5 | エンティティ表 | EntityTable, EntityGenerator, ThirdPartyNotices | 生成物の先頭の記録 | — |
 | 10.2, 10.3, 10.5 | Unicode の表 | UnicodeClass, UnicodeTables, UnicodeGenerator, ThirdPartyNotices | 生成物の先頭の記録 | — |
 | 10.4 | ビルドに生成器不要 | CommonmarkIntegration | 生成物のコミット | — |
@@ -291,8 +293,8 @@ graph TB
 
 | Component | Domain/Layer | Intent | Req Coverage | Key Dependencies (P0/P1) | Contracts |
 |-----------|--------------|--------|--------------|--------------------------|-----------|
-| CommonmarkPublicHeader | 公開 API | `amark/commonmark.h` | 1.1, 1.6, 2.1, 3.1 | parser-core (P0) | Service |
-| CommonmarkHtmlHeader | 公開 API | `amark/commonmark_html.h` | 3.2 | CommonmarkPublicHeader, html-renderer (P0) | Service |
+| CommonmarkPublicHeader | 公開 API | `amark/cmark.h` | 1.1, 1.6, 2.1, 3.1 | parser-core (P0) | Service |
+| CommonmarkHtmlHeader | 公開 API | `amark/cmark_html.h` | 3.2 | CommonmarkPublicHeader, html-renderer (P0) | Service |
 | CommonmarkInternal | 非公開 | 共通の宣言と内部の約束 | 全体の前提, 5.7 | parser-core (P0) | State |
 | EntityTable | データ | 生成した名前付き文字参照の表 | 10.1, 10.5 | — | State |
 | UnicodeClass | 共有の非公開部品 | 句読点・空白の判定と生成した表（markdown-renderer と共有） | 7.1, 10.2, 10.5 | — | Service, State |
@@ -325,99 +327,99 @@ graph TB
 
 | Field | Detail |
 |-------|--------|
-| Intent | `amark/commonmark.h` に単位の列挙と公開関数を宣言する（レンダラに依存しない） |
+| Intent | `amark/cmark.h` に単位のフラグと公開関数を宣言する（レンダラに依存しない） |
 | Requirements | 1.1, 1.3, 1.6, 2.1, 2.2, 3.1 |
 
 **Contracts**: Service [x]
 
 ##### Service Interface
 ```c
-/* include/amark/commonmark.h */
+/* include/amark/cmark.h */
 #include <amark/dialect.h>
 #include <amark/parser.h>
 #include <amark/slice.h>
 #include <stdint.h>
 
-#define AMARK_COMMONMARK_SPEC_VERSION "0.31.2"
+#define AMARK_CMARK_SPEC_VERSION "0.31.2"
 
 /* 構文の選択（ビットフラグ。OR で組み合わせ、引数は uint32_t で受ける） */
-#define AMARK_COMMONMARK_THEMATIC_BREAK            ((uint32_t)0x00001u)
-#define AMARK_COMMONMARK_ATX_HEADING               ((uint32_t)0x00002u)
-#define AMARK_COMMONMARK_SETEXT_HEADING            ((uint32_t)0x00004u)
-#define AMARK_COMMONMARK_INDENTED_CODE             ((uint32_t)0x00008u)
-#define AMARK_COMMONMARK_FENCED_CODE               ((uint32_t)0x00010u)
-#define AMARK_COMMONMARK_HTML_BLOCK                ((uint32_t)0x00020u)
-#define AMARK_COMMONMARK_LINK_REFERENCE_DEFINITION ((uint32_t)0x00040u)
-#define AMARK_COMMONMARK_BLOCK_QUOTE               ((uint32_t)0x00080u)
-#define AMARK_COMMONMARK_LIST                      ((uint32_t)0x00100u) /* リストとリスト項目 */
-#define AMARK_COMMONMARK_BACKSLASH_ESCAPE          ((uint32_t)0x00200u)
-#define AMARK_COMMONMARK_ENTITY                    ((uint32_t)0x00400u) /* 名前付き・数値文字参照 */
-#define AMARK_COMMONMARK_CODE_SPAN                 ((uint32_t)0x00800u)
-#define AMARK_COMMONMARK_EMPHASIS                  ((uint32_t)0x01000u) /* 強調と強い強調 */
-#define AMARK_COMMONMARK_LINK                      ((uint32_t)0x02000u) /* リンクと画像 */
-#define AMARK_COMMONMARK_AUTOLINK                  ((uint32_t)0x04000u)
-#define AMARK_COMMONMARK_HTML_INLINE               ((uint32_t)0x08000u)
-#define AMARK_COMMONMARK_LINE_BREAK                ((uint32_t)0x10000u) /* ハード改行とソフト改行 */
+#define AMARK_CMARK_THEMATIC_BREAK            ((uint32_t)0x00001u)
+#define AMARK_CMARK_ATX_HEADING               ((uint32_t)0x00002u)
+#define AMARK_CMARK_SETEXT_HEADING            ((uint32_t)0x00004u)
+#define AMARK_CMARK_INDENTED_CODE             ((uint32_t)0x00008u)
+#define AMARK_CMARK_FENCED_CODE               ((uint32_t)0x00010u)
+#define AMARK_CMARK_HTML_BLOCK                ((uint32_t)0x00020u)
+#define AMARK_CMARK_LINK_REFERENCE_DEFINITION ((uint32_t)0x00040u)
+#define AMARK_CMARK_BLOCK_QUOTE               ((uint32_t)0x00080u)
+#define AMARK_CMARK_LIST                      ((uint32_t)0x00100u) /* リストとリスト項目 */
+#define AMARK_CMARK_BACKSLASH_ESCAPE          ((uint32_t)0x00200u)
+#define AMARK_CMARK_ENTITY                    ((uint32_t)0x00400u) /* 名前付き・数値文字参照 */
+#define AMARK_CMARK_CODE_SPAN                 ((uint32_t)0x00800u)
+#define AMARK_CMARK_EMPHASIS                  ((uint32_t)0x01000u) /* 強調と強い強調 */
+#define AMARK_CMARK_LINK                      ((uint32_t)0x02000u) /* リンクと画像 */
+#define AMARK_CMARK_AUTOLINK                  ((uint32_t)0x04000u)
+#define AMARK_CMARK_HTML_INLINE               ((uint32_t)0x08000u)
+#define AMARK_CMARK_LINE_BREAK                ((uint32_t)0x10000u) /* ハード改行とソフト改行 */
 
-#define AMARK_COMMONMARK_ALL ((uint32_t)0x1FFFFu)
-#define AMARK_COMMONMARK_CONSTRUCT_COUNT 17
+#define AMARK_CMARK_ALL ((uint32_t)0x1FFFFu)
+#define AMARK_CMARK_CONSTRUCT_COUNT 17
 
-AMARK_API amark_error_t amark_commonmark_extension_create(uint32_t construct,
+AMARK_API amark_error_t amark_cmark_extension_create(uint32_t construct,
                                                           amark_extension_t **extension);
-AMARK_API amark_slice_t amark_commonmark_get_extension_name(uint32_t construct);
-AMARK_API amark_error_t amark_commonmark_add_extensions(amark_dialect_t *dialect, uint32_t constructs);
-AMARK_API amark_error_t amark_commonmark_dialect_create(uint32_t constructs, amark_dialect_t **dialect);
-AMARK_API amark_error_t amark_commonmark_parse(const char *data, size_t len, const amark_parser_options_t *opts,
+AMARK_API amark_slice_t amark_cmark_get_extension_name(uint32_t construct);
+AMARK_API amark_error_t amark_cmark_add_extensions(amark_dialect_t *dialect, uint32_t constructs);
+AMARK_API amark_error_t amark_cmark_dialect_create(uint32_t constructs, amark_dialect_t **dialect);
+AMARK_API amark_error_t amark_cmark_parse(const char *data, size_t len, const amark_parser_options_t *opts,
                                                amark_node_t **doc);
 ```
-- `amark/commonmark.h` は `amark/html.h` を include せず、html-renderer の型を使わない。HTML への簡易変換は `amark/commonmark_html.h`（下記）に分ける
-- ヘッダ冒頭のコメントに記す利用者向けの事項: 対象の仕様の版、単位の一覧と拡張名、プリセットは凍結されていないこと、繰り返し解析する場合は方言を作って `amark_parser_parse` で再利用すべきこと（簡易 API は呼び出しごとに方言を作る）、CommonMark の拡張だけからなる方言で作った文書は方言の破棄後も有効なこと（parser-core の C1）、HTML への簡易変換は `amark/commonmark_html.h` にあること
+- `amark/cmark.h` は `amark/html.h` を include せず、html-renderer の型を使わない。HTML への簡易変換は `amark/cmark_html.h`（下記）に分ける
+- ヘッダ冒頭のコメントに記す利用者向けの事項: 対象の仕様の版、単位の一覧と拡張名、プリセットは凍結されていないこと、繰り返し解析する場合は方言を作って `amark_parser_parse` で再利用すべきこと（簡易 API は呼び出しごとに方言を作る）、CommonMark の拡張だけからなる方言で作った文書は方言の破棄後も有効なこと（parser-core の C1）、HTML への簡易変換は `amark/cmark_html.h` にあること
 
 #### CommonmarkHtmlHeader
 
 | Field | Detail |
 |-------|--------|
-| Intent | `amark/commonmark_html.h` に HTML への簡易変換を宣言する |
+| Intent | `amark/cmark_html.h` に HTML への簡易変換を宣言する |
 | Requirements | 3.2, 3.3 |
 
 **Contracts**: Service [x]
 
 ##### Service Interface
 ```c
-/* include/amark/commonmark_html.h */
+/* include/amark/cmark_html.h */
 #include <amark/buffer.h>
-#include <amark/commonmark.h>
+#include <amark/cmark.h>
 #include <amark/html.h>
 
-AMARK_API amark_error_t amark_commonmark_convert_to_html(const char *data, size_t len,
+AMARK_API amark_error_t amark_cmark_convert_to_html(const char *data, size_t len,
                                                          const amark_parser_options_t *parse_opts,
                                                          const amark_html_options_t *html_opts,
                                                          amark_buffer_t *out);
 ```
 - ヘッダ冒頭のコメント: HTML の既定値は生 HTML と危険な URL を出力しないこと、繰り返し変換する場合は方言を再利用し `amark_parser_parse` と `amark_html_render` を使うべきこと
-- 包括ヘッダ `amark/amark.h` は `amark/commonmark.h` と `amark/commonmark_html.h` の両方を include する（追記）
+- 包括ヘッダ `amark/amark.h` は `amark/cmark.h` と `amark/cmark_html.h` の両方を include する（追記）
 
 ##### 単位の表（CommonmarkDialect が持つ）
 
 | ビット | 拡張名（= 構文名） | 種類 | 優先順位 | start_chars / triggers | 解析状態 |
 |---|---|---|---|---|---|
-| THEMATIC_BREAK | `commonmark_thematic_break` | ブロック NONE | 60 | `*-_` | なし |
-| ATX_HEADING | `commonmark_atx_heading` | ブロック INLINE | 20 | `#` | なし |
-| SETEXT_HEADING | `commonmark_setext_heading` | ブロック INLINE | 50 | `=-` | なし |
-| INDENTED_CODE | `commonmark_indented_code` | ブロック RAW | 80 | `NULL` | なし |
-| FENCED_CODE | `commonmark_fenced_code` | ブロック RAW | 30 | `` `~ `` | なし |
-| HTML_BLOCK | `commonmark_html_block` | ブロック RAW | 40 | `<` | なし |
-| LINK_REFERENCE_DEFINITION | `commonmark_link_reference_definition` | 段落の処理器 | 100 | — | なし |
-| BLOCK_QUOTE | `commonmark_block_quote` | ブロック BLOCKS | 10 | `>` | なし |
-| LIST | `commonmark_list`（構文 `commonmark_list_item` と `commonmark_list`） | ブロック BLOCKS ×2 | 70（項目）、—（リストは開始なし） | `*+-0123456789` | 開いているリストの記録 |
-| BACKSLASH_ESCAPE | `commonmark_backslash_escape` | インライン | 20 | `\` | なし |
-| ENTITY | `commonmark_entity` | インライン | 10 | `&` | なし |
-| CODE_SPAN | `commonmark_code_span` | インライン | 10 | `` ` `` | `` ` `` の位置の記憶 |
-| EMPHASIS | `commonmark_emphasis` | インライン | 10 | `*_` | なし |
-| LINK | `commonmark_link` | インライン | 10 | `[]!` | 展開量 |
-| AUTOLINK | `commonmark_autolink` | インライン | 10 | `<` | なし |
-| HTML_INLINE | `commonmark_html_inline` | インライン | 20 | `<` | 閉じのない構造の記憶 |
-| LINE_BREAK | `commonmark_line_break` | インライン | 10 | `\n\` | なし |
+| THEMATIC_BREAK | `cmark_thematic_break` | ブロック NONE | 60 | `*-_` | なし |
+| ATX_HEADING | `cmark_atx_heading` | ブロック INLINE | 20 | `#` | なし |
+| SETEXT_HEADING | `cmark_setext_heading` | ブロック INLINE | 50 | `=-` | なし |
+| INDENTED_CODE | `cmark_indented_code` | ブロック RAW | 80 | `NULL` | なし |
+| FENCED_CODE | `cmark_fenced_code` | ブロック RAW | 30 | `` `~ `` | なし |
+| HTML_BLOCK | `cmark_html_block` | ブロック RAW | 40 | `<` | なし |
+| LINK_REFERENCE_DEFINITION | `cmark_link_reference_definition` | 段落の処理器 | 100 | — | なし |
+| BLOCK_QUOTE | `cmark_block_quote` | ブロック BLOCKS | 10 | `>` | なし |
+| LIST | `cmark_list`（構文 `cmark_list_item` と `cmark_list`） | ブロック BLOCKS ×2 | 70（項目）、—（リストは開始なし） | `*+-0123456789` | 開いているリストの記録 |
+| BACKSLASH_ESCAPE | `cmark_backslash_escape` | インライン | 20 | `\` | なし |
+| ENTITY | `cmark_entity` | インライン | 10 | `&` | なし |
+| CODE_SPAN | `cmark_code_span` | インライン | 10 | `` ` `` | `` ` `` の位置の記憶 |
+| EMPHASIS | `cmark_emphasis` | インライン | 10 | `*_` | なし |
+| LINK | `cmark_link` | インライン | 10 | `[]!` | 展開量 |
+| AUTOLINK | `cmark_autolink` | インライン | 10 | `<` | なし |
+| HTML_INLINE | `cmark_html_inline` | インライン | 20 | `<` | 閉じのない構造の記憶 |
+| LINE_BREAK | `cmark_line_break` | インライン | 10 | `\n\` | なし |
 
 - 同じトリガーの順: `<` はオートリンク（10）→ 生 HTML（20）、`\` は改行（10、`\` + 行末だけを処理）→ エスケープ（20）。他のトリガーは 1 つの構文だけ
 - どの拡張もノード種別を宣言しない（`node_kind_count = 0`、1.5）。記述子と構文はすべて `static const` で、`user_data` は使わない（12.1）
@@ -435,32 +437,32 @@ AMARK_API amark_error_t amark_commonmark_convert_to_html(const char *data, size_
 
 ##### State Management
 ```c
-/* src/commonmark/commonmark_internal.h（非公開。AMARK_API を付けない） */
+/* src/cmark/cmark_internal.h（非公開。AMARK_API を付けない） */
 #include <amark/extension.h>
 #include <amark/buffer.h>
 #include <amark/utf8.h>
 #include "base/unicode_class.h"
 
 /* 各構文のソースが定義する記述子（CommonmarkDialect だけが参照する） */
-extern const amark_extension_desc_t amark_commonmark_thematic_break_desc;
+extern const amark_extension_desc_t amark_cmark_thematic_break_desc;
 /* … 17 個すべて（atx_heading、setext_heading、indented_code、fenced_code、html_block、
      link_reference_definition、block_quote、list、backslash_escape、entity、code_span、
      emphasis、link、autolink、html_inline、line_break） */
 
-#define AMARK_COMMONMARK_LINK_SPACE "commonmark.link"   /* 定義テーブルの名前空間 */
-#define AMARK_COMMONMARK_MAX_LABEL_LENGTH 999           /* ラベルの内容の最大文字数（5.8） */
-#define AMARK_COMMONMARK_MAX_PAREN_DEPTH 32             /* 宛先の括弧の入れ子（9.5） */
-#define AMARK_COMMONMARK_MIN_EXPANSION_LIMIT 100000u    /* 参照展開の量の下限（9.4） */
+#define AMARK_CMARK_LINK_SPACE "cmark.link"   /* 定義テーブルの名前空間 */
+#define AMARK_CMARK_MAX_LABEL_LENGTH 999           /* ラベルの内容の最大文字数（5.8） */
+#define AMARK_CMARK_MAX_PAREN_DEPTH 32             /* 宛先の括弧の入れ子（9.5） */
+#define AMARK_CMARK_MIN_EXPANSION_LIMIT 100000u    /* 参照展開の量の下限（9.4） */
 
-typedef struct amark_commonmark_link_definition
+typedef struct amark_cmark_link_definition
 {
     char *url;            /* 所有。エスケープと文字参照を解決済み。NUL 終端 */
     size_t url_len;
     char *title;          /* 所有。なければ空文字列 */
     size_t title_len;
-} amark_commonmark_link_definition_t;
+} amark_cmark_link_definition_t;
 ```
-- リンク参照定義の約束（5.7）: 定義テーブルの名前空間 `commonmark.link`、鍵は `amark_commonmark_normalize_label` の結果、値は上の構造体（1 回の `amark_malloc` で構造体と 2 つの文字列を連続して確保し、後片付け関数 `amark_free` 相当で解放）。書くのは LinkReferenceExtension、読むのは LinkExtension だけ。第三者の拡張にとっては非公開（必要になれば公開 API の追加として扱う）
+- リンク参照定義の約束（5.7）: 定義テーブルの名前空間 `cmark.link`、鍵は `amark_cmark_normalize_label` の結果、値は上の構造体（1 回の `amark_malloc` で構造体と 2 つの文字列を連続して確保し、後片付け関数 `amark_free` 相当で解放）。書くのは LinkReferenceExtension、読むのは LinkExtension だけ。第三者の拡張にとっては非公開（必要になれば公開 API の追加として扱う）
 - 共通部品の宣言（CharClass、EntityAndEscape、LinkScan、HtmlScan、BlockUtil の関数）は各コンポーネントの節に示す
 
 ### データ
@@ -473,8 +475,8 @@ typedef struct amark_commonmark_link_definition
 | Requirements | 10.1, 10.5 |
 
 **Contracts**: State [x]
-- `src/commonmark/commonmark_entity_data.c` は生成物。`static const` の配列 `{名前（`&` と `;` を除く）, 名前の長さ, コードポイント 2 個（2 個目がなければ 0）}` を名前のバイト順の昇順に持ち、件数を定数で公開する（内部）。先頭は foundation の定型ヘッダ（MIT）、続いて「生成物、手で編集しない」「出典 URL、取得日、SHA-256、CC BY 4.0、WHATWG への帰属」を記したコメント
-- 内部 API: `extern const amark_commonmark_entity_t amark_commonmark_entities[]; extern const size_t amark_commonmark_entity_count;`
+- `src/cmark/cmark_entity_data.c` は生成物。`static const` の配列 `{名前（`&` と `;` を除く）, 名前の長さ, コードポイント 2 個（2 個目がなければ 0）}` を名前のバイト順の昇順に持ち、件数を定数で公開する（内部）。先頭は foundation の定型ヘッダ（MIT）、続いて「生成物、手で編集しない」「出典 URL、取得日、SHA-256、CC BY 4.0、WHATWG への帰属」を記したコメント
+- 内部 API: `extern const amark_cmark_entity_t amark_cmark_entities[]; extern const size_t amark_cmark_entity_count;`
 
 #### UnicodeClass（共有の非公開モジュール）
 
@@ -497,7 +499,7 @@ bool amark_unicode_is_whitespace(uint32_t c);  /* 一般カテゴリ Zs、タブ
 - `src/base/unicode_class.c`: ASCII は表を引かずに判定し、0x80 以上は `src/base/unicode_class_data.c` の昇順の表を二分探索する（対数時間）。可変の状態を持たない
 - `src/base/unicode_class_data.c` は生成物: 句読点のコードポイント範囲 `{first, last}` の昇順配列と、Zs のコードポイントの昇順配列（0x80 以上だけでもよい）。先頭に定型ヘッダ、生成物である旨、出典 URL（UnicodeData.txt）、版 16.0.0、SHA-256、Unicode License v3 の著作権表示
 - 所有と変更: 本仕様が所有する。markdown-renderer が消費側であり、関数・意味・表の変更は markdown-renderer の再検証を伴う。ほかの spec が使う場合も `src/base/unicode_class.h` だけを include する
-- Validation: `commonmark_data_test.c`
+- Validation: `cmark_data_test.c`
 
 #### UnicodeTables
 
@@ -507,7 +509,7 @@ bool amark_unicode_is_whitespace(uint32_t c);  /* 一般カテゴリ Zs、タブ
 | Requirements | 10.2, 10.5 |
 
 **Contracts**: State [x]
-- `src/commonmark/commonmark_unicode_data.c` は生成物: 畳み込み `{元, 先の個数 1〜3, 先 3 個}` の元の昇順配列（CaseFolding の状態 C と F）だけを持つ。ラベルの正規化だけが使うため commonmark 専用とし、UnicodeClass には置かない。先頭に定型ヘッダ、出典 URL（CaseFolding.txt）、版 16.0.0、SHA-256、Unicode License v3 の著作権表示
+- `src/cmark/cmark_unicode_data.c` は生成物: 畳み込み `{元, 先の個数 1〜3, 先 3 個}` の元の昇順配列（CaseFolding の状態 C と F）だけを持つ。ラベルの正規化だけが使うため commonmark 専用とし、UnicodeClass には置かない。先頭に定型ヘッダ、出典 URL（CaseFolding.txt）、版 16.0.0、SHA-256、Unicode License v3 の著作権表示
 
 ### 文字
 
@@ -522,14 +524,14 @@ bool amark_unicode_is_whitespace(uint32_t c);  /* 一般カテゴリ Zs、タブ
 
 ##### Service Interface
 ```c
-bool amark_commonmark_is_ascii_punctuation(uint32_t c);   /* !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~ */
-uint32_t amark_commonmark_char_before(amark_slice_t text, size_t offset); /* 直前の 1 文字。先頭なら '\n' */
-uint32_t amark_commonmark_char_at(amark_slice_t text, size_t offset);     /* その位置の 1 文字。末尾なら '\n' */
-size_t amark_commonmark_case_fold(uint32_t c, uint32_t folded[3]);       /* 畳み込み先の個数（なければ c 自身の 1） */
+bool amark_cmark_is_ascii_punctuation(uint32_t c);   /* !"#$%&'()*+,-./:;<=>?@[\]^_`{|}~ */
+uint32_t amark_cmark_char_before(amark_slice_t text, size_t offset); /* 直前の 1 文字。先頭なら '\n' */
+uint32_t amark_cmark_char_at(amark_slice_t text, size_t offset);     /* その位置の 1 文字。末尾なら '\n' */
+size_t amark_cmark_case_fold(uint32_t c, uint32_t folded[3]);       /* 畳み込み先の個数（なければ c 自身の 1） */
 ```
-- Unicode の句読点・空白の判定は UnicodeClass の `amark_unicode_is_punctuation` / `amark_unicode_is_whitespace` を `commonmark_internal.h` 経由で使い、CharClass は同じ意味の関数を重複して定義しない
+- Unicode の句読点・空白の判定は UnicodeClass の `amark_unicode_is_punctuation` / `amark_unicode_is_whitespace` を `cmark_internal.h` 経由で使い、CharClass は同じ意味の関数を重複して定義しない
 - 畳み込みの表は二分探索で引く（対数時間）。`char_at` は foundation の `amark_utf8_decode`、`char_before` は foundation の `amark_utf8_decode_previous` で復号し、独自の後方の復号を持たない（入力は parser-core が正規化した妥当な UTF-8）。内容の先頭と末尾は CommonMark の規則どおり空白（行末）として扱う
-- Validation: `commonmark_data_test.c`
+- Validation: `cmark_data_test.c`
 
 #### EntityAndEscape
 
@@ -543,13 +545,13 @@ size_t amark_commonmark_case_fold(uint32_t c, uint32_t folded[3]);       /* 畳�
 ##### Service Interface
 ```c
 /* text の offset が '&' のとき、成立する文字参照のバイト数を返し（なければ 0）、復号した文字を out に追記する */
-amark_error_t amark_commonmark_decode_entity(amark_slice_t text, size_t offset, amark_buffer_t *out, size_t *consumed);
+amark_error_t amark_cmark_decode_entity(amark_slice_t text, size_t offset, amark_buffer_t *out, size_t *consumed);
 /* バックスラッシュエスケープ（ASCII 句読点の前の \ を除く）と文字参照を解決して out に追記する */
-amark_error_t amark_commonmark_unescape(amark_slice_t text, amark_buffer_t *out);
+amark_error_t amark_cmark_unescape(amark_slice_t text, amark_buffer_t *out);
 ```
 - 名前付き: `&` の後の `[A-Za-z][A-Za-z0-9]{0,31}` と `;` を EntityTable で二分探索。数値: `&#` + 10 進 1〜7 桁 + `;`、`&#x` / `&#X` + 16 進 1〜6 桁 + `;`。値が 0、`0xD800`〜`0xDFFF`、`0x10FFFF` 超なら U+FFFD（6.2）。成立しなければ `*consumed = 0` で `out` を変えない（6.3）
 - 走査は `&` から高々 34 バイトで終わる（9.1）
-- Validation: `commonmark_inline_test.c`（`&#0;`、`&#xD800;`、`&#x110000;`、8 桁、`&#x` の 7 桁、未知の名前、`;` なしの名前、2 コードポイントの名前 `&ngE;`）
+- Validation: `cmark_inline_test.c`（`&#0;`、`&#xD800;`、`&#x110000;`、8 桁、`&#x` の 7 桁、未知の名前、`;` なしの名前、2 コードポイントの名前 `&ngE;`）
 
 ### 走査
 
@@ -565,21 +567,21 @@ amark_error_t amark_commonmark_unescape(amark_slice_t text, amark_buffer_t *out)
 ##### Service Interface
 ```c
 /* offset が '[' のとき、閉じの ']' までのバイト数（']' を含む）を返す。不成立なら 0 */
-size_t amark_commonmark_scan_link_label(amark_slice_t text, size_t offset);
+size_t amark_cmark_scan_link_label(amark_slice_t text, size_t offset);
 /* ラベルの内容（括弧を除く）が 999 文字以下・空白だけでない・エスケープされない括弧を含まないか */
-bool amark_commonmark_is_valid_label(amark_slice_t label);
+bool amark_cmark_is_valid_label(amark_slice_t label);
 /* 正規化: 前後の空白を除き、連続する空白を 1 個のスペースにし、各文字を畳み込む */
-amark_error_t amark_commonmark_normalize_label(amark_slice_t label, amark_buffer_t *out);
+amark_error_t amark_cmark_normalize_label(amark_slice_t label, amark_buffer_t *out);
 /* 宛先（<...> または括弧の釣り合う非空白の並び）。成立すれば終わりの位置と生の範囲を返す */
-bool amark_commonmark_scan_link_destination(amark_slice_t text, size_t offset, size_t *end, amark_slice_t *raw,
+bool amark_cmark_scan_link_destination(amark_slice_t text, size_t offset, size_t *end, amark_slice_t *raw,
                                             bool *bracketed);
 /* title（"..."、'...'、(...)）。空行を含まない。成立すれば終わりの位置と生の内容 */
-bool amark_commonmark_scan_link_title(amark_slice_t text, size_t offset, size_t *end, amark_slice_t *raw);
+bool amark_cmark_scan_link_title(amark_slice_t text, size_t offset, size_t *end, amark_slice_t *raw);
 ```
 - ラベルの走査は内容 999 文字を超えた時点で打ち切る（5.8、9.1）。`is_valid_label` はショートカット・省略の参照でリンクテキストをラベルとして使う場合にも使う（エスケープされない括弧を含むテキストはラベルにならない）
-- 宛先の括弧は `AMARK_COMMONMARK_MAX_PAREN_DEPTH`（32）段を超えたら不成立（9.5）。`<...>` は行末と `<` を含まない
+- 宛先の括弧は `AMARK_CMARK_MAX_PAREN_DEPTH`（32）段を超えたら不成立（9.5）。`<...>` は行末と `<` を含まない
 - 正規化は 1 回の走査で、入力の長さの定数倍の出力を作る（畳み込みは 1 文字から最大 3 文字）
-- Validation: `commonmark_inline_test.c`（999 / 1000 文字のラベル、空白だけ、`[a\]b]`、括弧 32 / 33 段、`ẞ` と `SS` の照合）
+- Validation: `cmark_inline_test.c`（999 / 1000 文字のラベル、空白だけ、`[a\]b]`、括弧 32 / 33 段、`ẞ` と `SS` の照合）
 
 #### HtmlScan
 
@@ -592,25 +594,25 @@ bool amark_commonmark_scan_link_title(amark_slice_t text, size_t offset, size_t 
 
 ##### Service Interface
 ```c
-typedef struct amark_commonmark_html_memo
+typedef struct amark_cmark_html_memo
 {
     size_t no_comment_end_from;     /* この位置以降に "-->" がない（SIZE_MAX なら未調査） */
     size_t no_pi_end_from;          /* "?>" */
     size_t no_cdata_end_from;       /* "]]>" */
     size_t no_declaration_end_from; /* ">" */
-} amark_commonmark_html_memo_t;
+} amark_cmark_html_memo_t;
 
-void amark_commonmark_html_memo_init(amark_commonmark_html_memo_t *memo);
+void amark_cmark_html_memo_init(amark_cmark_html_memo_t *memo);
 /* offset が '<' のとき、生 HTML として成立するバイト数（なければ 0） */
-size_t amark_commonmark_scan_html_inline(amark_slice_t text, size_t offset, amark_commonmark_html_memo_t *memo);
+size_t amark_cmark_scan_html_inline(amark_slice_t text, size_t offset, amark_cmark_html_memo_t *memo);
 /* 行の最初の空白でない位置から、HTML ブロックの種類 1〜7 を返す（なければ 0）。種類 7 は can_be_kind7 が真のときだけ */
-int amark_commonmark_html_block_start(amark_slice_t rest, bool can_be_kind7);
+int amark_cmark_html_block_start(amark_slice_t rest, bool can_be_kind7);
 /* 種類 1〜5 の終了条件を rest が含むか。種類 6・7 は常に偽（空行で終わる） */
-bool amark_commonmark_html_block_ends(int kind, amark_slice_t rest);
+bool amark_cmark_html_block_ends(int kind, amark_slice_t rest);
 ```
 - 開き・閉じタグの文法（タグ名、属性、引用符付きの値、行末を 1 つまで含む空白）は 0.31.2 の定義どおり。種類 1 は `pre`、`script`、`style`、`textarea`、種類 6 のタグ名表は 0.31.2 の一覧（大文字小文字を区別しない）
 - 記憶（9.1）: 閉じの並びが見つからなかったら、その探索の開始位置を記録し、以後同じ内容でそれ以降から始まる同種の探索をすぐに不成立にする（`unclosed <!--` の類型を線形にする）
-- Validation: `commonmark_inline_test.c`（属性の各形、`<!-->`、`<!--->`、CDATA、閉じのない構造の連続）
+- Validation: `cmark_inline_test.c`（属性の各形、`<!-->`、`<!--->`、CDATA、閉じのない構造の連続）
 
 #### BlockUtil
 
@@ -624,11 +626,11 @@ bool amark_commonmark_html_block_ends(int kind, amark_slice_t rest);
 ##### Service Interface
 ```c
 /* 現在位置から、空白（スペース・タブ）を最大 limit 桁まで読んだときの桁数を、位置を変えずに数える */
-size_t amark_commonmark_peek_space_columns(const amark_block_context_t *ctx, size_t limit);
+size_t amark_cmark_peek_space_columns(const amark_block_context_t *ctx, size_t limit);
 /* 現在位置から空白を最大 columns 桁だけ読み飛ばす（タブは部分消費） */
-void amark_commonmark_skip_space_columns(amark_block_context_t *ctx, size_t columns);
+void amark_cmark_skip_space_columns(amark_block_context_t *ctx, size_t columns);
 /* 現在位置から行末までのスライス（部分消費の補いはしない。判定用） */
-amark_slice_t amark_commonmark_rest_of_line(const amark_block_context_t *ctx);
+amark_slice_t amark_cmark_rest_of_line(const amark_block_context_t *ctx);
 ```
 - `peek` は `get_line`・`get_offset`・`get_column` から、タブを次の 4 の倍数の桁まで進める規則で桁を計算する。巻き戻しの API を使わずに「先読みしてから必要な分だけ `advance_columns`」を実現する（cmark の位置の保存と復元の代わり）
 
@@ -657,7 +659,7 @@ amark_slice_t amark_commonmark_rest_of_line(const amark_block_context_t *ctx);
 
 **Contracts**: Service [x] / State [x]
 
-- 構文 2 つを 1 つの拡張に持つ: `commonmark_list_item`（`start` あり、`content = BLOCKS`）と `commonmark_list`（`start = NULL`、項目の開始からだけ開かれる）
+- 構文 2 つを 1 つの拡張に持つ: `cmark_list_item`（`start` あり、`content = BLOCKS`）と `cmark_list`（`start = NULL`、項目の開始からだけ開かれる）
 - 項目の開始（4.2〜4.4）:
   1. `get_indent < 4`。区切り線の優先順位が高いため `* * *` はここに来ない
   2. 記号を読む: `*` `+` `-`、または 1〜9 桁の数字と `.` か `)`。次が空白・タブ・行末でなければ `NONE`
@@ -704,7 +706,7 @@ amark_slice_t amark_commonmark_rest_of_line(const amark_block_context_t *ctx);
   1. `get_top_bracket` が `NULL` なら処理しない（テキスト）
   2. 開きが無効なら `remove_bracket` して `]` を `append_text`、1 バイト進める
   3. インライン: 直後が `(` なら、空白（行末 1 つ可）、宛先（省略可）、空白、title（省略可）、空白、`)` を走査。成立すれば url と title を `unescape` する
-  4. 参照: 3 が不成立なら、直後の `[label]` を `scan_link_label`。ラベルが空でなく有効なら完全参照、`[]` なら省略、続かなければショートカット。省略とショートカットでは開きの `get_content_offset` から `]` の直前までをラベルとし、`is_valid_label` でなければ不成立。正規化した鍵で `amark_definition_table_find(…, "commonmark.link", 鍵)`
+  4. 参照: 3 が不成立なら、直後の `[label]` を `scan_link_label`。ラベルが空でなく有効なら完全参照、`[]` なら省略、続かなければショートカット。省略とショートカットでは開きの `get_content_offset` から `]` の直前までをラベルとし、`is_valid_label` でなければ不成立。正規化した鍵で `amark_definition_table_find(…, "cmark.link", 鍵)`
   5. 展開量の上限（9.4）: 参照が見つかったとき、`url_len + title_len` を解析状態の展開量に加え、`max(100000, それまでにインライン解析した内容の合計長)` を超えるなら不成立として扱う
   6. 成立: 位置を閉じの終わりまで `advance` し、LINK または IMAGE（開きのフラグで決める）を url・title 付きで作り `close_bracket`。リンクなら `deactivate_brackets(ctx, FLAG_LINK)`（7.5、画像では呼ばない）
   7. 不成立: `remove_bracket` し、`]` を `append_text` して 1 バイト進める（7.6）。完全参照の `[label]` は消費しない（後で別のリンクになりうる）
@@ -725,15 +727,15 @@ amark_slice_t amark_commonmark_rest_of_line(const amark_block_context_t *ctx);
 **Contracts**: Service [x]
 
 - 単位の表: `static const` の 17 要素 `{ビット, 拡張名, 記述子へのポインタ}` を列挙の値の昇順に持つ
-- `amark_commonmark_extension_create(construct, extension)`: `extension == NULL`、`construct` がちょうど 1 つの定義済みのビットでない: `AMARK_ERROR_INVALID_ARGUMENT`（1.3）。それ以外は `amark_extension_create(desc, extension)` の結果を返す
-- `amark_commonmark_get_extension_name(construct)`: 定義済みの 1 ビットなら拡張名（静的、NUL 終端）、それ以外 `{NULL, 0}`（1.6）
-- `amark_commonmark_add_extensions(dialect, constructs)`（1.2、2.4、2.5）: `dialect == NULL`、`constructs == 0`、`constructs & ~AMARK_COMMONMARK_ALL`: `AMARK_ERROR_INVALID_ARGUMENT`。凍結済みなら `AMARK_ERROR_INVALID_STATE`（`amark_dialect_is_frozen` で先に確かめる）。表の順に、指定されたビットの拡張を生成して `amark_dialect_add_extension`。失敗したら、その拡張を破棄し、この呼び出しで追加した拡張を逆順に `amark_dialect_remove_extension` で取り外して、そのエラー（`ALREADY_EXISTS`、`NO_MEMORY` など）を返す。取り外しは凍結されていない方言では失敗しない
-- `amark_commonmark_dialect_create(constructs, dialect)`（2.1、2.2、2.6）: `dialect == NULL` と `constructs` の検査は同上。`amark_dialect_create` → `amark_commonmark_add_extensions` → 成功なら凍結せずに `*dialect` に書く。失敗なら方言を破棄して `*dialect` を変更しない
-- `amark_commonmark_parse(data, len, opts, doc)`（3.1、3.3〜3.6）: `doc == NULL`、`len > 0 && data == NULL`: `AMARK_ERROR_INVALID_ARGUMENT`。`amark_commonmark_dialect_create(AMARK_COMMONMARK_ALL)` → `amark_parser_parse(dialect, data, len, opts, &tmp)` → 方言を破棄 → 成功なら `*doc = tmp`。`opts == NULL` は parser-core の既定値。同じ入力の通常のパースと同一の木（3.6）
+- `amark_cmark_extension_create(construct, extension)`: `extension == NULL`、`construct` がちょうど 1 つの定義済みのビットでない: `AMARK_ERROR_INVALID_ARGUMENT`（1.3）。それ以外は `amark_extension_create(desc, extension)` の結果を返す
+- `amark_cmark_get_extension_name(construct)`: 定義済みの 1 ビットなら拡張名（静的、NUL 終端）、それ以外 `{NULL, 0}`（1.6）
+- `amark_cmark_add_extensions(dialect, constructs)`（1.2、2.4、2.5）: `dialect == NULL`、`constructs == 0`、`constructs & ~AMARK_CMARK_ALL`: `AMARK_ERROR_INVALID_ARGUMENT`。凍結済みなら `AMARK_ERROR_INVALID_STATE`（`amark_dialect_is_frozen` で先に確かめる）。表の順に、指定されたビットの拡張を生成して `amark_dialect_add_extension`。失敗したら、その拡張を破棄し、この呼び出しで追加した拡張を逆順に `amark_dialect_remove_extension` で取り外して、そのエラー（`ALREADY_EXISTS`、`NO_MEMORY` など）を返す。取り外しは凍結されていない方言では失敗しない
+- `amark_cmark_dialect_create(constructs, dialect)`（2.1、2.2、2.6）: `dialect == NULL` と `constructs` の検査は同上。`amark_dialect_create` → `amark_cmark_add_extensions` → 成功なら凍結せずに `*dialect` に書く。失敗なら方言を破棄して `*dialect` を変更しない
+- `amark_cmark_parse(data, len, opts, doc)`（3.1、3.3〜3.6）: `doc == NULL`、`len > 0 && data == NULL`: `AMARK_ERROR_INVALID_ARGUMENT`。`amark_cmark_dialect_create(AMARK_CMARK_ALL)` → `amark_parser_parse(dialect, data, len, opts, &tmp)` → 方言を破棄 → 成功なら `*doc = tmp`。`opts == NULL` は parser-core の既定値。同じ入力の通常のパースと同一の木（3.6）
 - 並行利用（12.1〜12.3）: 可変のグローバル状態を持たない。簡易 API は呼び出しごとに方言を作るため共有状態がない。プリセットを凍結した方言は parser-core の規則どおり複数のパーサから同時に使える（構文のコールバックは解析状態と文脈だけを書き換える）
 
 **Implementation Notes**
-- Validation: `commonmark_dialect_test.c`、`commonmark_error_test.c`
+- Validation: `cmark_dialect_test.c`、`cmark_error_test.c`
 - Risks: 簡易 API の繰り返し呼び出しの費用（ヘッダの文書で方言の再利用を案内）
 
 #### CommonmarkConvert
@@ -744,23 +746,23 @@ amark_slice_t amark_commonmark_rest_of_line(const amark_block_context_t *ctx);
 | Requirements | 3.2, 3.3, 3.4, 3.5 |
 
 **Contracts**: Service [x]
-- `amark_commonmark_convert_to_html(data, len, parse_opts, html_opts, out)`: `out == NULL`、`len > 0 && data == NULL`: `AMARK_ERROR_INVALID_ARGUMENT`。宣言は `amark/commonmark_html.h`。手順は 方言の生成（`AMARK_COMMONMARK_ALL`）→ `amark_parser_parse(dialect, data, len, parse_opts, &doc)` → `amark_html_render(doc, html_opts, out)` → 文書の破棄 → 方言の破棄。`html_opts` の検証は `amark_html_render` に委ね、不正なら `AMARK_ERROR_INVALID_ARGUMENT` が返る（出力先は変わらない）
+- `amark_cmark_convert_to_html(data, len, parse_opts, html_opts, out)`: `out == NULL`、`len > 0 && data == NULL`: `AMARK_ERROR_INVALID_ARGUMENT`。宣言は `amark/cmark_html.h`。手順は 方言の生成（`AMARK_CMARK_ALL`）→ `amark_parser_parse(dialect, data, len, parse_opts, &doc)` → `amark_html_render(doc, html_opts, out)` → 文書の破棄 → 方言の破棄。`html_opts` の検証は `amark_html_render` に委ね、不正なら `AMARK_ERROR_INVALID_ARGUMENT` が返る（出力先は変わらない）
 - 出力先は html-renderer が失敗時に呼び出し前の長さへ戻す。解析の失敗では出力先に何も書かない（3.5）
 - `html_opts == NULL` は html-renderer の既定値（生 HTML と危険な URL を出力しない、3.3）
-- 本体のソースで `amark/html.h`（`amark/commonmark_html.h` 経由を含む）を include するのはこのファイルだけ
+- 本体のソースで `amark/html.h`（`amark/cmark_html.h` 経由を含む）を include するのはこのファイルだけ
 
 ### ツールとデータの出典
 
 #### EntityGenerator / UnicodeGenerator
 
 **Contracts**: Batch [x]
-- Trigger: 保守者が手で実行する（`python3 tools/generate_entity_table.py <entities.json> > src/commonmark/commonmark_entity_data.c`、`python3 tools/generate_unicode_tables.py <UnicodeData.txt> <CaseFolding.txt> --class-output src/base/unicode_class_data.c --fold-output src/commonmark/commonmark_unicode_data.c`）
+- Trigger: 保守者が手で実行する（`python3 tools/generate_entity_table.py <entities.json> > src/cmark/cmark_entity_data.c`、`python3 tools/generate_unicode_tables.py <UnicodeData.txt> <CaseFolding.txt> --class-output src/base/unicode_class_data.c --fold-output src/cmark/cmark_unicode_data.c`）
 - Input / validation: 入力ファイルのパス。entities.json は JSON として読み、`;` で終わる名前だけを採る。UnicodeData.txt は範囲の行（`First>` / `Last>`）を展開してカテゴリを判定する。CaseFolding.txt は状態 C と F を採る。入力の SHA-256 を計算する
-- Output: UnicodeGenerator は 2 つのファイル（句読点・空白の表 `unicode_class_data.c`、畳み込みの表 `commonmark_unicode_data.c`）を出力する。各ファイルに foundation の定型ヘッダ、生成物である旨、出典の URL・版（Unicode 16.0.0 / entities.json の取得日）・SHA-256・ライセンスのコメント、`static const` の表、件数の定数。出力は入力だけで決まる（並び順を固定、10.3）
+- Output: UnicodeGenerator は 2 つのファイル（句読点・空白の表 `unicode_class_data.c`、畳み込みの表 `cmark_unicode_data.c`）を出力する。各ファイルに foundation の定型ヘッダ、生成物である旨、出典の URL・版（Unicode 16.0.0 / entities.json の取得日）・SHA-256・ライセンスのコメント、`static const` の表、件数の定数。出力は入力だけで決まる（並び順を固定、10.3）
 - Idempotency: 同じ入力から同じバイト列を出力する。ビルドと CI は実行しない（10.4）
 
 #### ThirdPartyNotices / SpecFixture
-- `THIRD_PARTY_NOTICES.md`: WHATWG HTML Standard の名前付き文字参照（対象ファイル `src/commonmark/commonmark_entity_data.c`、CC BY 4.0、変更: C の表へ変換）、Unicode Character Database 16.0.0（対象ファイル `src/base/unicode_class_data.c` と `src/commonmark/commonmark_unicode_data.c`、Unicode License v3 の全文）、CommonMark Spec 0.31.2（CC BY-SA 4.0、テストデータとしてだけ同梱し、ライブラリには含まれない）（8.1、10.5）
+- `THIRD_PARTY_NOTICES.md`: WHATWG HTML Standard の名前付き文字参照（対象ファイル `src/cmark/cmark_entity_data.c`、CC BY 4.0、変更: C の表へ変換）、Unicode Character Database 16.0.0（対象ファイル `src/base/unicode_class_data.c` と `src/cmark/cmark_unicode_data.c`、Unicode License v3 の全文）、CommonMark Spec 0.31.2（CC BY-SA 4.0、テストデータとしてだけ同梱し、ライブラリには含まれない）（8.1、10.5）
 - `tests/data/commonmark/spec-0.31.2.txt`: 上流のタグ `0.31.2` の spec.txt をバイト単位で同一に保持。`LICENSE.txt` に著者 John MacFarlane、CC BY-SA 4.0、出典 URL、SHA-256、改変していない旨（8.1）
 
 ### テスト
@@ -786,7 +788,7 @@ void test_spec_examples_free(test_spec_examples_item_t *examples, size_t count);
 - 32 個の `` ` `` と ` example` の行で例を開始し、`.` だけの行で入力と期待 HTML を分け、32 個の `` ` `` だけの行で終える。例の中の `→`（U+2192）をタブに戻す（8.2）。`#` で始まる行（例の外）で節名を更新する
 - テスト補助のため `malloc` 系を直接使ってよい（ライブラリのアロケータの計測に混ざらないように）
 
-#### ConformanceTest（`commonmark_spec_test.c`）
+#### ConformanceTest（`cmark_spec_test.c`）
 **Contracts**: Batch [x]
 - 例の数が 652 であることを確かめる（8.2）
 - 各例: プリセットの方言（1 回だけ作って凍結し再利用）で `amark_parser_parse`、`amark_html_options_init` の後に `allow_raw_html = true`、`allow_dangerous_urls = true` として `amark_html_render`、期待 HTML とバイト比較（8.3、8.4）
@@ -794,7 +796,7 @@ void test_spec_examples_free(test_spec_examples_item_t *examples, size_t count);
 - 各例を 1 バイトずつ `amark_parser_feed` して得た HTML が一括と同一（8.6）
 - 計測アロケータで、全例の処理後に `live == 0`
 
-#### PathologicalTest（`commonmark_pathological_test.c`）
+#### PathologicalTest（`cmark_pathological_test.c`）
 **Contracts**: Batch [x]
 - 類型（cmark の `pathological_tests.py` の入力と規模を移植）と期待の検査:
 
@@ -825,11 +827,11 @@ void test_spec_examples_free(test_spec_examples_item_t *examples, size_t count);
 - メモリ（9.6）: 計測アロケータの `bytes_peak`が入力長の定数倍（類型ごとに 64 倍以下）で、終了後 `live == 0`
 
 #### 単体テストと失敗注入
-- `commonmark_dialect_test.c`: 17 単位それぞれの生成と名前（1.1、1.6）、2 ビット・0・未定義ビットの拒否（1.3）、一括追加と名前の重複での全か無か（1.2、2.5）、凍結済みで `INVALID_STATE`（2.4）、プリセットの拡張数 17・未凍結・後から追加と取り外しができる（2.1〜2.3）、部分集合（2.2）、外した構文の記法（HTML ブロックなしで `<div>` が段落のテキスト、インデントコードなしで字下げ行が段落、リンク参照定義なしで定義行が段落、強調なしで `*a*` がテキスト、1.4）、新しいノード種別がない（全文書の全ノードが標準種別、1.5）、自作の拡張との混在と優先順位の変更（1.7）、簡易パースと通常のパースの木の同一性（3.6）、簡易パースの文書が方言の破棄後も使える（3.1）、簡易変換の追記と既定の安全性（3.2、3.3）、`NULL` と長さの検査（3.4）、2 つのスレッドで同じ凍結済みの方言を使う解析（スレッドの API が使える環境だけ。C99 の範囲外のため任意、12.2、12.3）
-- `commonmark_block_test.c`: 仕様の例にない境界（9 桁と 10 桁の開始番号、見出しレベル 6 と 7、フェンスの長さ違いの閉じ、HTML ブロックの種類ごとの終了、リストの記号の変化での分割、空項目と空行、深さの上限の付近）と、外した構文との組み合わせ（4.1〜4.7、5.1〜5.8）
-- `commonmark_inline_test.c`: 数値参照の範囲（6.2、6.3）、コードスパンの空白の規則（6.4、6.5）、文字参照のスペースと改行（6.6）、生 HTML とオートリンクの境界（6.7、6.8）、flanking の Unicode の句読点（記号 S を含む、7.1）、rule of 3（7.2）、リンクの各形と無効化（7.3〜7.6）、ラベルの畳み込み（7.7）、優先順位（7.8）、ラベル 999 / 1000 文字（5.8）、括弧 32 / 33 段（9.5）、展開量の上限の境界（9.4）
-- `commonmark_data_test.c`: エンティティ表が昇順で重複がなく、`amp`、`ngE`（2 コードポイント）、`CounterClockwiseContourIntegral` を含み、`;` なしの名前を含まない（10.1）。`amark_unicode_is_punctuation` が `!`、`£`（Sc）、`、`（Po）で真、`a` で偽。`amark_unicode_is_whitespace` が U+3000 で真。句読点と Zs の表が昇順で重複がない。`ẞ` の畳み込みが `ss`（10.2）。生成物の先頭に出典と SHA-256 の記録がある（ソースを読む検査、10.3）
-- `commonmark_error_test.c`: 方言の生成、一括追加、代表的な文書（全構文を含む）の解析、簡易変換について、失敗注入の網羅パターン（各回で `NO_MEMORY` かつ状態不変、または成功、後片付け後 `live == 0`、11.1〜11.3）。全例の文字列の UTF-8 妥当性（`amark_utf8_validate`、11.4）は ConformanceTest の各例でも確認する
+- `cmark_dialect_test.c`: 17 単位それぞれの生成と名前（1.1、1.6）、2 ビット・0・未定義ビットの拒否（1.3）、一括追加と名前の重複での全か無か（1.2、2.5）、凍結済みで `INVALID_STATE`（2.4）、プリセットの拡張数 17・未凍結・後から追加と取り外しができる（2.1〜2.3）、部分集合（2.2）、外した構文の記法（HTML ブロックなしで `<div>` が段落のテキスト、インデントコードなしで字下げ行が段落、リンク参照定義なしで定義行が段落、強調なしで `*a*` がテキスト、1.4）、新しいノード種別がない（全文書の全ノードが標準種別、1.5）、自作の拡張との混在と優先順位の変更（1.7）、簡易パースと通常のパースの木の同一性（3.6）、簡易パースの文書が方言の破棄後も使える（3.1）、簡易変換の追記と既定の安全性（3.2、3.3）、`NULL` と長さの検査（3.4）、2 つのスレッドで同じ凍結済みの方言を使う解析（スレッドの API が使える環境だけ。C99 の範囲外のため任意、12.2、12.3）
+- `cmark_block_test.c`: 仕様の例にない境界（9 桁と 10 桁の開始番号、見出しレベル 6 と 7、フェンスの長さ違いの閉じ、HTML ブロックの種類ごとの終了、リストの記号の変化での分割、空項目と空行、深さの上限の付近）と、外した構文との組み合わせ（4.1〜4.7、5.1〜5.8）
+- `cmark_inline_test.c`: 数値参照の範囲（6.2、6.3）、コードスパンの空白の規則（6.4、6.5）、文字参照のスペースと改行（6.6）、生 HTML とオートリンクの境界（6.7、6.8）、flanking の Unicode の句読点（記号 S を含む、7.1）、rule of 3（7.2）、リンクの各形と無効化（7.3〜7.6）、ラベルの畳み込み（7.7）、優先順位（7.8）、ラベル 999 / 1000 文字（5.8）、括弧 32 / 33 段（9.5）、展開量の上限の境界（9.4）
+- `cmark_data_test.c`: エンティティ表が昇順で重複がなく、`amp`、`ngE`（2 コードポイント）、`CounterClockwiseContourIntegral` を含み、`;` なしの名前を含まない（10.1）。`amark_unicode_is_punctuation` が `!`、`£`（Sc）、`、`（Po）で真、`a` で偽。`amark_unicode_is_whitespace` が U+3000 で真。句読点と Zs の表が昇順で重複がない。`ẞ` の畳み込みが `ss`（10.2）。生成物の先頭に出典と SHA-256 の記録がある（ソースを読む検査、10.3）
+- `cmark_error_test.c`: 方言の生成、一括追加、代表的な文書（全構文を含む）の解析、簡易変換について、失敗注入の網羅パターン（各回で `NO_MEMORY` かつ状態不変、または成功、後片付け後 `live == 0`、11.1〜11.3）。全例の文字列の UTF-8 妥当性（`amark_utf8_validate`、11.4）は ConformanceTest の各例でも確認する
 
 ### 統合
 
@@ -838,7 +840,7 @@ void test_spec_examples_free(test_spec_examples_item_t *examples, size_t count);
 **Contracts**: Batch [x]
 - Trigger: `cmake -S . -B build && cmake --build build && ctest --test-dir build`（静的・動的の両方、3 OS）
 - Input: Modified Files の一覧
-- Output: 7 つのテスト実行ファイルが CTest に登録され成功する。ヘッダ単独 include 検査が `amark/commonmark.h` と `amark/commonmark_html.h` に適用され、`amark/commonmark.h` が `amark/html.h` なしでコンパイルできる。C++ 検査がプリセットの生成と簡易変換を呼んでリンクできる。動的ライブラリの公開シンボルは CommonmarkPublicHeader の 5 関数と CommonmarkHtmlHeader の 1 関数だけが増え、`amark_unicode_*` は export されない。テスト補助と抽出器は `amark_test_support` にだけ含まれる（8.7）。ビルドは Python を必要としない（10.4）。`THIRD_PARTY_NOTICES.md` がインストールされる
+- Output: 7 つのテスト実行ファイルが CTest に登録され成功する。ヘッダ単独 include 検査が `amark/cmark.h` と `amark/cmark_html.h` に適用され、`amark/cmark.h` が `amark/html.h` なしでコンパイルできる。C++ 検査がプリセットの生成と簡易変換を呼んでリンクできる。動的ライブラリの公開シンボルは CommonmarkPublicHeader の 5 関数と CommonmarkHtmlHeader の 1 関数だけが増え、`amark_unicode_*` は export されない。テスト補助と抽出器は `amark_test_support` にだけ含まれる（8.7）。ビルドは Python を必要としない（10.4）。`THIRD_PARTY_NOTICES.md` がインストールされる
 
 ## Data Models
 
@@ -872,9 +874,9 @@ void test_spec_examples_free(test_spec_examples_item_t *examples, size_t count);
 
 ## Testing Strategy
 - 単体・統合・性能のテストは「テスト」の各コンポーネントに記した。要点:
-  - Unit: UnicodeClass、CharClass と表（`commonmark_data_test.c`）、EntityAndEscape・LinkScan・HtmlScan の境界（`commonmark_inline_test.c`）、ブロック構文の境界（`commonmark_block_test.c`）
-  - Integration: 全 652 例のバイト比較と 1 バイト供給の同一性（`commonmark_spec_test.c`）、方言の組み立てと簡易 API（`commonmark_dialect_test.c`）、失敗注入（`commonmark_error_test.c`）、C++ 検査
-  - Performance: 病的入力の 25 類型（`commonmark_pathological_test.c`）
+  - Unit: UnicodeClass、CharClass と表（`cmark_data_test.c`）、EntityAndEscape・LinkScan・HtmlScan の境界（`cmark_inline_test.c`）、ブロック構文の境界（`cmark_block_test.c`）
+  - Integration: 全 652 例のバイト比較と 1 バイト供給の同一性（`cmark_spec_test.c`）、方言の組み立てと簡易 API（`cmark_dialect_test.c`）、失敗注入（`cmark_error_test.c`）、C++ 検査
+  - Performance: 病的入力の 25 類型（`cmark_pathological_test.c`）
 
 ## Security Considerations
 - 入力は信頼できないものとして扱う。各構文の走査は読み進めた分に比例し、内容ごとの記憶と上限で二乗を防ぐ（9.1）
@@ -892,7 +894,7 @@ parser-core の公開 API の追加・変更は不要である。本仕様が依
 
 | ID | 種類 | 内容（要約） | 本仕様での利用 |
 |---|---|---|---|
-| C1 | 契約の緩和 | 寿命の義務は拡張が登録したノード種別のノードを含む文書だけに及ぶ。標準種別だけの文書は方言の破棄後も有効 | `amark_commonmark_parse` が方言を破棄して文書だけを返す（3.1） |
+| C1 | 契約の緩和 | 寿命の義務は拡張が登録したノード種別のノードを含む文書だけに及ぶ。標準種別だけの文書は方言の破棄後も有効 | `amark_cmark_parse` が方言を破棄して文書だけを返す（3.1） |
 | C2 | 意味の明確化 | 「行が空行」は継続判定と開始判定を終えた位置から行末までがスペースとタブだけであること | `> - a\n>\n> - b` の loose（4.5） |
 | C3 | 意味の明確化 | インライン対象は 1 つずつ最後まで解析され、対象ごとに `get_block` のノードが異なる | 内容ごとの記憶の初期化（9.1、9.4） |
 

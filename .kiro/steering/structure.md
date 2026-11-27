@@ -40,7 +40,7 @@
 | `src/tree/` | ノード、種別、編集、走査、レンダラが共有する非公開の振り分け走査（`node_walk`） |
 | `src/parser/` | 構文非依存のパーサエンジン、拡張、方言 |
 | `src/html/`, `src/markdown/` | 各レンダラ |
-| `src/commonmark/` | CommonMark の構文拡張と、その専用の表 |
+| `src/cmark/` | CommonMark の構文拡張と、その専用の表 |
 
 - 新しい構文群（例: 将来の GFM）は `src/<name>/` を足す。ディレクトリはさらに入れ子にしない
 - 各ディレクトリの中は `<module>.c` と、必要なら非公開の `<module>.h` を対にする。生成したデータは `<module>_data.c` としてリポジトリに含める（例: `src/base/unicode_class_data.c`）
@@ -87,6 +87,7 @@
 - **生成・破棄**: opaque 型は `_create` / `_destroy`、中身を呼び出し側が持つ構造体は `_init` / `_deinit`
 - **非公開シンボル**: ファイル内に閉じるものは `static` とする。翻訳単位をまたぐ非公開シンボルは動的ライブラリから export しない
 - **テスト補助**: `test_<area>_*`（上記「テスト補助」）
+- **CommonMark モジュールの名前**: 識別子・ファイル・ヘッダは `cmark` を使う（`amark_cmark_*`、`AMARK_CMARK_*`、拡張名 `cmark_*`、`src/cmark/`、`amark/cmark.h`）。仕様そのものは「CommonMark」、kiro の spec 名とテストデータの置き場（`tests/data/commonmark/`）は `commonmark` のまま。文書中で接頭辞やパスを伴わない単独の「cmark」は参照実装 commonmark/cmark を指す
 
 ## Include Organization
 
@@ -111,4 +112,4 @@
 ---
 _Document patterns, not file trees. New files following patterns shouldn't require updates_
 
-_updated_at: 2026-11-27 — `src/` をサブディレクトリに分割。各 spec の設計に合わせて公開ヘッダの配置、テスト補助の命名、テストデータ・生成ツールの置き場所、共有の骨組みファイルの追記規則を反映。レンダラ共通層（旧 `src/render/`）を廃し、フック表と走査駆動部を node-tree の非公開モジュール `src/tree/node_walk` へ移した。`version.h` を生成から手書き（バージョンの唯一の出所）に変更_
+_updated_at: 2026-11-27 — CommonMark モジュールの名前を `cmark` に。`src/` をサブディレクトリに分割。各 spec の設計に合わせて公開ヘッダの配置、テスト補助の命名、テストデータ・生成ツールの置き場所、共有の骨組みファイルの追記規則を反映。レンダラ共通層（旧 `src/render/`）を廃し、フック表と走査駆動部を node-tree の非公開モジュール `src/tree/node_walk` へ移した。`version.h` を生成から手書き（バージョンの唯一の出所）に変更_
