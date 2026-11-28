@@ -57,4 +57,5 @@ target_sources(amark PRIVATE
     tree/node.c
     tree/node_value.c
     tree/node_edit.c
+    tree/node_iter.c
 )
