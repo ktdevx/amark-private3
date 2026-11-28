@@ -99,3 +99,6 @@ amark_target_warnings(amark_node_registry_test)
 
 naos_add_executable(amark_node_test SOURCES node_test.c LIBRARIES Amark::amark amark_test_support)
 amark_target_warnings(amark_node_test)
+
+naos_add_executable(amark_node_value_test SOURCES node_value_test.c LIBRARIES Amark::amark amark_test_support)
+amark_target_warnings(amark_node_value_test)
