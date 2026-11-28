@@ -79,7 +79,7 @@ amark_error_t amark_utf8_decode(amark_slice_t src, uint32_t *cp, size_t *consume
     unsigned char second_min;
     unsigned char second_max;
     uint32_t value;
-    size_t length;
+    size_t len;
     size_t i;
 
     if (!cp || !consumed || (src.len == 0) || !src.data)
@@ -88,8 +88,8 @@ amark_error_t amark_utf8_decode(amark_slice_t src, uint32_t *cp, size_t *consume
     }
 
     bytes = (const unsigned char *)src.data;
-    length = utf8_sequence_info(bytes[0], &second_min, &second_max, &value);
-    if (length == 0)
+    len = utf8_sequence_info(bytes[0], &second_min, &second_max, &value);
+    if (len == 0)
     {
         *cp = AMARK_UTF8_REPLACEMENT_CHARACTER;
         *consumed = 1;
@@ -97,7 +97,7 @@ amark_error_t amark_utf8_decode(amark_slice_t src, uint32_t *cp, size_t *consume
     }
 
     /* i バイト目が範囲外か入力の終わりなら、そこまでの i バイトが最大部分列になる */
-    for (i = 1; i < length; i++)
+    for (i = 1; i < len; i++)
     {
         unsigned char min = (i == 1) ? second_min : 0x80u;
         unsigned char max = (i == 1) ? second_max : 0xBFu;
@@ -113,7 +113,7 @@ amark_error_t amark_utf8_decode(amark_slice_t src, uint32_t *cp, size_t *consume
     }
 
     *cp = value;
-    *consumed = length;
+    *consumed = len;
     return AMARK_OK;
 }
 
