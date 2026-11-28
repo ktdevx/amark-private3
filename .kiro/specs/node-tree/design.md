@@ -504,7 +504,7 @@ AMARK_API const amark_node_kind_t *amark_node_registry_find(const amark_node_reg
 - `amark_node_registry_find(registry, name)`: 名前がバイト単位で一致する標準種別、次に登録済みの拡張種別を返す。どれにも一致しない、または `registry` が `NULL` なら `NULL`（4.6）。種別数に対して線形時間
 
 ##### State Management
-- State model: 登録済み拡張種別のハンドル配列（`amark_node_kind_t **items`、`count`、`cap`。容量は 2 倍で伸長し、最初の登録で初期容量 4 を確保する）。`amark_node_registry_create` は配列を確保せず、登録 0 件の間は `items == NULL`、`count == cap == 0` とする（foundation の Memory のライブラリ内の規則: サイズ 0 を要求しない）
+- State model: 登録済み拡張種別のハンドル配列（`amark_node_kind_t **items`、`len`、`cap`。容量は 2 倍で伸長し、最初の登録で初期容量 4 を確保する）。`amark_node_registry_create` は配列を確保せず、登録 0 件の間は `items == NULL`、`len == cap == 0` とする（foundation の Memory のライブラリ内の規則: サイズ 0 を要求しない）
 - Persistence & consistency: ハンドルはレジストリの破棄まで有効で不変（4.7）
 - Concurrency strategy: `amark_node_registry_add` と他の操作を同時に行わない。登録が終わった後は、`find` と、そのレジストリの種別を使うノードの生成・操作（異なる木）を複数スレッドから同時に行ってよい（13.4）。種別は登録後に変更されない
 
@@ -810,7 +810,7 @@ typedef struct amark_node_walk_hook
 typedef struct amark_node_walk_table
 {
     amark_node_walk_hook_t *items;
-    size_t count;
+    size_t len;
     size_t cap;
 } amark_node_walk_table_t;
 
@@ -843,8 +843,8 @@ void amark_node_walk_skip_children(amark_node_walk_t *walk);
   - 既存の項目あり・`fn == NULL`: 項目を取り除く（末尾と入れ替え）（14.2）
   - 既存の項目なし・`fn == NULL`: 何もせず `AMARK_OK`（14.2）
   - 既存の項目なし・`fn != NULL`: 必要なら容量を 2 倍（初期 4）に伸長して末尾に追加。容量計算のあふれは `AMARK_ERROR_OVERFLOW`、確保失敗は `AMARK_ERROR_NO_MEMORY` で表を変更しない（14.1、14.4）
-- `amark_node_walk_table_find`: `kind` とポインタが等しい項目を返す。なければ、`table` または `kind` が `NULL`、または `count == 0` なら `NULL`（14.3）。計算量は登録数 h に比例
-- `amark_node_walk_table_init` / `_deinit`: 空の表にする / `items` を解放して空に戻す（14.9）。`NULL` は何もしない。空の表は `items == NULL`、`count == cap == 0` で、`init` は確保しない。項目の除去で `count` が 0 になっても縮小の再確保（サイズ 0 の `amark_realloc`）はしない（foundation の Memory のライブラリ内の規則）
+- `amark_node_walk_table_find`: `kind` とポインタが等しい項目を返す。なければ、`table` または `kind` が `NULL`、または `len == 0` なら `NULL`（14.3）。計算量は登録数 h に比例
+- `amark_node_walk_table_init` / `_deinit`: 空の表にする / `items` を解放して空に戻す（14.9）。`NULL` は何もしない。空の表は `items == NULL`、`len == cap == 0` で、`init` は確保しない。項目の除去で `len` が 0 になっても縮小の再確保（サイズ 0 の `amark_realloc`）はしない（foundation の Memory のライブラリ内の規則）
 - `amark_node_walk_run(walk, root, table, visit, ctx)`（`walk`、`root`、`table`、`visit` が `NULL` なら `AMARK_ERROR_INVALID_ARGUMENT`。引数の検査は各レンダラの入口でも行う）:
   1. `amark_node_iter_init(&walk->iter, (amark_node_t *)root)`（const を外すのはここだけ。イテレータは木を変更しない、14.5）
   2. `amark_node_iter_next` が `DONE` を返すまで: `walk->node`・`walk->event` を設定し `skip_children = false`、`hook = find(table, kind)`、`visit(ctx, walk, hook)` を呼ぶ。非 `AMARK_OK` ならその値を直ちに返す（14.5、14.8）
