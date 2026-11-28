@@ -80,12 +80,6 @@ AMARK_API void amark_free(void *ptr);
  */
 AMARK_API amark_error_t amark_allocator_set(const amark_allocator_t *allocator);
 
-/*
- * 現在のアロケータを allocator に書き込む。既定のときは C 標準ライブラリの malloc、realloc、calloc、
- * free を書き込む。allocator が NULL なら何もしない
- */
-AMARK_API void amark_allocator_get(amark_allocator_t *allocator);
-
 AMARK_END_DECLS
 
 #endif /* AMARK_MEMORY_H */

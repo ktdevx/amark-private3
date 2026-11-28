@@ -228,7 +228,7 @@ sequenceDiagram
 | 4.6, 4.7 | リリース | ReleaseWorkflow | `release.yml` | CI |
 | 5.1, 5.2 | ライセンスとソースヘッダ | LicenseNotice | `LICENSE`、定型ヘッダ | — |
 | 5.3 | ソースヘッダ検査 | SourceHeaderCheck | `amark.source_headers` テスト | — |
-| 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8, 6.9 | グローバルアロケータ | Memory | `amark_malloc` ほか、`amark_allocator_set`、`amark_allocator_get` | — |
+| 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8 | グローバルアロケータ | Memory | `amark_malloc` ほか、`amark_allocator_set` | — |
 | 7.1, 7.2, 7.3, 7.4, 7.5, 7.7 | エラー列挙、一覧表、文字列化 | Error | `AMARK_ERROR_LIST`、`amark_error_t`、`amark_error_string`、エラーコード一覧表 | — |
 | 7.6 | 名前と文字列の組による単一の一覧 | Error | `AMARK_ERROR_LIST(X)` からの列挙と文字列化の生成 | — |
 | 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 8.7 | スライスと所有権規約 | Slice | `amark_slice_t` ほか | — |
@@ -249,7 +249,7 @@ sequenceDiagram
 | ExportMacros | ランタイム API | export とリンケージのマクロ | 1.4, 1.5, 11.4 | — | Service |
 | VersionInfo | ランタイム API | バージョン定数と実行時問い合わせ | 2.5, 2.6 | ExportMacros (P0) | Service |
 | Error | ランタイム API | 単一のエラー列挙と文字列化 | 7.1–7.7 | ExportMacros (P0) | Service |
-| Memory | ランタイム API | グローバルアロケータ | 6.1–6.9 | Error (P0) | Service, State |
+| Memory | ランタイム API | グローバルアロケータ | 6.1–6.8 | Error (P0) | Service, State |
 | Slice | ランタイム API | 借用文字列と所有権規約 | 8.1–8.7 | Memory (P0) | Service |
 | Utf8 | ランタイム API | UTF-8 の復号（前方・逆方向）・符号化・検証 | 10.1–10.8 | Slice (P0) | Service |
 | Buffer | ランタイム API | 可変長バッファ | 9.1–9.9 | Utf8 (P0), Memory (P0) | Service, State |
@@ -517,13 +517,13 @@ const char *amark_error_string(amark_error_t err)
 | Field | Detail |
 |-------|--------|
 | Intent | ライブラリ内のすべての動的確保が経由する、差し替え可能なグローバルアロケータ |
-| Requirements | 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8, 6.9 |
+| Requirements | 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8 |
 
 **Responsibilities & Constraints**
 - ライブラリ内のソースは `malloc` / `realloc` / `calloc` / `free` を直接呼ばない。直接呼ぶのは `src/base/memory.c` の既定アロケータだけ（6.1、6.2）
 - 現在のアロケータは `src/base/memory.c` の `static` 変数 1 つに持つ。これがライブラリ唯一の可変グローバル状態
 - アロケータはプロセス全体で 1 つのため、関数へ渡す利用者データは持たない。利用者のアロケータが状態を必要とするなら、利用者側の静的変数などに持つ
-- 既定アロケータは C 標準ライブラリの `malloc` / `realloc` / `calloc` / `free` をそのまま 4 つの関数ポインタに設定する（型が一致するため中継関数を挟まない）
+- 既定アロケータは、C 標準ライブラリの `malloc` / `realloc` / `calloc` / `free` へ中継する `src/base/memory.c` 内の `static` 関数 4 つとする。標準ライブラリの関数を直接設定しないのは、現在のアロケータを既定アロケータで静的に初期化するため（MSVC の C では dllimport された関数のアドレスを静的初期化子に書けない）
 
 **Contracts**: Service [x] / State [x]
 
@@ -549,10 +549,9 @@ AMARK_API void *amark_calloc(size_t n, size_t size);
 AMARK_API void amark_free(void *ptr);
 
 AMARK_API amark_error_t amark_allocator_set(const amark_allocator_t *allocator);
-AMARK_API void amark_allocator_get(amark_allocator_t *allocator);
 ```
 
-ラッパの振る舞い（全プラットフォーム共通、6.7、6.8）:
+ラッパの振る舞い（全プラットフォーム共通、6.6、6.7）:
 
 | 呼び出し | 振る舞い |
 |---|---|
@@ -572,14 +571,14 @@ AMARK_API void amark_allocator_get(amark_allocator_t *allocator);
 - **ライブラリ内の規則**（全 spec に適用）: ライブラリのコードは、戻り値の `NULL` を `AMARK_ERROR_NO_MEMORY` と解釈する箇所で、サイズ 0 の確保（`amark_malloc(0)`、要素数 0 の `amark_calloc`、`amark_realloc(p, 0)`）を要求しない。要素数が 0 になりうる配列・表・スタックは、確保の前に個数を確かめ、空は `NULL` と個数 0 で表す（確保は個数が 1 以上のときだけ行う）。縮めて空にするときは `amark_realloc(p, 0)` ではなく `amark_free` で解放し `NULL` と 0 に戻す
 - 本 spec の確保はこの規則に該当しない: `amark_slice_dup` は `len + 1`（1 以上）、`amark_buffer_reserve` は新容量 + 1（新容量は 16 以上）、`amark_buffer_detach` の空文字列は 1 バイトを要求する
 - `amark_allocator_set(allocator)`:
-  - `allocator == NULL`: 既定アロケータ（C 標準ライブラリ）に戻し `AMARK_OK`（6.5）
+  - `allocator == NULL`: 既定アロケータ（C 標準ライブラリへの中継）に戻し `AMARK_OK`（6.5）
   - 4 つの関数のいずれかが `NULL`: 現在のアロケータを変えずに `AMARK_ERROR_INVALID_ARGUMENT`（6.4）
   - それ以外: 内容を複製して現在のアロケータとし `AMARK_OK`。以降の確保と解放は指定された 4 関数へ委ねる（6.3）
-- `amark_allocator_get(allocator)`: 現在のアロケータ（既定時は C 標準ライブラリの `malloc` / `realloc` / `calloc` / `free`）を書き込む。`NULL` なら何もしない（6.6）
+- 現在のアロケータを問い合わせる API は持たない。既存のアロケータを包む（計測やログの層を重ねる）具体的な利用者が現れたら追加する（追加は互換性を壊さない）
 
 ##### State Management
-- State model: 現在のアロケータ 1 つ。初期値は既定アロケータ
-- Concurrency strategy: 差し替えはスレッドセーフでない。利用者は、Amark を使う他のスレッドが動いておらず、かつ以前のアロケータで確保された Amark のメモリが残っていない時点で差し替える。ライブラリはこれを検出しない。この制約を `memory.h` のコメントに明記する（6.9）
+- State model: 現在のアロケータ 1 つ。既定アロケータで静的に初期化する
+- Concurrency strategy: 差し替えはスレッドセーフでない。利用者は、Amark を使う他のスレッドが動いておらず、かつ以前のアロケータで確保された Amark のメモリが残っていない時点で差し替える。ライブラリはこれを検出しない。この制約を `memory.h` のコメントに明記する（6.8）
 - 確保と差し替え以外の操作（`amark_malloc` などの呼び出し）は現在のアロケータを読むだけで、複数スレッドから同時に呼んでよい
 
 #### Slice
@@ -746,7 +745,7 @@ AMARK_API amark_slice_t amark_buffer_as_slice(const amark_buffer_t *buf);
 **Responsibilities & Constraints**
 - `tests/support/` に置く静的ライブラリ `amark_test_support`。ライブラリ本体には含めない（3.4）
 - 公開 API（`amark_allocator_set`）だけを使って差し替える
-- グローバルアロケータは利用者データを持たないため、計測アロケータの状態（統計、失敗注入の設定、差し替え前のアロケータ）は `tests/support/test_allocator.c` の `static` 変数に持つ
+- グローバルアロケータは利用者データを持たないため、計測アロケータの状態（統計、失敗注入の設定、差し替え済みかどうか）は `tests/support/test_allocator.c` の `static` 変数に持つ
 - 命名規則（後続 spec の補助にも適用）: ファイルは `tests/support/test_<area>.{h,c}`、外部に見える関数・型は `test_<area>_*`（型は `test_<area>_*_t`）。`<area>` は補助の対象（例: `allocator`、`tree`、`tree_dump`、`spec_examples`）。ライブラリ本体の公開名前空間 `amark_` は使わない
 - バイト数の計測のため、計測アロケータは各ブロックの先頭に要求サイズを記録するヘッダ（`max_align_t` 相当の整列を保つ大きさ）を付けて確保し、利用者へはその直後のアドレスを返す。再確保・解放ではヘッダから旧サイズを読んで統計を更新する。ヘッダ分の加算があふれる要求は確保失敗として扱う
 
@@ -873,7 +872,7 @@ test_allocator_stats_t test_allocator_stats(void);
 ## Testing Strategy
 
 ### Unit Tests
-- `memory_test.c`: 既定アロケータでの確保・再確保・解放（6.2）。計測アロケータの `bytes_live`・`bytes_total`・`bytes_peak` が確保・再確保（拡大と縮小）・解放の列に対して期待どおりに変化すること（3.6）。計測アロケータへの差し替え後に `amark_malloc` などが指定した関数へ委ねられること（6.3）。関数欠落時に `AMARK_ERROR_INVALID_ARGUMENT` で現在のアロケータが変わらないこと（6.4）。`NULL` 指定で既定へ戻ること（6.5）。`amark_allocator_get` が差し替えた 4 関数、既定時は C 標準ライブラリの 4 関数を返すこと（6.6）。`amark_calloc(SIZE_MAX, 2)` がアロケータを呼ばず `NULL`（6.7）。`amark_malloc(0)`、`amark_calloc(0, n)`、`amark_calloc(n, 0)`、`amark_realloc(NULL, 0)` がアロケータを呼ばずに `NULL` を返すこと（計測アロケータの `allocations` と `failures` が増えない）、`amark_realloc(p, 0)` が `free_fn` で解放して `NULL` を返すこと（`deallocations` が増え `live` が減る）、`amark_free(NULL)` が何もしないこと（6.8）
+- `memory_test.c`: 既定アロケータでの確保・再確保・解放（6.2）。計測アロケータの `bytes_live`・`bytes_total`・`bytes_peak` が確保・再確保（拡大と縮小）・解放の列に対して期待どおりに変化すること（3.6）。計測アロケータへの差し替え後に `amark_malloc` などが指定した関数へ委ねられること（6.3）。関数欠落時に `AMARK_ERROR_INVALID_ARGUMENT` で現在のアロケータが変わらないこと（6.4）。`NULL` 指定で既定へ戻ること（6.5）。`amark_calloc(SIZE_MAX, 2)` がアロケータを呼ばず `NULL`（6.6）。`amark_malloc(0)`、`amark_calloc(0, n)`、`amark_calloc(n, 0)`、`amark_realloc(NULL, 0)` がアロケータを呼ばずに `NULL` を返すこと（計測アロケータの `allocations` と `failures` が増えない）、`amark_realloc(p, 0)` が `free_fn` で解放して `NULL` を返すこと（`deallocations` が増え `live` が減る）、`amark_free(NULL)` が何もしないこと（6.7）
 - `error_test.c`: テスト内のヘルパマクロで `AMARK_ERROR_LIST` を展開し、コードの配列とテスト内の個数（例: `enum { test_error_count = 0 AMARK_ERROR_LIST(TEST_ERROR_COUNT_ENTRY) };`、各項目を `+ 1` に展開）を作る。`AMARK_OK == 0`（7.1）、本 spec の 4 つのコードが存在すること（7.2）、一覧の i 番目のコードの値が i であること（並び順で連番、7.5）、各コードの文字列が一覧の文字列と一致し、非 `NULL`・非空・`"unknown error"` と異なり互いに異なること（7.3、7.6）、一覧の最後の次の値（`(amark_error_t)test_error_count`）で `"unknown error"`（7.4）。一覧を走査するため、コードを追加する spec はこのテストを変更しない
 - `slice_test.c`: 生成（`NULL` を含む）（8.2）、NUL を含む比較・長さ違いの比較（8.3）、部分範囲の切り詰め（offset 超過、len 超過）（8.4）、複製の内容と NUL 終端（8.5）、失敗注入で `NULL` かつ `live == 0`（8.6）
 - `utf8_test.c`: 1〜4 バイトの境界値（U+0000、U+007F、U+0080、U+07FF、U+0800、U+FFFF、U+10000、U+10FFFF）の復号と符号化の往復（10.1、10.4、10.7）、過長（`C0 80`、`E0 80 80`）、サロゲート（`ED A0 80`）、範囲外（`F4 90 80 80`、`F5`）、途切れ（`E3 81`）、孤立継続バイト（`80`）について `consumed` が Unicode 標準の例（Table 3-8）と一致すること（10.2）、空入力（10.3）、サロゲートと `0x110000` の符号化拒否（10.5）、検証の `error_offset`（10.6）。`amark_utf8_decode_previous` について、1〜4 バイトの各文字の直後からの逆方向復号、不正な並び（途切れ `E3 81`、孤立継続バイトの連続 `80 80`、継続バイトが 4 つ以上続く並び、過長 `C0 80`）を含む入力の各単位境界で、前方復号の最後の単位と戻り値・`cp`・`consumed` が一致すること、`offset == 0` と `offset > len` の拒否（10.8）
