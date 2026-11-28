@@ -49,3 +49,15 @@ target_sources(amark PRIVATE
     base/utf8.c
     base/buffer.c
 )
+
+# node-tree
+target_sources(amark PRIVATE
+    tree/node_kind.c
+    tree/node_registry.c
+    tree/node.c
+    tree/node_value.c
+    tree/node_edit.c
+    tree/node_iter.c
+    tree/node_normalize.c
+    tree/node_walk.c
+)

@@ -45,6 +45,42 @@ NAOS_TEST(calls_public_api)
         NAOS_CHECK_TRUE(buf.data == nullptr);
         NAOS_CHECK_UINT_EQ(0u, buf.len);
     }
+
+    /* node-tree: 木の生成、子の追加、走査、破棄 */
+    {
+        amark_node_t *doc = nullptr;
+        amark_node_t *paragraph = nullptr;
+        amark_node_t *text = nullptr;
+        amark_node_iter_t iter;
+        amark_node_iter_event_t event;
+        unsigned events = 0;
+
+        NAOS_CHECK_INT_EQ(AMARK_OK, amark_node_create(AMARK_NODE_DOCUMENT, &doc));
+        NAOS_CHECK_INT_EQ(AMARK_OK, amark_node_create(AMARK_NODE_PARAGRAPH, &paragraph));
+        NAOS_CHECK_INT_EQ(AMARK_OK, amark_node_create(AMARK_NODE_TEXT, &text));
+        NAOS_CHECK_INT_EQ(AMARK_OK, amark_node_set_literal(text, amark_slice_from_cstr("hi")));
+        NAOS_CHECK_INT_EQ(AMARK_OK, amark_node_append_child(paragraph, text));
+        NAOS_CHECK_INT_EQ(AMARK_OK, amark_node_append_child(doc, paragraph));
+        NAOS_CHECK_TRUE(amark_node_get_parent(text) == paragraph);
+        NAOS_CHECK_TRUE(amark_node_get_first_child(doc) == paragraph);
+
+        /* doc ENTER、paragraph ENTER、text ENTER、paragraph EXIT、doc EXIT */
+        amark_node_iter_init(&iter, doc);
+        while ((event = amark_node_iter_next(&iter)) != AMARK_NODE_ITER_DONE)
+        {
+            if ((events == 2u) && (event == AMARK_NODE_ITER_ENTER))
+            {
+                NAOS_CHECK_TRUE(amark_node_iter_get_node(&iter) == text);
+            }
+
+            events++;
+        }
+
+        NAOS_CHECK_UINT_EQ(5u, events);
+        NAOS_CHECK_INT_EQ(AMARK_NODE_ITER_DONE, amark_node_iter_get_event(&iter));
+
+        amark_node_destroy(doc);
+    }
 }
 
 /* clang-format off */

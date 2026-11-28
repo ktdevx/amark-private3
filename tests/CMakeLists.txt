@@ -89,3 +89,33 @@ amark_target_warnings(amark_header_check)
 add_test(NAME amark.source_headers
     COMMAND "${CMAKE_COMMAND}" "-DAMARK_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
             -P "${PROJECT_SOURCE_DIR}/cmake/AmarkCheckSourceHeaders.cmake")
+
+# node-tree
+naos_add_executable(amark_node_kind_test SOURCES node_kind_test.c LIBRARIES Amark::amark amark_test_support)
+amark_target_warnings(amark_node_kind_test)
+
+naos_add_executable(amark_node_registry_test SOURCES node_registry_test.c LIBRARIES Amark::amark amark_test_support)
+amark_target_warnings(amark_node_registry_test)
+
+naos_add_executable(amark_node_test SOURCES node_test.c LIBRARIES Amark::amark amark_test_support)
+amark_target_warnings(amark_node_test)
+
+naos_add_executable(amark_node_value_test SOURCES node_value_test.c LIBRARIES Amark::amark amark_test_support)
+amark_target_warnings(amark_node_value_test)
+
+naos_add_executable(amark_node_edit_test SOURCES node_edit_test.c LIBRARIES Amark::amark amark_test_support)
+amark_target_warnings(amark_node_edit_test)
+
+naos_add_executable(amark_node_iter_test SOURCES node_iter_test.c LIBRARIES Amark::amark amark_test_support)
+amark_target_warnings(amark_node_iter_test)
+
+naos_add_executable(amark_node_normalize_test SOURCES node_normalize_test.c LIBRARIES Amark::amark amark_test_support)
+amark_target_warnings(amark_node_normalize_test)
+
+# 振り分け走査は非公開で export しないため、src/tree/node_walk.c をテスト実行ファイルへ直接コンパイルし、
+# src/ を include パスに加えて tree/node_walk.h を include する（node_walk.c は公開 API だけを呼ぶ）
+naos_add_executable(amark_node_walk_test
+    SOURCES node_walk_test.c ${PROJECT_SOURCE_DIR}/src/tree/node_walk.c
+    LIBRARIES Amark::amark amark_test_support)
+target_include_directories(amark_node_walk_test PRIVATE ${PROJECT_SOURCE_DIR}/src)
+amark_target_warnings(amark_node_walk_test)
