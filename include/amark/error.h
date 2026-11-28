@@ -23,7 +23,9 @@
     X(AMARK_ERROR_NO_MEMORY, "out of memory")           \
     X(AMARK_ERROR_INVALID_ARGUMENT, "invalid argument") \
     X(AMARK_ERROR_OVERFLOW, "size overflow")            \
-    X(AMARK_ERROR_INVALID_UTF8, "invalid UTF-8")
+    X(AMARK_ERROR_INVALID_UTF8, "invalid UTF-8")        \
+    X(AMARK_ERROR_INVALID_CHILD, "invalid child node")  \
+    X(AMARK_ERROR_ALREADY_EXISTS, "already exists")
 
 /* 内部用（末尾の _ は互換性の対象外を示す）: 一覧の 1 項目を列挙子 1 つに展開する */
 #define AMARK_ERROR_ENUM_ENTRY_(name, string) name,
