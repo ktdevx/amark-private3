@@ -58,12 +58,15 @@ static amark_allocator_t test_counting_allocator(void)
     return allocator;
 }
 
+/* 既定アロケータ。各テストの前に（前のテストの後片付けで既定に戻った状態から）問い合わせて控える */
+static amark_allocator_t test_default_allocator;
+
 static void test_check_is_default(const amark_allocator_t *allocator)
 {
-    NAOS_CHECK_TRUE(allocator->malloc_fn == malloc);
-    NAOS_CHECK_TRUE(allocator->realloc_fn == realloc);
-    NAOS_CHECK_TRUE(allocator->calloc_fn == calloc);
-    NAOS_CHECK_TRUE(allocator->free_fn == free);
+    NAOS_CHECK_TRUE(allocator->malloc_fn == test_default_allocator.malloc_fn);
+    NAOS_CHECK_TRUE(allocator->realloc_fn == test_default_allocator.realloc_fn);
+    NAOS_CHECK_TRUE(allocator->calloc_fn == test_default_allocator.calloc_fn);
+    NAOS_CHECK_TRUE(allocator->free_fn == test_default_allocator.free_fn);
 }
 
 NAOS_SETUP(reset_counters)
@@ -72,6 +75,7 @@ NAOS_SETUP(reset_counters)
     test_counting_realloc_calls = 0;
     test_counting_calloc_calls = 0;
     test_counting_free_calls = 0;
+    amark_allocator_get(&test_default_allocator);
 }
 
 NAOS_TEARDOWN(restore_default)
@@ -80,13 +84,39 @@ NAOS_TEARDOWN(restore_default)
     NAOS_CHECK_INT_EQ(AMARK_OK, amark_allocator_set(NULL));
 }
 
-NAOS_TEST(default_allocator_is_stdlib)
+NAOS_TEST(default_allocator_functions_work)
 {
     amark_allocator_t allocator;
+    unsigned char *p;
+    unsigned char *z;
+    size_t i;
 
     memset(&allocator, 0, sizeof(allocator));
     amark_allocator_get(&allocator);
+    NAOS_REQUIRE_TRUE(allocator.malloc_fn != NULL);
+    NAOS_REQUIRE_TRUE(allocator.realloc_fn != NULL);
+    NAOS_REQUIRE_TRUE(allocator.calloc_fn != NULL);
+    NAOS_REQUIRE_TRUE(allocator.free_fn != NULL);
     test_check_is_default(&allocator);
+
+    p = (unsigned char *)allocator.malloc_fn(8);
+    NAOS_REQUIRE_NOT_NULL(p);
+    memset(p, 0x5A, 8);
+    p = (unsigned char *)allocator.realloc_fn(p, 64);
+    NAOS_REQUIRE_NOT_NULL(p);
+    for (i = 0; i < 8; i++)
+    {
+        NAOS_CHECK_UINT_EQ(0x5Au, p[i]);
+    }
+    allocator.free_fn(p);
+
+    z = (unsigned char *)allocator.calloc_fn(4, 4);
+    NAOS_REQUIRE_NOT_NULL(z);
+    for (i = 0; i < 16; i++)
+    {
+        NAOS_CHECK_UINT_EQ(0u, z[i]);
+    }
+    allocator.free_fn(z);
 }
 
 NAOS_TEST(default_allocator_allocates_and_frees)
@@ -506,7 +536,7 @@ NAOS_TEST(test_allocator_install_resets_and_uninstall_restores)
 
     test_allocator_install();
     amark_allocator_get(&current);
-    NAOS_CHECK_FALSE(current.malloc_fn == malloc);
+    NAOS_CHECK_FALSE(current.malloc_fn == test_default_allocator.malloc_fn);
 
     p = amark_malloc(4);
     NAOS_REQUIRE_NOT_NULL(p);
@@ -530,7 +560,7 @@ NAOS_TEST(test_allocator_install_resets_and_uninstall_restores)
 NAOS_SUITE(memory,
     NAOS_SET_SETUP(reset_counters),
     NAOS_SET_TEARDOWN(restore_default),
-    NAOS_ADD_TEST(default_allocator_is_stdlib),
+    NAOS_ADD_TEST(default_allocator_functions_work),
     NAOS_ADD_TEST(default_allocator_allocates_and_frees),
     NAOS_ADD_TEST(get_with_null_does_nothing),
     NAOS_ADD_TEST(set_delegates_to_given_functions),

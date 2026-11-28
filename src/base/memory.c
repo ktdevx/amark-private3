@@ -14,34 +14,36 @@
 #include <stdlib.h>
 
 /*
- * 差し替えられたアロケータ。malloc_fn が NULL（初期値）の間は既定アロケータを使う。
- * 既定アロケータの関数を静的初期化子で設定しないのは、MSVC の C では dllimport された関数
- * （/MD の malloc など）のアドレスが静的初期化子では import thunk のアドレスになり、
- * 式で得るアドレスと一致しなくなるため。
+ * 既定アロケータ: C 標準ライブラリの 4 関数へ中継する。標準ライブラリの関数そのものではなく
+ * この翻訳単位の関数を置くのは、下の静的初期化子にアドレス定数として書けるようにするため
+ * （MSVC の C では dllimport された関数（/MD の malloc など）のアドレスを静的初期化子に書けない）。
  */
-static amark_allocator_t amark_custom_allocator;
-
-/* 既定アロケータ: 型が一致するため C 標準ライブラリの 4 関数をそのまま設定する */
-static void amark_default_allocator(amark_allocator_t *allocator)
+static void *amark_default_malloc(size_t size)
 {
-    allocator->malloc_fn = malloc;
-    allocator->realloc_fn = realloc;
-    allocator->calloc_fn = calloc;
-    allocator->free_fn = free;
+    return malloc(size);
 }
 
-/* 現在のアロケータ。読むだけなので複数スレッドから同時に呼んでよい */
-static amark_allocator_t amark_current_allocator(void)
+static void *amark_default_realloc(void *ptr, size_t size)
 {
-    amark_allocator_t allocator;
-
-    if (amark_custom_allocator.malloc_fn != NULL)
-    {
-        return amark_custom_allocator;
-    }
-    amark_default_allocator(&allocator);
-    return allocator;
+    return realloc(ptr, size);
 }
+
+static void *amark_default_calloc(size_t n, size_t size)
+{
+    return calloc(n, size);
+}
+
+static void amark_default_free(void *ptr)
+{
+    free(ptr);
+}
+
+static const amark_allocator_t amark_default_allocator = {amark_default_malloc, amark_default_realloc,
+                                                          amark_default_calloc, amark_default_free};
+
+/* 現在のアロケータ。ライブラリ唯一の可変グローバル状態で、初期値は既定アロケータ */
+static amark_allocator_t amark_current_allocator = {amark_default_malloc, amark_default_realloc, amark_default_calloc,
+                                                    amark_default_free};
 
 void *amark_malloc(size_t size)
 {
@@ -49,7 +51,7 @@ void *amark_malloc(size_t size)
     {
         return NULL;
     }
-    return amark_current_allocator().malloc_fn(size);
+    return amark_current_allocator.malloc_fn(size);
 }
 
 void *amark_realloc(void *ptr, size_t size)
@@ -60,10 +62,10 @@ void *amark_realloc(void *ptr, size_t size)
     }
     if (size == 0)
     {
-        amark_current_allocator().free_fn(ptr);
+        amark_current_allocator.free_fn(ptr);
         return NULL;
     }
-    return amark_current_allocator().realloc_fn(ptr, size);
+    return amark_current_allocator.realloc_fn(ptr, size);
 }
 
 void *amark_calloc(size_t n, size_t size)
@@ -72,7 +74,7 @@ void *amark_calloc(size_t n, size_t size)
     {
         return NULL;
     }
-    return amark_current_allocator().calloc_fn(n, size);
+    return amark_current_allocator.calloc_fn(n, size);
 }
 
 void amark_free(void *ptr)
@@ -81,16 +83,14 @@ void amark_free(void *ptr)
     {
         return;
     }
-    amark_current_allocator().free_fn(ptr);
+    amark_current_allocator.free_fn(ptr);
 }
 
 amark_error_t amark_allocator_set(const amark_allocator_t *allocator)
 {
     if (allocator == NULL)
     {
-        amark_allocator_t none = {NULL, NULL, NULL, NULL};
-
-        amark_custom_allocator = none;
+        amark_current_allocator = amark_default_allocator;
         return AMARK_OK;
     }
     if ((allocator->malloc_fn == NULL) || (allocator->realloc_fn == NULL) || (allocator->calloc_fn == NULL) ||
@@ -98,7 +98,7 @@ amark_error_t amark_allocator_set(const amark_allocator_t *allocator)
     {
         return AMARK_ERROR_INVALID_ARGUMENT;
     }
-    amark_custom_allocator = *allocator;
+    amark_current_allocator = *allocator;
     return AMARK_OK;
 }
 
@@ -108,5 +108,5 @@ void amark_allocator_get(amark_allocator_t *allocator)
     {
         return;
     }
-    *allocator = amark_current_allocator();
+    *allocator = amark_current_allocator;
 }
