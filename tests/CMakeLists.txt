@@ -111,3 +111,11 @@ amark_target_warnings(amark_node_iter_test)
 
 naos_add_executable(amark_node_normalize_test SOURCES node_normalize_test.c LIBRARIES Amark::amark amark_test_support)
 amark_target_warnings(amark_node_normalize_test)
+
+# 振り分け走査は非公開で export しないため、src/tree/node_walk.c をテスト実行ファイルへ直接コンパイルし、
+# src/ を include パスに加えて tree/node_walk.h を include する（node_walk.c は公開 API だけを呼ぶ）
+naos_add_executable(amark_node_walk_test
+    SOURCES node_walk_test.c ${PROJECT_SOURCE_DIR}/src/tree/node_walk.c
+    LIBRARIES Amark::amark amark_test_support)
+target_include_directories(amark_node_walk_test PRIVATE ${PROJECT_SOURCE_DIR}/src)
+amark_target_warnings(amark_node_walk_test)
