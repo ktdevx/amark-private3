@@ -4,7 +4,7 @@
  */
 
 /*
- * 計測付きアロケータ。各ブロックの先頭に要求サイズを記録するヘッダを付けて、差し替え前のアロケータで
+ * 計測付きアロケータ。各ブロックの先頭に要求サイズを記録するヘッダを付けて C 標準ライブラリで
  * 確保し、利用者へはヘッダの直後のアドレスを返す。再確保・解放ではヘッダから旧サイズを読んで統計を
  * 更新する。ヘッダの大きさはあらゆるオブジェクト型の整列を保つよう、整列の厳しい型の共用体にする
  * （C99 には max_align_t がないため）。
@@ -14,6 +14,7 @@
 #include <amark/memory.h>
 
 #include <stdint.h>
+#include <stdlib.h>
 
 typedef union test_allocator_header
 {
@@ -28,7 +29,7 @@ typedef union test_allocator_header
 #define TEST_ALLOCATOR_HEADER_SIZE sizeof(test_allocator_header_t)
 
 static test_allocator_stats_t test_allocator_state;
-static amark_allocator_t test_allocator_underlying;
+static int test_allocator_installed;
 static int test_allocator_failing;
 static size_t test_allocator_remaining;
 
@@ -84,7 +85,7 @@ static void *test_allocator_malloc(size_t size)
     {
         return NULL;
     }
-    header = (test_allocator_header_t *)test_allocator_underlying.malloc_fn(TEST_ALLOCATOR_HEADER_SIZE + size);
+    header = (test_allocator_header_t *)malloc(TEST_ALLOCATOR_HEADER_SIZE + size);
     if (header == NULL)
     {
         return NULL;
@@ -109,7 +110,7 @@ static void *test_allocator_realloc(void *ptr, size_t size)
     }
     header = test_allocator_to_header(ptr);
     old_size = header->size;
-    header = (test_allocator_header_t *)test_allocator_underlying.realloc_fn(header, TEST_ALLOCATOR_HEADER_SIZE + size);
+    header = (test_allocator_header_t *)realloc(header, TEST_ALLOCATOR_HEADER_SIZE + size);
     if (header == NULL)
     {
         return NULL;
@@ -132,8 +133,8 @@ static void *test_allocator_calloc(size_t n, size_t size)
         return NULL;
     }
     total = n * size;
-    /* ヘッダを含めて 1 要素とみなし、ゼロ埋めは差し替え前のアロケータに任せる */
-    header = (test_allocator_header_t *)test_allocator_underlying.calloc_fn(1, TEST_ALLOCATOR_HEADER_SIZE + total);
+    /* ヘッダを含めて 1 要素とみなし、ゼロ埋めは calloc に任せる */
+    header = (test_allocator_header_t *)calloc(1, TEST_ALLOCATOR_HEADER_SIZE + total);
     if (header == NULL)
     {
         return NULL;
@@ -154,7 +155,7 @@ static void test_allocator_free(void *ptr)
     test_allocator_state.deallocations++;
     test_allocator_state.live--;
     test_allocator_state.bytes_live -= header->size;
-    test_allocator_underlying.free_fn(header);
+    free(header);
 }
 
 static void test_allocator_reset(void)
@@ -168,27 +169,26 @@ static void test_allocator_reset(void)
 
 void test_allocator_install(void)
 {
-    amark_allocator_t current;
     amark_allocator_t measuring;
 
     test_allocator_reset();
-    amark_allocator_get(&current);
-    if (current.malloc_fn == test_allocator_malloc)
+    if (test_allocator_installed)
     {
         return;
     }
 
-    test_allocator_underlying = current;
     measuring.malloc_fn = test_allocator_malloc;
     measuring.realloc_fn = test_allocator_realloc;
     measuring.calloc_fn = test_allocator_calloc;
     measuring.free_fn = test_allocator_free;
     (void)amark_allocator_set(&measuring);
+    test_allocator_installed = 1;
 }
 
 void test_allocator_uninstall(void)
 {
     (void)amark_allocator_set(NULL);
+    test_allocator_installed = 0;
 }
 
 void test_allocator_fail_after(size_t successes)

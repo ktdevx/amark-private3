@@ -101,12 +101,3 @@ amark_error_t amark_allocator_set(const amark_allocator_t *allocator)
     amark_current_allocator = *allocator;
     return AMARK_OK;
 }
-
-void amark_allocator_get(amark_allocator_t *allocator)
-{
-    if (allocator == NULL)
-    {
-        return;
-    }
-    *allocator = amark_current_allocator;
-}

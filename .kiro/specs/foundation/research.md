@@ -84,7 +84,7 @@
 - **Follow-up**: CI 行列で静的・動的の両方をインストール確認まで検証する
 
 ### Decision: アロケータ関数には 0 サイズと空ポインタを渡さない
-- **Context**: 要件 6.7、6.8。C の `malloc(0)` と `realloc(p, 0)` は処理系定義（C23 では `realloc(p, 0)` は未定義動作）
+- **Context**: 要件 6.6、6.7。C の `malloc(0)` と `realloc(p, 0)` は処理系定義（C23 では `realloc(p, 0)` は未定義動作）
 - **Alternatives Considered**:
   1. 0 サイズ要求をそのまま利用者関数へ渡す
   2. 0 サイズ要求を 1 バイトの要求として扱い、`amark_free(NULL)` と `amark_realloc(NULL, n)` はラッパ側で処理する
@@ -95,11 +95,17 @@
 - **Follow-up**: 利用者関数への事前条件（size ≥ 1、ptr ≠ NULL）とサイズ 0 の扱いを公開ヘッダに明記する。後続 spec の設計で、個数が 0 になりうる確保に「個数が 1 以上のときだけ確保する」ことを明記する
 
 ### Decision: グローバルアロケータは利用者データを持たない
-- **Context**: 要件 6.3、6.6。アロケータはプロセス全体で 1 つ（steering の Key Technical Decisions）
-- **Selected Approach**: `amark_allocator_t` は `malloc_fn` / `realloc_fn` / `calloc_fn` / `free_fn` の 4 関数だけを持ち、関数の型は C 標準ライブラリの `malloc` / `realloc` / `calloc` / `free` と同じにする。既定アロケータは標準ライブラリの 4 関数をそのまま設定する
-- **Rationale**: グローバルに 1 つしかないため、利用者データは利用者側の静的変数で足りる。型が標準と一致すれば中継関数が要らず、利用者も既存の確保関数をそのまま渡せる
+- **Context**: 要件 6.3。アロケータはプロセス全体で 1 つ（steering の Key Technical Decisions）
+- **Selected Approach**: `amark_allocator_t` は `malloc_fn` / `realloc_fn` / `calloc_fn` / `free_fn` の 4 関数だけを持ち、関数の型は C 標準ライブラリの `malloc` / `realloc` / `calloc` / `free` と同じにする。既定アロケータは標準ライブラリの 4 関数へ中継する `static` 関数とする（実装時に変更。現在のアロケータを静的に初期化するため。design の Memory を参照）
+- **Rationale**: グローバルに 1 つしかないため、利用者データは利用者側の静的変数で足りる。型が標準と一致すれば、利用者は既存の確保関数をそのまま渡せる
 - **Trade-offs**: 1 つのプロセスで状態の異なる複数のアロケータを使い分けられない（グローバルアロケータの方針として受け入れる）
 - **Follow-up**: テスト用の計測アロケータは状態を `tests/support/` の静的変数に持つ
+
+### Decision: 現在のアロケータを問い合わせる API を持たない
+- **Context**: 当初の要件 6.6（現在のアロケータの問い合わせ、`amark_allocator_get`）。実装後の見直しで削除した
+- **Selected Approach**: 問い合わせの API を公開しない。テスト用の計測アロケータは実際の確保を C 標準ライブラリで行い、差し替え済みかどうかを自分の静的変数で持つ
+- **Rationale**: 問い合わせが要るのは、既存のアロケータを包む層（計測・ログ）を重ねるときと、独自のアロケータへ一時的な差し替えから戻すときに限られ、具体的な利用者がいない。公開 API を最小にする方針に従い、必要になったら追加する（追加は互換性を壊さず、削除は壊す）
+- **Trade-offs**: 利用者は、他の部品が差し替えた独自のアロケータの上に層を重ねられない
 
 ### Decision: エラーコードは X マクロの単一の一覧から生成し、末尾追加のみ
 - **Context**: 要件 7.1〜7.6。後続 spec が追加していく
