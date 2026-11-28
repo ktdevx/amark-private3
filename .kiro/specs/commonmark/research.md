@@ -68,10 +68,21 @@
 ### Decision: 拡張の粒度と名前
 - **Context**: 要件 1.1、1.4、1.6
 - **Alternatives Considered**: 上表
-- **Selected Approach**: 17 単位。拡張名と構文名は `cmark_` で始める（例: `cmark_html_block`）。単位はビットフラグの `#define` 定数（`uint32_t`）で指定し、集合はビットの論理和
-- **Rationale**: 取り外したい単位と仕様の構文が一致する。名前の接頭辞で将来の gfm や第三者の拡張と衝突しない
+- **Selected Approach**: 17 単位。拡張名と構文名は方言の接頭辞を付けない規則の名前とする（例: `html_block`。次の「規則と方言プリセットの分離」で `cmark_` 接頭辞から改めた）。CommonMark のプリセットでは単位をビットフラグの `#define` 定数（`uint32_t`）で指定し、集合はビットの論理和
+- **Rationale**: 取り外したい単位と仕様の構文が一致する。名前の衝突は parser-core の方言が検査する
 - **Trade-offs**: リンクと画像は分けない（`]` の処理が共有で、画像だけを外す用途が乏しい）。リンク参照定義はリンクと別にする（定義を外すと参照リンクが成立しない方言を作れる）
 - **Follow-up**: GFM が優先順位を挟めるよう、ブロックの開始判定の優先順位を 10 刻みにする
+
+### Decision: 規則と方言プリセットの分離
+- **Context**: 要件 1.1、1.6、1.8。利用者は「強調」「テーブル」のような規則を、どの方言の出身かを意識せずに 1 つずつ使いたい。また将来の GFM は CommonMark の共有部品（文字の分類、文字参照、リンクの走査、桁の部品）と規則をそのまま使う
+- **Alternatives Considered**:
+  1. 方言ごとのモジュール（`src/cmark/` に規則と共有部品とプリセットを置き、GFM は `src/gfm/`）— GFM が `cmark_internal.h` を include するとモジュールの非公開境界が崩れる。規則の名前と生成が方言に結び付き（`amark_cmark_extension_create(AMARK_CMARK_EMPHASIS)`、拡張名 `cmark_emphasis`）、利用者が規則として参照しにくい。単位の表が全記述子を参照するため、1 規則だけを使っても全規則がリンクされる
+  2. 規則の層（`src/syntax/`）とプリセットの層（`src/cmark/`、将来の `src/gfm/`）に分ける — 規則は方言に属さず、規則ごとの公開の生成関数と拡張名の定数を持つ。プリセットは規則の公開 API だけで方言を組み立てる
+  3. 2 に加え、共有部品を `src/syntax/shared/` のように入れ子のディレクトリに分ける — steering の「ディレクトリはさらに入れ子にしない」に反する
+- **Selected Approach**: 2。`src/syntax/` はフラットに置き、ファイル名で役割を示す（共有部品は `syntax_chars.c` など、規則は `syntax_<規則名>.c`）。公開ヘッダは `amark/syntax.h` 1 つに全規則を置く。CommonMark のビットフラグはプリセットの選択の便宜として `amark/cmark.h` に残し、`amark_cmark_extension_create` と `amark_cmark_get_extension_name` は規則の生成関数と名前の定数に置き換える。定義テーブルの名前空間は `cmark.link` から規則の間の約束 `link` に改める。既定の優先順位は規則の記述子が持ち、方言ごとの上書きは parser-core の既存の `amark_dialect_set_priority` で行う
+- **Rationale**: steering の「方言は拡張セット」をコードの配置と名前にそのまま反映できる。GFM は共有部品の変更を本仕様の改訂として扱えばよく、プリセット同士が互いの非公開ヘッダに依存しない。規則ごとに生成関数があるため、静的リンクでは使った規則だけがリンクされる。markdown-renderer と parser-core が参照する公開 API（`amark_cmark_parse`、`amark/cmark.h`、`AMARK_CMARK_SPEC_PATH`）は変わらない
+- **Trade-offs**: 公開関数が 17 個（GFM で更に）増える。共有部品は同梱の規則だけが使え、外部の拡張の作者には非公開のまま（steering の「本体と拡張で同じ API を使う」との差。公開するかは gfm の spec 作成時に、実際に必要な部品を見て判断する）
+- **Follow-up**: gfm の spec では、GFM の規則を `src/syntax/` と `amark/syntax.h` に足し、GFM のプリセットを `src/gfm/` に置く。拡張間の依存の宣言（例: タスクリストはリストの規則を前提とする）は当面プリセットの構成で満たし、必要になれば parser-core の改訂として扱う
 
 ### Decision: 簡易 API の形
 - **Context**: 要件 3
@@ -106,7 +117,7 @@
 
 ### Decision: 句読点・空白の分類を共有の非公開モジュールにする
 - **Context**: 要件 7.1、10.2。markdown-renderer も出力側の flanking で同じ分類を必要とする
-- **Selected Approach**: 最初から `src/base/unicode_class.{h,c}` と生成物 `src/base/unicode_class_data.c` に `amark_unicode_is_punctuation` / `amark_unicode_is_whitespace` を置く（非公開、export しない）。畳み込みの表はラベルの正規化だけが使うため `src/cmark/cmark_unicode_data.c` に commonmark 専用として残す。生成器は 2 つのファイルを出力する。直前の文字の復号は foundation の `amark_utf8_decode_previous` を使う
+- **Selected Approach**: 最初から `src/base/unicode_class.{h,c}` と生成物 `src/base/unicode_class_data.c` に `amark_unicode_is_punctuation` / `amark_unicode_is_whitespace` を置く（非公開、export しない）。畳み込みの表はラベルの正規化だけが使うため `src/syntax/syntax_case_fold_data.c` に規則の層の専用として残す。生成器は 2 つのファイルを出力する。直前の文字の復号は foundation の `amark_utf8_decode_previous` を使う
 - **Rationale**: レンダラがパーサの非公開ヘッダに依存せず、同一の表と判定を共有できる
 
 ## Risks & Mitigations

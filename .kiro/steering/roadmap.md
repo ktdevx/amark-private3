@@ -55,7 +55,7 @@ Amark は Markdown テキストをパースする C99 ライブラリである�
 
 ## Boundary Strategy
 
-- **Why this split**: 「データ構造（node-tree）」「構文非依存の解析機構（parser-core）」「具体的な構文（commonmark）」「出力（html-renderer / markdown-renderer）」を分けることで、レンダラは手組みの木だけでテストでき、パーサはレンダラなしで木を検証できる。エンジンと構文を別 spec にすることで、拡張 API が CommonMark の都合に寄りすぎていないかを境界でレビューできる。
+- **Why this split**: 「データ構造（node-tree）」「構文非依存の解析機構（parser-core）」「具体的な構文（commonmark。方言に属さない規則と、規則を集める CommonMark 方言プリセット）」「出力（html-renderer / markdown-renderer）」を分けることで、レンダラは手組みの木だけでテストでき、パーサはレンダラなしで木を検証できる。エンジンと構文を別 spec にすることで、拡張 API が CommonMark の都合に寄りすぎていないかを境界でレビューできる。
 - **Shared seams to watch**:
   - **エラーコード**: `foundation` が単一の列挙を所有する。後続 spec はそこへ追加し、独自体系を作らない
   - **ノード種別の所有**: 標準ノード種別（CommonMark が必要とするもの）とそのアクセサは `node-tree` が所有する。拡張が定義するノード種別の登録機構も `node-tree` が提供し、`parser-core` の拡張 API と整合させる
@@ -70,9 +70,9 @@ Amark は Markdown テキストをパースする C99 ライブラリである�
 - [x] node-tree -- 値を木に持つノード、標準ノード種別とアクセサ、拡張ノード種別の登録、木の編集 API、走査. Dependencies: foundation
 - [x] parser-core -- 構文非依存の 2 フェーズ（ブロック→インライン）パーサエンジン、構文拡張の登録 API、方言（拡張セット）定義. Dependencies: foundation, node-tree
 - [x] html-renderer -- 木から HTML へのレンダリング、ノード種別ごとのレンダラフック. Dependencies: foundation, node-tree
-- [x] commonmark -- CommonMark 構文一式を拡張として実装、CommonMark 方言プリセット、仕様適合テスト. Dependencies: parser-core, html-renderer
+- [x] commonmark -- CommonMark 構文一式を方言に属さない規則（`src/syntax/`）として実装、規則を集める CommonMark 方言プリセット（`src/cmark/`）、仕様適合テスト. Dependencies: parser-core, html-renderer
 - [x] markdown-renderer -- 木から Markdown へのレンダリング、ノード種別ごとのレンダラフック、往復テスト. Dependencies: node-tree, commonmark, html-renderer
 
 ## Future Phases
 
-- gfm -- GFM 拡張（テーブル、取り消し線、タスクリスト、拡張オートリンク、tagfilter）と GFM 方言プリセット。拡張 API とレンダラフックが固まった後に着手する. Dependencies: commonmark, html-renderer, markdown-renderer
+- gfm -- GFM の規則（テーブル、取り消し線、タスクリスト、拡張オートリンク、tagfilter）を規則の層（`src/syntax/`）に足し、CommonMark の規則と合わせた GFM 方言プリセット（`src/gfm/`）を作る。規則の層の共有部品を外部の拡張の作者に公開するかもここで判断する。拡張 API とレンダラフックが固まった後に着手する. Dependencies: commonmark, html-renderer, markdown-renderer

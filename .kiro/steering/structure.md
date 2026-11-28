@@ -10,7 +10,8 @@
 基盤（エクスポート、バージョン、エラーコード、アロケータ、スライス、UTF-8、バッファ）
   └─ 木（ノード、編集、走査、振り分け走査 node_walk〔非公開〕）
        ├─ パーサエンジン（拡張登録 API、方言）
-       │    └─ 構文拡張（CommonMark など）
+       │    └─ 規則（方言に属さない構文拡張と、その共有部品）
+       │         └─ 方言プリセット（CommonMark、将来の GFM など。規則を選んで集めるだけ）
        ├─ HTML レンダラ
        └─ Markdown レンダラ
 ```
@@ -18,6 +19,7 @@
 - 基盤の内部の依存方向は `export → version, error → memory → slice → utf8 → buffer → amark.h`。各モジュールは自分より下位のモジュールだけを include する。逆向きの include はレビューでエラーとして扱う
 - レンダラはパーサに依存しない。パーサはレンダラに依存しない
 - 構文拡張はパーサエンジンの公開拡張 API だけに依存し、エンジンの非公開部分に触れない
+- **規則と方言プリセットを分ける**: 構文は特定の方言に属さない「規則」として規則の層に置く（例: 強調、フェンスコード、将来のテーブル）。方言プリセットは構文のロジックを持たず、規則の公開 API だけで規則を集める。プリセットは規則の層の非公開ヘッダを include せず、プリセット同士も互いに依存しない。2 つの方言で共有したい部品が出たら、それは規則の層の共有部品に置く
 - 1 つの拡張が構文・ノード種別・レンダラフックをまとめて提供する場合、それらを結び付けるのは拡張の側である
 - **振り分け走査** `src/tree/node_walk.h`（非公開）は、種別ハンドルをキーとするフック表と反復の走査駆動部で、node-tree spec が所有する。利用者は HTML と Markdown の両レンダラ。変更したときは html-renderer と markdown-renderer を再検証する。公開や共有の文字列ライターの切り出しは、実際の第 2 の利用者が現れるまで行わない（Markdown の行の書き出しは markdown-renderer に置く）
 
@@ -40,9 +42,10 @@
 | `src/tree/` | ノード、種別、編集、走査、レンダラが共有する非公開の振り分け走査（`node_walk`） |
 | `src/parser/` | 構文非依存のパーサエンジン、拡張、方言 |
 | `src/html/`, `src/markdown/` | 各レンダラ |
-| `src/cmark/` | CommonMark の構文拡張と、その専用の表 |
+| `src/syntax/` | 規則（方言に属さない構文拡張）と、規則が共有する非公開の部品・表（`syntax_internal.h`） |
+| `src/cmark/` | CommonMark 方言プリセットと簡易 API（規則の公開 API だけを使う） |
 
-- 新しい構文群（例: 将来の GFM）は `src/<name>/` を足す。ディレクトリはさらに入れ子にしない
+- 新しい構文（例: 将来の GFM のテーブル）は規則として `src/syntax/` に足し、新しい方言（例: 将来の GFM）はプリセットとして `src/<name>/` を足す。ディレクトリはさらに入れ子にしない（`src/syntax/` の中もフラットに置き、共有部品と規則はファイル名で区別する）
 - 各ディレクトリの中は `<module>.c` と、必要なら非公開の `<module>.h` を対にする。生成したデータは `<module>_data.c` としてリポジトリに含める（例: `src/base/unicode_class_data.c`）
 - ファイルのベース名は `src/` 全体で一意にする（静的ライブラリのメンバ名の衝突を避け、ファイル名だけで所属が分かるようにするため）
 - ディレクトリは置き場所であって所有の単位ではない。たとえば `src/base/unicode_class.*` は commonmark spec が所有するが、基盤層の部品なので `base/` に置く
@@ -87,7 +90,8 @@
 - **生成・破棄**: opaque 型は `_create` / `_destroy`、中身を呼び出し側が持つ構造体は `_init` / `_deinit`
 - **非公開シンボル**: ファイル内に閉じるものは `static` とする。翻訳単位をまたぐ非公開シンボルは動的ライブラリから export しない
 - **テスト補助**: `test_<area>_*`（上記「テスト補助」）
-- **CommonMark モジュールの名前**: 識別子・ファイル・ヘッダは `cmark` を使う（`amark_cmark_*`、`AMARK_CMARK_*`、拡張名 `cmark_*`、`src/cmark/`、`amark/cmark.h`）。仕様そのものは「CommonMark」、kiro の spec 名とテストデータの置き場（`tests/data/commonmark/`）は `commonmark` のまま。文書中で接頭辞やパスを伴わない単独の「cmark」は参照実装 commonmark/cmark を指す
+- **規則の名前**: 識別子・ファイル・ヘッダは `syntax` を使う（`amark_syntax_<rule>_create`、`AMARK_SYNTAX_<RULE>_NAME`、`src/syntax/syntax_*`、`amark/syntax.h`）。規則のソースは `syntax_<規則名>.c`。拡張名・構文名は方言の接頭辞を付けない規則の名前（例: `emphasis`、`html_block`）。方言の出身ではなく規則として参照できるようにするため
+- **CommonMark プリセットの名前**: 識別子・ファイル・ヘッダは `cmark` を使う（`amark_cmark_*`、`AMARK_CMARK_*`、`src/cmark/`、`amark/cmark.h`）。仕様そのものは「CommonMark」、kiro の spec 名とテストデータの置き場（`tests/data/commonmark/`）は `commonmark` のまま。文書中で接頭辞やパスを伴わない単独の「cmark」は参照実装 commonmark/cmark を指す
 
 ## Include Organization
 
@@ -113,4 +117,4 @@
 ---
 _Document patterns, not file trees. New files following patterns shouldn't require updates_
 
-_updated_at: 2026-11-27 — foundation の実装に同期: テストからの include の書き方を追記、例の末尾コメントを clang-format の整形どおり 1 スペースに。CommonMark モジュールの名前を `cmark` に。`src/` をサブディレクトリに分割。各 spec の設計に合わせて公開ヘッダの配置、テスト補助の命名、テストデータ・生成ツールの置き場所、共有の骨組みファイルの追記規則を反映。レンダラ共通層（旧 `src/render/`）を廃し、フック表と走査駆動部を node-tree の非公開モジュール `src/tree/node_walk` へ移した。`version.h` を生成から手書き（バージョンの唯一の出所）に変更_
+_updated_at: 2026-11-28 — 規則（`src/syntax/`、`amark/syntax.h`、方言の接頭辞なしの拡張名）と方言プリセット（`src/cmark/`）を分ける構成に変更。2026-11-27 — foundation の実装に同期: テストからの include の書き方を追記、例の末尾コメントを clang-format の整形どおり 1 スペースに。CommonMark モジュールの名前を `cmark` に。`src/` をサブディレクトリに分割。各 spec の設計に合わせて公開ヘッダの配置、テスト補助の命名、テストデータ・生成ツールの置き場所、共有の骨組みファイルの追記規則を反映。レンダラ共通層（旧 `src/render/`）を廃し、フック表と走査駆動部を node-tree の非公開モジュール `src/tree/node_walk` へ移した。`version.h` を生成から手書き（バージョンの唯一の出所）に変更_

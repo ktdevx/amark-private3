@@ -10,14 +10,14 @@
 
 ## Desired Outcome
 
-- CommonMark の各構文が個別の拡張として登録され、それらをまとめた CommonMark 方言プリセットでパースできる
+- CommonMark の各構文が方言に属さない個別の規則（拡張）として提供され、それらをまとめた CommonMark 方言プリセットでパースできる
 - CommonMark 仕様（spec.txt）の例がすべて通る
 - 個々の構文を外した方言（例: 生 HTML なし、インデントコードブロックなし）を組み立てられる
 - 病的な入力（深いネスト、大量のデリミタやブラケット）で処理時間が爆発しない
 
 ## Approach
 
-構文ごとにブロック拡張・インライン拡張を実装し、`parser-core` の公開拡張 API だけを使う。エンジンの内部に手を入れたくなった場合は、裏口を作らず `parser-core` の API を改訂する（spec 横断の変更として扱う）。仕様の spec.txt から例を抽出してテストデータとし、パース → HTML レンダリングの結果を期待値と比較する。
+構文ごとにブロック拡張・インライン拡張を「規則」として実装し（`src/syntax/`、`amark/syntax.h`）、`parser-core` の公開拡張 API だけを使う。方言プリセット（`src/cmark/`、`amark/cmark.h`）は規則の公開 API だけで規則を集める。エンジンの内部に手を入れたくなった場合は、裏口を作らず `parser-core` の API を改訂する（spec 横断の変更として扱う）。仕様の spec.txt から例を抽出してテストデータとし、パース → HTML レンダリングの結果を期待値と比較する。
 
 ## Scope
 
@@ -47,7 +47,7 @@
 ## Upstream / Downstream
 
 - **Upstream**: parser-core、html-renderer、node-tree、foundation
-- **Downstream**: markdown-renderer（往復テスト）、将来の gfm（CommonMark 方言に拡張を足して GFM 方言を作る）
+- **Downstream**: markdown-renderer（往復テスト）、将来の gfm（GFM の規則を規則の層に足し、CommonMark の規則と合わせて GFM 方言プリセットを作る）
 
 ## Existing Spec Touchpoints
 
