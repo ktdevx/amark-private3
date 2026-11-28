@@ -313,7 +313,7 @@ struct amark_node
     amark_node_t *parent;
     amark_node_t *first_child;
     amark_node_t *last_child;
-    amark_node_t *previous;
+    amark_node_t *prev;
     amark_node_t *next;
     union
     {
@@ -333,7 +333,7 @@ amark_error_t amark_node_string_set(amark_node_string_t *string, amark_slice_t v
 amark_slice_t amark_node_string_get(const amark_node_string_t *string);                /* node_value.c: 未設定なら "" */
 ```
 - 依存の向き: `node.c` は `node_kind.c` だけに、`node_value.c` と `node_edit.c` は `node.c` と `node_kind.c` に、`node_normalize.c` は `node.c`・`node_value.c` に、`node_iter.c` は `node.c` と `node_kind.c` に依存する。`node.c` は `node_value.c` と `node_edit.c` に依存しない（実装順: node_kind → node_registry → node → node_value / node_edit → node_iter / node_normalize → node_walk。`node_walk.c` は公開 API だけを使い、この非公開ヘッダを include しない）
-- Invariants: `first_child == NULL` と `last_child == NULL` は同値。兄弟リストは双方向で、`first_child->previous == NULL`、`last_child->next == NULL`、各子の `parent` は親を指す。根は `parent`、`previous`、`next` がすべて `NULL`
+- Invariants: `first_child == NULL` と `last_child == NULL` は同値。兄弟リストは双方向で、`first_child->prev == NULL`、`last_child->next == NULL`、各子の `parent` は親を指す。根は `parent`、`prev`、`next` がすべて `NULL`
 - `amark_node_string_set`: `value.len > 0 && value.data == NULL` は `AMARK_ERROR_INVALID_ARGUMENT`、`value.len == SIZE_MAX` は `AMARK_ERROR_OVERFLOW`、`amark_utf8_validate` が失敗なら `AMARK_ERROR_INVALID_UTF8`、空なら旧値を解放して未設定に戻す、それ以外は `amark_slice_dup` で複製（失敗で `AMARK_ERROR_NO_MEMORY`）してから旧値を解放する。いずれの失敗でも旧値は残る
 
 ### 種別
@@ -555,7 +555,7 @@ AMARK_API amark_node_t *amark_node_get_previous(const amark_node_t *node);
 - `amark_node_create(type, node)`: `amark_node_kind_get_standard(type)` が `NULL`（`NONE`、`EXTENSION`、未定義値）なら `AMARK_ERROR_INVALID_ARGUMENT`（1.3）。それ以外は `amark_node_create_with_kind` と同じ（1.1）
 - `amark_node_create_with_kind(kind, node)`: `kind` または `node` が `NULL` なら `AMARK_ERROR_INVALID_ARGUMENT`。`amark_calloc` で 1 ノードを確保し（失敗で `AMARK_ERROR_NO_MEMORY`、`*node` は変更しない）、リンクをすべて `NULL`、値を既定値（見出しレベル 1、リスト種別 BULLET・開始番号 1・tight 偽、文字列は未設定 = 空、付随データ `NULL`）にして `*node` に書く（1.2、3.4）。`kind` は標準種別のハンドルか、破棄されていないレジストリが返したハンドルでなければならない（任意のポインタを検証する手段はない）
 - `amark_node_destroy(node)`: `NULL` は何もしない（1.7）。親を持つなら先に `amark_node_unlink` と同じ取り外しを行う（1.5）。続いて部分木を後行順に反復で解放する: 現在ノードに子があれば最初の子を親の子リストから外してそこへ降り、子がなければ値を解放（文字列の解放、拡張種別で付随データが非 `NULL` かつ `destroy_data` があれば `destroy_data(data, user_data)` を 1 回呼ぶ）して `amark_free` し、親へ戻る。起点を解放したら終わる（1.4、5.2、13.1）
-- `amark_node_unlink(node)`: 親を持てば兄弟の前後をつなぎ直し、親の `first_child` / `last_child` を更新して、`node` の `parent`・`previous`・`next` を `NULL` にする。子孫は保ち、所有権は呼び出し側へ移る（7.4）。親を持たないか `NULL` なら何もしない（7.5）。編集操作の移動と置換もこの関数で取り外す
+- `amark_node_unlink(node)`: 親を持てば兄弟の前後をつなぎ直し、親の `first_child` / `last_child` を更新して、`node` の `parent`・`prev`・`next` を `NULL` にする。子孫は保ち、所有権は呼び出し側へ移る（7.4）。親を持たないか `NULL` なら何もしない（7.5）。編集操作の移動と置換もこの関数で取り外す
 - `amark_node_get_type`: `amark_node_kind_get_type(node->kind)`。`NULL` は `AMARK_NODE_NONE`（2.4）
 - `amark_node_get_kind`: 種別ハンドル。`NULL` は `NULL`
 - 参照 5 関数: 対応するリンクを返す。ない場合と `NULL` を渡した場合は `NULL`。木を変更しない（8.1、8.2）
