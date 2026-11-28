@@ -36,17 +36,61 @@ typedef struct test_string_field
     const char *name;
 } test_string_field_t;
 
+/*
+ * 公開関数を呼ぶだけのファイル内の関数。動的構成の MSVC では dllimport の関数のアドレスが定数でないため
+ * （C4232）、静的な表には公開関数ではなくこれらのアドレスを置く
+ */
+static amark_slice_t test_get_literal(const amark_node_t *node)
+{
+    return amark_node_get_literal(node);
+}
+
+static amark_error_t test_set_literal(amark_node_t *node, amark_slice_t value)
+{
+    return amark_node_set_literal(node, value);
+}
+
+static amark_slice_t test_get_info(const amark_node_t *node)
+{
+    return amark_node_get_info(node);
+}
+
+static amark_error_t test_set_info(amark_node_t *node, amark_slice_t value)
+{
+    return amark_node_set_info(node, value);
+}
+
+static amark_slice_t test_get_url(const amark_node_t *node)
+{
+    return amark_node_get_url(node);
+}
+
+static amark_error_t test_set_url(amark_node_t *node, amark_slice_t value)
+{
+    return amark_node_set_url(node, value);
+}
+
+static amark_slice_t test_get_title(const amark_node_t *node)
+{
+    return amark_node_get_title(node);
+}
+
+static amark_error_t test_set_title(amark_node_t *node, amark_slice_t value)
+{
+    return amark_node_set_title(node, value);
+}
+
 static const test_string_field_t test_string_fields[] = {
-    {AMARK_NODE_CODE_BLOCK, amark_node_get_literal, amark_node_set_literal, "code_block.literal"},
-    {AMARK_NODE_CODE_BLOCK, amark_node_get_info, amark_node_set_info, "code_block.info"},
-    {AMARK_NODE_HTML_BLOCK, amark_node_get_literal, amark_node_set_literal, "html_block.literal"},
-    {AMARK_NODE_TEXT, amark_node_get_literal, amark_node_set_literal, "text.literal"},
-    {AMARK_NODE_CODE, amark_node_get_literal, amark_node_set_literal, "code.literal"},
-    {AMARK_NODE_HTML_INLINE, amark_node_get_literal, amark_node_set_literal, "html_inline.literal"},
-    {AMARK_NODE_LINK, amark_node_get_url, amark_node_set_url, "link.url"},
-    {AMARK_NODE_LINK, amark_node_get_title, amark_node_set_title, "link.title"},
-    {AMARK_NODE_IMAGE, amark_node_get_url, amark_node_set_url, "image.url"},
-    {AMARK_NODE_IMAGE, amark_node_get_title, amark_node_set_title, "image.title"},
+    {AMARK_NODE_CODE_BLOCK, test_get_literal, test_set_literal, "code_block.literal"},
+    {AMARK_NODE_CODE_BLOCK, test_get_info, test_set_info, "code_block.info"},
+    {AMARK_NODE_HTML_BLOCK, test_get_literal, test_set_literal, "html_block.literal"},
+    {AMARK_NODE_TEXT, test_get_literal, test_set_literal, "text.literal"},
+    {AMARK_NODE_CODE, test_get_literal, test_set_literal, "code.literal"},
+    {AMARK_NODE_HTML_INLINE, test_get_literal, test_set_literal, "html_inline.literal"},
+    {AMARK_NODE_LINK, test_get_url, test_set_url, "link.url"},
+    {AMARK_NODE_LINK, test_get_title, test_set_title, "link.title"},
+    {AMARK_NODE_IMAGE, test_get_url, test_set_url, "image.url"},
+    {AMARK_NODE_IMAGE, test_get_title, test_set_title, "image.title"},
 };
 
 #define TEST_STRING_FIELD_COUNT (sizeof(test_string_fields) / sizeof(test_string_fields[0]))
@@ -325,9 +369,9 @@ NAOS_TEST(string_with_nul_bytes)
 
 NAOS_TEST(string_rejects_invalid_utf8)
 {
-    static const char overlong[] = {(char)0xC0, (char)0x80};
-    static const char truncated[] = {'a', (char)0xE3, (char)0x81};
-    static const char lone_continuation[] = {(char)0x80};
+    static const char overlong[] = "\xC0\x80";
+    static const char truncated[] = "a\xE3\x81";
+    static const char lone_continuation[] = "\x80";
     size_t i;
 
     test_allocator_install();
@@ -339,15 +383,16 @@ NAOS_TEST(string_rejects_invalid_utf8)
 
         NAOS_NOTE("field %s", field->name);
         NAOS_REQUIRE_INT_EQ(AMARK_OK, amark_node_create(field->type, &node));
-        NAOS_CHECK_INT_EQ(AMARK_ERROR_INVALID_UTF8, field->set(node, amark_slice_make(overlong, sizeof(overlong))));
+        NAOS_CHECK_INT_EQ(AMARK_ERROR_INVALID_UTF8, field->set(node, amark_slice_make(overlong, sizeof(overlong) - 1)));
         test_check_value(field->get(node), "", 0);
 
         NAOS_CHECK_INT_EQ(AMARK_OK, field->set(node, amark_slice_from_cstr("old")));
         live = test_allocator_stats().live;
-        NAOS_CHECK_INT_EQ(AMARK_ERROR_INVALID_UTF8, field->set(node, amark_slice_make(overlong, sizeof(overlong))));
-        NAOS_CHECK_INT_EQ(AMARK_ERROR_INVALID_UTF8, field->set(node, amark_slice_make(truncated, sizeof(truncated))));
+        NAOS_CHECK_INT_EQ(AMARK_ERROR_INVALID_UTF8, field->set(node, amark_slice_make(overlong, sizeof(overlong) - 1)));
         NAOS_CHECK_INT_EQ(AMARK_ERROR_INVALID_UTF8,
-                          field->set(node, amark_slice_make(lone_continuation, sizeof(lone_continuation))));
+                          field->set(node, amark_slice_make(truncated, sizeof(truncated) - 1)));
+        NAOS_CHECK_INT_EQ(AMARK_ERROR_INVALID_UTF8,
+                          field->set(node, amark_slice_make(lone_continuation, sizeof(lone_continuation) - 1)));
         test_check_value(field->get(node), "old", 3);
         NAOS_CHECK_UINT_EQ(live, test_allocator_stats().live);
 
