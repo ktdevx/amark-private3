@@ -1,0 +1,22 @@
+# Amark の整形規則（clang-format 18）。規約の詳細は .kiro/steering/tech.md を参照。
+---
+Language: Cpp
+BasedOnStyle: LLVM
+BreakBeforeBraces: Allman
+IndentWidth: 4
+UseTab: Never
+ColumnLimit: 120
+PointerAlignment: Right
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortBlocksOnASingleLine: Never
+# 公開ヘッダと非公開ヘッダの並びを意図どおり保つ
+SortIncludes: Never
+MaxEmptyLinesToKeep: 1
+KeepEmptyLinesAtTheStartOfBlocks: false
+# 入れ子のプリプロセッサ指令は "#" の後ろを 2 桁ずつ字下げする（例: "#  if"、"#    define"）。include ガードは字下げしない
+IndentPPDirectives: AfterHash
+PPIndentWidth: 2
+# 複数行マクロの "\" は列上限ではなく、マクロ内で最も長い行にそろえる
+AlignEscapedNewlines: Left
+...

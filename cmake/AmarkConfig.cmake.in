@@ -1,0 +1,8 @@
+# Amark の CMake パッケージ設定。find_package(Amark) が読み込み、Amark::amark を定義する。
+# Amark::amark へのリンクだけで公開ヘッダの include パスと必要なコンパイル定義（動的構成の
+# AMARK_SHARED）が付く。
+@PACKAGE_INIT@
+
+include("${CMAKE_CURRENT_LIST_DIR}/AmarkTargets.cmake")
+
+check_required_components(Amark)

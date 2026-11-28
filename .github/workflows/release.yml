@@ -1,0 +1,71 @@
+# リリース。バージョンタグ（vX.Y.Z）の push で起動する。verify ジョブでタグのバージョンと
+# include/amark/version.h の 3 つの数値定数から組み立てたバージョンの一致を確かめ、ci ジョブで
+# 継続的インテグレーションのワークフロー（ci.yml）を呼び出し、両方が成功したときに限り publish ジョブで
+# gh release create によりリリースを公開する。いずれかが失敗すればリリースは公開されない。
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  verify:
+    name: verify
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # CMakeLists.txt と同じく "#define AMARK_VERSION_<PART> <10 進数>" の行から数値を読む。
+      # 3 つのいずれかが読めない（行がない、形が違う、複数ある）場合と、タグ名が "v" で始まらない場合、
+      # タグ名から先頭の "v" を除いた値が x.y.z と一致しない場合は非 0 で終了する
+      - name: Verify tag matches version.h
+        run: |
+          header="include/amark/version.h"
+          version=""
+          for part in MAJOR MINOR PATCH; do
+              values="$(sed -n -E "s/^#define AMARK_VERSION_${part} +([0-9]+)\$/\\1/p" "$header")"
+              if [ -z "$values" ] || [ "$(printf '%s\n' "$values" | wc -l)" -ne 1 ]; then
+                  echo "::error::$header does not define AMARK_VERSION_${part} exactly once as a decimal number"
+                  exit 1
+              fi
+              version="${version:+$version.}$values"
+          done
+          tag="${GITHUB_REF_NAME:-}"
+          case "$tag" in
+              v*) ;;
+              *)
+                  echo "::error::tag '$tag' does not start with 'v'"
+                  exit 1
+                  ;;
+          esac
+          if [ "${tag#v}" != "$version" ]; then
+              echo "::error::tag '$tag' does not match version $version in $header"
+              exit 1
+          fi
+          echo "tag '$tag' matches version $version in $header"
+
+  ci:
+    needs: verify
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    name: publish
+    needs: [verify, ci]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      # チェックアウトせずに gh を使うため、対象リポジトリを GH_REPO で渡す
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes

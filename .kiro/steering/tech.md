@@ -60,10 +60,10 @@
 ```c
 typedef struct amark_buffer amark_buffer_t;
 
-void amark_buffer_init(amark_buffer_t *buf);   /* 確保しないので失敗しない */
+void amark_buffer_init(amark_buffer_t *buf); /* 確保しないので失敗しない */
 void amark_buffer_deinit(amark_buffer_t *buf);
 
-amark_error_t amark_node_create(amark_node_type_t type, amark_node_t **node);   /* 結果は出力引数 */
+amark_error_t amark_node_create(amark_node_type_t type, amark_node_t **node); /* 結果は出力引数 */
 void amark_node_destroy(amark_node_t *node);
 ```
 
@@ -91,7 +91,7 @@ amark_error_t amark_buffer_append(amark_buffer_t *buf, const char *data, size_t 
         return AMARK_OK;
     }
 
-    err = amark_buffer_reserve(buf, len);   /* あふれ・確保失敗ではバッファを変えない */
+    err = amark_buffer_reserve(buf, len); /* あふれ・確保失敗ではバッファを変えない */
     if (err)
     {
         return err;
@@ -152,7 +152,7 @@ GitHub Actions で 3 OS すべてについて、静的・動的の両方をビ�
 | Option | Default | Content |
 |---|---|---|
 | `BUILD_SHARED_LIBS` | `OFF` | `ON` で動的ライブラリ |
-| `AMARK_BUILD_TESTS` | トップレベル時 `ON` | テストを構成する（Naos の取得もこのときだけ） |
+| `AMARK_BUILD_TESTS` | トップレベル時 `ON` | テストを構成する（`BUILD_TESTING` も真のときだけ。Naos の取得もこのときだけ） |
 | `AMARK_INSTALL` | トップレベル時 `ON` | インストール規則を生成する |
 | `AMARK_WARNINGS_AS_ERRORS` | `OFF` | 警告をエラーにする（CI では `ON`） |
 
@@ -161,14 +161,18 @@ GitHub Actions で 3 OS すべてについて、静的・動的の両方をビ�
 ### Common Commands
 
 ```bash
-# Configure: cmake -S . -B build
+# Configure: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 # Build:     cmake --build build --config Release
 # Test:      ctest --test-dir build -C Release --output-on-failure
-# Shared:    cmake -S . -B build -DBUILD_SHARED_LIBS=ON
-# Strict:    cmake -S . -B build -DAMARK_WARNINGS_AS_ERRORS=ON
+# Shared:    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON
+# Strict:    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DAMARK_WARNINGS_AS_ERRORS=ON
 # Install:   cmake --install build --config Release --prefix <dir>
+# Consumer:  cmake -S tests/package -B build-package -DCMAKE_PREFIX_PATH=<dir> -DCMAKE_BUILD_TYPE=Release
+#            cmake --build build-package --config Release   # amark_package_consumer を実行する
 # Format:    clang-format-18 --dry-run --Werror <files>
 ```
+
+単一構成のジェネレータでも `CMAKE_BUILD_TYPE=Release` を指定する（未指定のまま `--install --config Release` とすると、構成別のターゲット情報が入らず `find_package` 後に使えない）
 
 ## Key Technical Decisions
 
@@ -180,4 +184,4 @@ GitHub Actions で 3 OS すべてについて、静的・動的の両方をビ�
 ---
 _Document standards and patterns, not every dependency_
 
-_updated_at: 2026-11-27 — foundation の設計に合わせて命名例（`void amark_buffer_init`、出力引数の `amark_node_create`）とコード例を修正し、エラーコード一覧表の規則、所有権規約、ビルドオプション、検査する規約としない規約、CI とリリースを追記。foundation の設計レビューに合わせ、アロケータの形とサイズ 0 の規則、`AMARK_ERROR_LIST` によるエラーコードの規則、手書きの `version.h` を出所とするリリース手順に更新_
+_updated_at: 2026-11-27 — foundation の実装に同期: Common Commands に `CMAKE_BUILD_TYPE=Release` と利用者確認を追加、`AMARK_BUILD_TESTS` に `BUILD_TESTING` の条件を追記、例の末尾コメントを clang-format の整形どおり 1 スペースに。foundation の設計に合わせて命名例（`void amark_buffer_init`、出力引数の `amark_node_create`）とコード例を修正し、エラーコード一覧表の規則、所有権規約、ビルドオプション、検査する規約としない規約、CI とリリースを追記。foundation の設計レビューに合わせ、アロケータの形とサイズ 0 の規則、`AMARK_ERROR_LIST` によるエラーコードの規則、手書きの `version.h` を出所とするリリース手順に更新_
