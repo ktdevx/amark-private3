@@ -89,3 +89,7 @@ amark_target_warnings(amark_header_check)
 add_test(NAME amark.source_headers
     COMMAND "${CMAKE_COMMAND}" "-DAMARK_SOURCE_DIR=${PROJECT_SOURCE_DIR}"
             -P "${PROJECT_SOURCE_DIR}/cmake/AmarkCheckSourceHeaders.cmake")
+
+# node-tree
+naos_add_executable(amark_node_kind_test SOURCES node_kind_test.c LIBRARIES Amark::amark amark_test_support)
+amark_target_warnings(amark_node_kind_test)
