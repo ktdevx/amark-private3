@@ -54,4 +54,5 @@ target_sources(amark PRIVATE
 target_sources(amark PRIVATE
     tree/node_kind.c
     tree/node_registry.c
+    tree/node.c
 )
