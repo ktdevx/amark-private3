@@ -108,3 +108,6 @@ amark_target_warnings(amark_node_edit_test)
 
 naos_add_executable(amark_node_iter_test SOURCES node_iter_test.c LIBRARIES Amark::amark amark_test_support)
 amark_target_warnings(amark_node_iter_test)
+
+naos_add_executable(amark_node_normalize_test SOURCES node_normalize_test.c LIBRARIES Amark::amark amark_test_support)
+amark_target_warnings(amark_node_normalize_test)
