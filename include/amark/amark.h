@@ -20,4 +20,9 @@
 #include <amark/utf8.h>
 #include <amark/buffer.h>
 
+/* node-tree */
+#include <amark/node_kind.h>
+#include <amark/node.h>
+#include <amark/node_iter.h>
+
 #endif /* AMARK_AMARK_H */
