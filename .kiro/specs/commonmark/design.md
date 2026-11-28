@@ -10,7 +10,7 @@
 
 ### Goals
 - 0.31.2 の spec.txt の全 652 例で、生 HTML と危険な URL を許可した html-renderer の出力が期待 HTML とバイト単位で一致する
-- 17 単位のどの部分集合でも方言を作れ、外した構文の記法は残りの構文の規則で解釈される
+- 17 規則のどの部分集合でも方言を作れ、外した構文の記法は残りの構文の規則で解釈される
 - cmark の病的入力の各類型が、1 件あたり CPU 時間 5 秒以内で規定の HTML になる
 - エンジンの非公開部分に触れず、ライブラリ外の拡張と同じ API だけを使う
 
@@ -30,7 +30,7 @@
 
 ### This Spec Owns
 - 公開ヘッダ `amark/syntax.h`: 17 個の規則の生成関数と拡張名の定数（プリセットとレンダラのヘッダを include しない）
-- 公開ヘッダ `amark/cmark.h`: CommonMark の構文の単位のフラグ、方言への一括追加、方言プリセットの生成、簡易パース（レンダラのヘッダを include しない）
+- 公開ヘッダ `amark/cmark.h`: CommonMark 方言プリセットの生成、簡易パース（`amark/syntax.h` を include し、レンダラのヘッダを include しない）
 - 公開ヘッダ `amark/cmark_html.h`: HTML への簡易変換（`amark/cmark.h` と `amark/html.h` を include する）
 - CommonMark 0.31.2 の各構文の規則（開始・継続・終了・flanking・rule of 3・リンクの宛先と title・ラベルの正規化・HTML ブロックの 7 種類・文字参照・コードスパンの規則）と、その拡張の記述子・名前・既定の優先順位
 - 規則が共有する非公開の部品（`src/syntax/syntax_internal.h` と文字・文字参照・走査・桁の部品）。将来の GFM の規則も同じ部品を使う
@@ -61,7 +61,7 @@
 
 ### Revalidation Triggers
 - 対象の仕様の版の変更（期待 HTML と構文の規則が変わる。html-renderer も再検証）
-- 規則の生成関数・拡張名・構文名・既定の優先順位、CommonMark の単位のフラグの値の変更（方言を組み立てる利用者と gfm に影響）
+- 規則の生成関数・拡張名・構文名・既定の優先順位、プリセットに含める規則の変更（方言を組み立てる利用者と gfm に影響）
 - 共有部品（`syntax_internal.h`）の関数・意味の変更（gfm の規則が消費側になったら gfm も再検証）
 - リンク参照定義の値の型と名前空間の変更
 - 簡易 API の引数・所有規則の変更
@@ -121,7 +121,7 @@ graph TB
 ```
 
 **Architecture Integration**:
-- Selected pattern: 規則と方言プリセットの 2 層。規則の層（`src/syntax/`）は構文ごとの拡張（17 規則）と共有部品からなり、各規則は静的な記述子（`static const`）と、必要なら解析ごとの状態の関数、公開の生成関数だけを持つ。プリセットの層（`src/cmark/`）は構文のロジックを持たず、単位のビットと規則の生成関数を対応させる表で方言を組み立てる。図では規則の層が SyntaxPublic・Internal・Data・Chars・Scan・BlockUtil・Blocks・Inlines、プリセットの層が Public・PublicHtml・Dialect・Convert である
+- Selected pattern: 規則と方言プリセットの 2 層。規則の層（`src/syntax/`）は構文ごとの拡張（17 規則）と共有部品からなり、各規則は静的な記述子（`static const`）と、必要なら解析ごとの状態の関数、公開の生成関数だけを持つ。プリセットの層（`src/cmark/`）は構文のロジックを持たず、規則の生成関数の表で方言を組み立てる。図では規則の層が SyntaxPublic・Internal・Data・Chars・Scan・BlockUtil・Blocks・Inlines、プリセットの層が Public・PublicHtml・Dialect・Convert である
 - Domain/feature boundaries: 規則の層をデータ（生成した表）、文字と参照（分類・畳み込み・文字参照・エスケープの解決）、共通の走査（ラベル、宛先、title、HTML の構造）、ブロック構文、インライン構文に、プリセットの層を組み立て（方言・簡易パース）と変換（HTML）に分ける。規則のソースは他の規則に依存しない。プリセットは規則の公開 API だけに依存し、将来の GFM のプリセットも同じ規則を集める
 - Existing patterns preserved: foundation の共通 API 規約（エラー戻り値＋出力引数、`NULL` で `AMARK_ERROR_INVALID_ARGUMENT`、強い保証）、命名（`amark_<module>_<verb>`、`_t`、`_create`）、ヘッダ規約（include ガード、`AMARK_BEGIN_DECLS`、`AMARK_API`）、内部シンボルは `AMARK_API` を付けず export しない
 - New components rationale: 各コンポーネントは要件群に対応する（Components 表）
@@ -145,7 +145,7 @@ graph TB
 ```
 include/amark/
 ├── syntax.h                    # 規則: 17 個の生成関数と拡張名の定数（プリセットとレンダラのヘッダを含まない）
-├── cmark.h                     # CommonMark プリセット: 単位のフラグ、方言への一括追加・生成、簡易パース（syntax.h を include、レンダラのヘッダを含まない）
+├── cmark.h                     # CommonMark プリセット: 方言の生成、簡易パース（syntax.h を include、レンダラのヘッダを含まない）
 └── cmark_html.h                # HTML への簡易変換（cmark.h と html.h を include）
 src/
 ├── base/
@@ -179,7 +179,7 @@ src/
 │   ├── syntax_html_inline.c             # 規則: 生 HTML（解析状態に閉じのない構造の記憶）
 │   └── syntax_line_break.c              # 規則: ハード改行・ソフト改行
 └── cmark/                               # CommonMark 方言プリセットの層（構文のロジックを持たない）
-    ├── cmark_dialect.c                  # 単位のビットと規則の生成関数の表、方言への一括追加・生成、簡易パース
+    ├── cmark_dialect.c                  # 規則の生成関数の表、方言の生成、簡易パース
     └── cmark_convert.c                  # HTML への簡易変換（html.h を include する唯一の本体ソース）
 tools/
 ├── generate_entity_table.py         # entities.json → src/syntax/syntax_entity_data.c
@@ -195,7 +195,7 @@ tests/
 ├── syntax_block_test.c         # 規則: ブロック構文の境界（仕様の例にない上限と組み合わせ）
 ├── syntax_inline_test.c        # 規則: インライン構文の境界（数値参照の範囲、ラベル長、括弧 32 段、展開量）
 ├── syntax_data_test.c          # 規則: 生成した表の件数と代表値、文字の分類、畳み込み
-├── cmark_dialect_test.c        # プリセット: 単位のフラグ・一括追加・プリセット・取り外し・凍結・簡易 API
+├── cmark_dialect_test.c        # プリセット: 方言の生成・規則の名前での取り外し・追加・簡易 API
 ├── cmark_spec_test.c           # プリセット: 全例のバイト比較、1 バイトずつの供給の同一性、例の数の確認、失敗の報告
 ├── cmark_pathological_test.c   # プリセット: 病的入力の類型ごとの入力生成・出力検査・CPU 時間の上限
 └── cmark_error_test.c          # 規則の生成・方言の生成・解析・簡易 API の失敗注入、資源の解放
@@ -225,7 +225,7 @@ sequenceDiagram
     participant Html as html-renderer
     User->>CM: convert to html
     CM->>Dialect: create dialect
-    loop each construct bit in table order
+    loop each rule in table order
         CM->>Dialect: create extension and add
     end
     CM->>Parser: parse whole input
@@ -235,7 +235,7 @@ sequenceDiagram
     CM-->>User: result and appended output
 ```
 
-- 一括追加は表の順（列挙の値の昇順）に行い、途中の失敗では、この呼び出しで追加した拡張を逆順に `amark_dialect_remove_extension` で外して破棄し、未追加の拡張を破棄する（2.6、1.2）
+- プリセットの生成は表の順に規則の生成関数で拡張を作り `amark_dialect_add_extension` する。途中の失敗では、追加できなかった拡張を破棄し、作りかけの方言を破棄する（追加済みの拡張は方言が所有して一緒に破棄される、2.4）
 - `amark_cmark_parse` は文書を返してから方言を破棄する。CommonMark の拡張はノード種別を定義しないため、文書は方言を参照しない（parser-core に適用済みの C1）
 
 ### 1 行のブロック開始判定（CommonMark の優先順位）
@@ -262,13 +262,13 @@ graph TB
 
 | Requirement | Summary | Components | Interfaces | Flows |
 |-------------|---------|------------|------------|-------|
-| 1.1, 1.5, 1.7 | 17 規則、標準種別だけ、同じ API | SyntaxPublicHeader, 全規則 | `amark_syntax_<rule>_create`、記述子 | 方言の生成 |
-| 1.2, 1.3 | 一括追加の全か無か、未定義の単位 | CommonmarkDialect | `amark_cmark_add_extensions` | 方言の生成 |
-| 1.4 | 外した構文の記法 | 全規則（相互に依存しない） | 規則のソースの独立 | 開始判定 |
-| 1.6 | 拡張名 | SyntaxPublicHeader | `AMARK_SYNTAX_<RULE>_NAME` | — |
-| 1.8 | 規則とプリセットの分離 | SyntaxPublicHeader, CommonmarkDialect | 規則の公開 API だけを使う表 | 方言の生成 |
-| 2.1, 2.2, 2.3, 2.6 | プリセット、部分集合、未凍結、失敗時の解放 | CommonmarkDialect | `amark_cmark_dialect_create` | 方言の生成 |
-| 2.4, 2.5 | 凍結済み・名前の重複 | CommonmarkDialect | `amark_dialect_add_extension` のエラーの伝播 | — |
+| 1.1, 1.4, 1.6 | 17 規則、標準種別だけ、同じ API | SyntaxPublicHeader, 全規則 | `amark_syntax_<rule>_create`、記述子 | 方言の生成 |
+| 1.2 | 生成関数の引数検査 | 全規則 | `amark_syntax_<rule>_create` | — |
+| 1.3 | 外した構文の記法 | 全規則（相互に依存しない） | 規則のソースの独立 | 開始判定 |
+| 1.5 | 拡張名 | SyntaxPublicHeader | `AMARK_SYNTAX_<RULE>_NAME` | — |
+| 1.7 | 規則とプリセットの分離 | SyntaxPublicHeader, CommonmarkDialect | 規則の公開 API だけを使う表 | 方言の生成 |
+| 2.1, 2.3, 2.4 | プリセット、未凍結、失敗時の解放 | CommonmarkDialect | `amark_cmark_dialect_create` | 方言の生成 |
+| 2.2 | 取り外しによる部分集合 | CommonmarkDialect, SyntaxPublicHeader | `amark_dialect_remove_extension` と `AMARK_SYNTAX_<RULE>_NAME` | — |
 | 3.1, 3.3, 3.4, 3.5, 3.6 | 簡易パース | CommonmarkDialect | `amark_cmark_parse` | 方言の生成と簡易 API |
 | 3.2 | HTML への簡易変換 | CommonmarkHtmlHeader, CommonmarkConvert | `amark_cmark_convert_to_html` | 方言の生成と簡易 API |
 | 4.1 | ブロック引用 | BlockQuoteExtension, BlockUtil | 記述子 `block_quote` | 開始判定 |
@@ -308,8 +308,8 @@ graph TB
 
 | Component | Domain/Layer | Intent | Req Coverage | Key Dependencies (P0/P1) | Contracts |
 |-----------|--------------|--------|--------------|--------------------------|-----------|
-| SyntaxPublicHeader | 公開 API（規則） | `amark/syntax.h` | 1.1, 1.6, 1.7, 1.8 | parser-core (P0) | Service |
-| CommonmarkPublicHeader | 公開 API（プリセット） | `amark/cmark.h` | 1.2, 1.3, 2.1, 3.1 | SyntaxPublicHeader, parser-core (P0) | Service |
+| SyntaxPublicHeader | 公開 API（規則） | `amark/syntax.h` | 1.1, 1.2, 1.5, 1.6, 1.7 | parser-core (P0) | Service |
+| CommonmarkPublicHeader | 公開 API（プリセット） | `amark/cmark.h` | 2.1, 3.1 | SyntaxPublicHeader, parser-core (P0) | Service |
 | CommonmarkHtmlHeader | 公開 API | `amark/cmark_html.h` | 3.2 | CommonmarkPublicHeader, html-renderer (P0) | Service |
 | SyntaxInternal | 非公開（規則の層） | 共有部品の宣言と規則の間の約束 | 全体の前提, 5.7 | parser-core (P0) | State |
 | EntityTable | データ | 生成した名前付き文字参照の表 | 10.1, 10.5 | — | State |
@@ -322,14 +322,14 @@ graph TB
 | BlockUtil | 走査 | 桁の先読みと読み飛ばし | 4.1, 4.2, 5.4, 5.5 | parser-core BlockContext (P0) | Service |
 | ThematicBreakExtension 〜 ListExtension（9 個） | ブロックの規則 | 各ブロック構文 | 1.1, 4.1–4.7, 5.1–5.8 | 共有部品 (P0) | Service, State |
 | BackslashEscapeExtension 〜 LineBreakExtension（8 個） | インラインの規則 | 各インライン構文 | 1.1, 6.1–6.8, 7.1–7.8, 9.4 | 共有部品 (P0) | Service, State |
-| CommonmarkDialect | プリセット | 単位と規則の生成関数の表、方言、簡易パース | 1.2, 1.3, 1.8, 2.1–2.6, 3.1, 3.3–3.6, 12.1–12.3 | SyntaxPublicHeader, parser-core Dialect (P0) | Service |
+| CommonmarkDialect | プリセット | 規則の生成関数の表、方言、簡易パース | 1.7, 2.1–2.3, 2.4, 3.1, 3.3–3.6, 12.1–12.3 | SyntaxPublicHeader, parser-core Dialect (P0) | Service |
 | CommonmarkConvert | 変換 | HTML への簡易変換 | 3.2–3.5 | CommonmarkDialect, html-renderer (P0) | Service |
 | EntityGenerator, UnicodeGenerator | ツール | 表の生成 | 10.1–10.3 | Python 3 (P1) | Batch |
 | ThirdPartyNotices | ライセンス | 第三者の表記 | 8.1, 10.5 | — | — |
 | SpecFixture, SpecExamples | テスト補助 | spec.txt の固定と抽出 | 8.1, 8.2, 8.7 | — | Service |
 | ConformanceTest | テスト | 全例のバイト比較 | 8.3–8.6 | CommonmarkConvert (P0) | Batch |
 | PathologicalTest | テスト | 病的入力 | 9.1–9.6 | CommonmarkConvert (P0) | Batch |
-| RuleTest | テスト | 規則の生成・名前・組み合わせ | 1.1, 1.4–1.7 | SyntaxPublicHeader (P0) | Batch |
+| RuleTest | テスト | 規則の生成・名前・組み合わせ | 1.1, 1.2, 1.3–1.6 | SyntaxPublicHeader (P0) | Batch |
 | ErrorInjectionTest | テスト | 失敗注入 | 11.1–11.3 | test_allocator (P0) | Batch |
 | CommonmarkIntegration | ビルド・テスト登録 | 包括ヘッダ、ビルド、テスト、C++ 検査、インストール | 8.7, 10.4 | foundation BuildSystem (P0) | Batch |
 
@@ -345,7 +345,7 @@ graph TB
 | Field | Detail |
 |-------|--------|
 | Intent | `amark/syntax.h` に規則の生成関数と拡張名の定数を宣言する（プリセットとレンダラに依存しない） |
-| Requirements | 1.1, 1.6, 1.7, 1.8 |
+| Requirements | 1.1, 1.5, 1.6, 1.7 |
 
 **Contracts**: Service [x]
 
@@ -394,7 +394,7 @@ AMARK_API amark_error_t amark_syntax_autolink_create(amark_extension_t **ext);
 AMARK_API amark_error_t amark_syntax_html_inline_create(amark_extension_t **ext);
 AMARK_API amark_error_t amark_syntax_line_break_create(amark_extension_t **ext);       /* ハード改行とソフト改行 */
 ```
-- 各関数は `ext == NULL` なら `AMARK_ERROR_INVALID_ARGUMENT`。それ以外は自分のソースの静的な記述子で `amark_extension_create(desc, ext)` を呼び、その結果を返す（1.1）
+- 各関数は `ext == NULL` なら `AMARK_ERROR_INVALID_ARGUMENT`（1.2）。それ以外は自分のソースの静的な記述子で `amark_extension_create(desc, ext)` を呼び、その結果を返す（1.1）
 - 規則ごとに生成関数を各規則のソースに置くため、静的リンクでは利用者が呼んだ規則（と共有部品）だけがリンクされる
 - ヘッダ冒頭のコメントに記す利用者向けの事項: 規則は方言に属さないこと、各規則が従う仕様（CommonMark 0.31.2 の該当節）、拡張名の一覧、規則の間の前提（参照リンクは `link_reference_definition` がなければ成立しない、など）、既定の優先順位は `amark_dialect_set_priority` で方言ごとに上書きできること、規則だけからなる方言で作った文書は方言の破棄後も有効なこと（parser-core の C1）
 - 将来の GFM の規則も本ヘッダに追記する（同じ命名 `amark_syntax_<rule>_create`、`AMARK_SYNTAX_<RULE>_NAME`）
@@ -403,8 +403,8 @@ AMARK_API amark_error_t amark_syntax_line_break_create(amark_extension_t **ext);
 
 | Field | Detail |
 |-------|--------|
-| Intent | `amark/cmark.h` に CommonMark の単位のフラグとプリセットの公開関数を宣言する（レンダラに依存しない） |
-| Requirements | 1.2, 1.3, 2.1, 2.2, 3.1 |
+| Intent | `amark/cmark.h` に CommonMark 方言プリセットと簡易パースを宣言する（レンダラに依存しない） |
+| Requirements | 2.1, 3.1 |
 
 **Contracts**: Service [x]
 
@@ -414,40 +414,16 @@ AMARK_API amark_error_t amark_syntax_line_break_create(amark_extension_t **ext);
 #include <amark/dialect.h>
 #include <amark/parser.h>
 #include <amark/syntax.h>
-#include <stdint.h>
 
 #define AMARK_CMARK_SPEC_VERSION "0.31.2"
 
-/* CommonMark の規則の選択（ビットフラグ。OR で組み合わせ、引数は uint32_t で受ける） */
-#define AMARK_CMARK_THEMATIC_BREAK            ((uint32_t)0x00001u)
-#define AMARK_CMARK_ATX_HEADING               ((uint32_t)0x00002u)
-#define AMARK_CMARK_SETEXT_HEADING            ((uint32_t)0x00004u)
-#define AMARK_CMARK_INDENTED_CODE             ((uint32_t)0x00008u)
-#define AMARK_CMARK_FENCED_CODE               ((uint32_t)0x00010u)
-#define AMARK_CMARK_HTML_BLOCK                ((uint32_t)0x00020u)
-#define AMARK_CMARK_LINK_REFERENCE_DEFINITION ((uint32_t)0x00040u)
-#define AMARK_CMARK_BLOCK_QUOTE               ((uint32_t)0x00080u)
-#define AMARK_CMARK_LIST                      ((uint32_t)0x00100u)
-#define AMARK_CMARK_BACKSLASH_ESCAPE          ((uint32_t)0x00200u)
-#define AMARK_CMARK_ENTITY                    ((uint32_t)0x00400u)
-#define AMARK_CMARK_CODE_SPAN                 ((uint32_t)0x00800u)
-#define AMARK_CMARK_EMPHASIS                  ((uint32_t)0x01000u)
-#define AMARK_CMARK_LINK                      ((uint32_t)0x02000u)
-#define AMARK_CMARK_AUTOLINK                  ((uint32_t)0x04000u)
-#define AMARK_CMARK_HTML_INLINE               ((uint32_t)0x08000u)
-#define AMARK_CMARK_LINE_BREAK                ((uint32_t)0x10000u)
-
-#define AMARK_CMARK_ALL ((uint32_t)0x1FFFFu)
-#define AMARK_CMARK_CONSTRUCT_COUNT 17
-
-AMARK_API amark_error_t amark_cmark_add_extensions(amark_dialect_t *dialect, uint32_t constructs);
-AMARK_API amark_error_t amark_cmark_dialect_create(uint32_t constructs, amark_dialect_t **dialect);
+AMARK_API amark_error_t amark_cmark_dialect_create(amark_dialect_t **dialect);
 AMARK_API amark_error_t amark_cmark_parse(const char *data, size_t len, const amark_parser_options_t *opts,
                                                amark_node_t **doc);
 ```
-- 各フラグは同名の規則（`AMARK_CMARK_EMPHASIS` ↔ `amark_syntax_emphasis_create`）に 1 対 1 で対応する。フラグはプリセットの選択の便宜であり、規則そのものは `amark/syntax.h` で扱う
+- 規則の選択の API（ビットフラグなど）は持たない。部分集合はプリセットから規則の拡張名で取り外して作り（`amark_dialect_remove_extension(d, amark_slice_from_cstr(AMARK_SYNTAX_HTML_BLOCK_NAME))` など）、少数の規則だけの方言は規則の生成関数で組み立てる
 - `amark/cmark.h` は `amark/html.h` を include せず、html-renderer の型を使わない。HTML への簡易変換は `amark/cmark_html.h`（下記）に分ける。`amark/syntax.h` は、取り外しに使う拡張名の定数を利用者が得られるように include する
-- ヘッダ冒頭のコメントに記す利用者向けの事項: 対象の仕様の版、フラグと規則（拡張名）の対応、プリセットは凍結されていないこと、繰り返し解析する場合は方言を作って `amark_parser_parse` で再利用すべきこと（簡易 API は呼び出しごとに方言を作る）、CommonMark の規則だけからなる方言で作った文書は方言の破棄後も有効なこと（parser-core の C1）、HTML への簡易変換は `amark/cmark_html.h` にあること
+- ヘッダ冒頭のコメントに記す利用者向けの事項: 対象の仕様の版、プリセットが含む規則（拡張名）の一覧、プリセットは凍結されていないこと、部分集合は取り外しで作ること、繰り返し解析する場合は方言を作って `amark_parser_parse` で再利用すべきこと（簡易 API は呼び出しごとに方言を作る）、CommonMark の規則だけからなる方言で作った文書は方言の破棄後も有効なこと（parser-core の C1）、HTML への簡易変換は `amark/cmark_html.h` にあること
 
 #### CommonmarkHtmlHeader
 
@@ -473,30 +449,30 @@ AMARK_API amark_error_t amark_cmark_convert_to_html(const char *data, size_t len
 - ヘッダ冒頭のコメント: HTML の既定値は生 HTML と危険な URL を出力しないこと、繰り返し変換する場合は方言を再利用し `amark_parser_parse` と `amark_html_render` を使うべきこと
 - 包括ヘッダ `amark/amark.h` は `amark/syntax.h`、`amark/cmark.h`、`amark/cmark_html.h` を include する（追記）
 
-##### 規則の表（各規則の記述子。ビットは CommonmarkDialect の単位の表での対応）
+##### 規則の表（各規則の記述子）
 
-| ビット | 拡張名（= 構文名） | 種類 | 既定の優先順位 | start_chars / triggers | 解析状態 |
-|---|---|---|---|---|---|
-| THEMATIC_BREAK | `thematic_break` | ブロック NONE | 60 | `*-_` | なし |
-| ATX_HEADING | `atx_heading` | ブロック INLINE | 20 | `#` | なし |
-| SETEXT_HEADING | `setext_heading` | ブロック INLINE | 50 | `=-` | なし |
-| INDENTED_CODE | `indented_code` | ブロック RAW | 80 | `NULL` | なし |
-| FENCED_CODE | `fenced_code` | ブロック RAW | 30 | `` `~ `` | なし |
-| HTML_BLOCK | `html_block` | ブロック RAW | 40 | `<` | なし |
-| LINK_REFERENCE_DEFINITION | `link_reference_definition` | 段落の処理器 | 100 | — | なし |
-| BLOCK_QUOTE | `block_quote` | ブロック BLOCKS | 10 | `>` | なし |
-| LIST | `list`（構文 `list_item` と `list`） | ブロック BLOCKS ×2 | 70（項目）、—（リストは開始なし） | `*+-0123456789` | 開いているリストの記録 |
-| BACKSLASH_ESCAPE | `backslash_escape` | インライン | 20 | `\` | なし |
-| ENTITY | `entity` | インライン | 10 | `&` | なし |
-| CODE_SPAN | `code_span` | インライン | 10 | `` ` `` | `` ` `` の位置の記憶 |
-| EMPHASIS | `emphasis` | インライン | 10 | `*_` | なし |
-| LINK | `link` | インライン | 10 | `[]!` | 展開量 |
-| AUTOLINK | `autolink` | インライン | 10 | `<` | なし |
-| HTML_INLINE | `html_inline` | インライン | 20 | `<` | 閉じのない構造の記憶 |
-| LINE_BREAK | `line_break` | インライン | 10 | `\n\` | なし |
+| 拡張名（= 構文名） | 種類 | 既定の優先順位 | start_chars / triggers | 解析状態 |
+|---|---|---|---|---|
+| `thematic_break` | ブロック NONE | 60 | `*-_` | なし |
+| `atx_heading` | ブロック INLINE | 20 | `#` | なし |
+| `setext_heading` | ブロック INLINE | 50 | `=-` | なし |
+| `indented_code` | ブロック RAW | 80 | `NULL` | なし |
+| `fenced_code` | ブロック RAW | 30 | `` `~ `` | なし |
+| `html_block` | ブロック RAW | 40 | `<` | なし |
+| `link_reference_definition` | 段落の処理器 | 100 | — | なし |
+| `block_quote` | ブロック BLOCKS | 10 | `>` | なし |
+| `list`（構文 `list_item` と `list`） | ブロック BLOCKS ×2 | 70（項目）、—（リストは開始なし） | `*+-0123456789` | 開いているリストの記録 |
+| `backslash_escape` | インライン | 20 | `\` | なし |
+| `entity` | インライン | 10 | `&` | なし |
+| `code_span` | インライン | 10 | `` ` `` | `` ` `` の位置の記憶 |
+| `emphasis` | インライン | 10 | `*_` | なし |
+| `link` | インライン | 10 | `[]!` | 展開量 |
+| `autolink` | インライン | 10 | `<` | なし |
+| `html_inline` | インライン | 20 | `<` | 閉じのない構造の記憶 |
+| `line_break` | インライン | 10 | `\n\` | なし |
 
 - 同じトリガーの順: `<` はオートリンク（10）→ 生 HTML（20）、`\` は改行（10、`\` + 行末だけを処理）→ エスケープ（20）。他のトリガーは 1 つの構文だけ
-- どの規則もノード種別を宣言しない（`node_kind_count = 0`、1.5）。記述子と構文はすべて各規則のソースの `static const` で、`user_data` は使わない（12.1）
+- どの規則もノード種別を宣言しない（`node_kind_count = 0`、1.4）。記述子と構文はすべて各規則のソースの `static const` で、`user_data` は使わない（12.1）
 - 既定の優先順位は CommonMark の開始判定の順を満たすように 10 刻みで割り当てる。他のプリセット（GFM など）は規則の間に構文を挟めるほか、必要なら `amark_dialect_set_priority` で方言ごとに上書きする
 
 ### 非公開
@@ -793,17 +769,17 @@ amark_slice_t amark_syntax_rest_of_line(const amark_block_context_t *ctx);
 
 | Field | Detail |
 |-------|--------|
-| Intent | 単位の表、方言への一括追加・生成、簡易パース（構文のロジックを持たない） |
-| Requirements | 1.2, 1.3, 1.8, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 3.1, 3.3, 3.4, 3.5, 3.6, 12.1, 12.2, 12.3 |
+| Intent | 規則の生成関数の表、方言の生成、簡易パース（構文のロジックを持たない） |
+| Requirements | 1.7, 2.1, 2.2, 2.3, 2.4, 3.1, 3.3, 3.4, 3.5, 3.6, 12.1, 12.2, 12.3 |
 
 **Contracts**: Service [x]
 
-- 単位の表: `static const` の 17 要素 `{ビット, 規則の生成関数へのポインタ}` を列挙の値の昇順に持つ（例: `{AMARK_CMARK_EMPHASIS, amark_syntax_emphasis_create}`）。`amark/syntax.h` だけを使い、`syntax_internal.h` と記述子を参照しない（1.8）
-- `amark_cmark_add_extensions(dialect, constructs)`（1.2、1.3、2.4、2.5）: `dialect == NULL`、`constructs == 0`、`constructs & ~AMARK_CMARK_ALL`: `AMARK_ERROR_INVALID_ARGUMENT`。凍結済みなら `AMARK_ERROR_INVALID_STATE`（`amark_dialect_is_frozen` で先に確かめる）。表の順に、指定されたビットの規則の生成関数で拡張を生成して `amark_dialect_add_extension`。失敗したら、その拡張を破棄し、この呼び出しで追加した拡張を逆順に `amark_dialect_remove_extension` で取り外して、そのエラー（`ALREADY_EXISTS`、`NO_MEMORY` など）を返す。取り外しは凍結されていない方言では失敗しない
-- `amark_cmark_dialect_create(constructs, dialect)`（2.1、2.2、2.6）: `dialect == NULL` と `constructs` の検査は同上。`amark_dialect_create` → `amark_cmark_add_extensions` → 成功なら凍結せずに `*dialect` に書く。失敗なら方言を破棄して `*dialect` を変更しない
-- `amark_cmark_parse(data, len, opts, doc)`（3.1、3.3〜3.6）: `doc == NULL`、`len > 0 && data == NULL`: `AMARK_ERROR_INVALID_ARGUMENT`。`amark_cmark_dialect_create(AMARK_CMARK_ALL)` → `amark_parser_parse(dialect, data, len, opts, &tmp)` → 方言を破棄 → 成功なら `*doc = tmp`。`opts == NULL` は parser-core の既定値。同じ入力の通常のパースと同一の木（3.6）
+- 規則の表: `static const` の 17 要素の規則の生成関数へのポインタ（`amark_syntax_thematic_break_create` 〜 `amark_syntax_line_break_create`）を持つ。`amark/syntax.h` だけを使い、`syntax_internal.h` と記述子を参照しない（1.7）
+- `amark_cmark_dialect_create(dialect)`（2.1、2.3、2.4）: `dialect == NULL`: `AMARK_ERROR_INVALID_ARGUMENT`。`amark_dialect_create` の後、表の順に生成関数で拡張を作って `amark_dialect_add_extension` する。生成または追加に失敗したら、追加できなかった拡張を破棄し、方言を破棄して（追加済みの拡張は方言とともに破棄される）`*dialect` を変更せずにそのエラーを返す。成功なら凍結せずに `*dialect` に書く
+- 部分集合（2.2）: プリセットは取り外しの API を持たず、利用者が parser-core の `amark_dialect_remove_extension` に規則の拡張名の定数を渡す。プリセットの拡張名は規則の拡張名そのものなので、追加の約束はない
+- `amark_cmark_parse(data, len, opts, doc)`（3.1、3.3〜3.6）: `doc == NULL`、`len > 0 && data == NULL`: `AMARK_ERROR_INVALID_ARGUMENT`。`amark_cmark_dialect_create` → `amark_parser_parse(dialect, data, len, opts, &tmp)` → 方言を破棄 → 成功なら `*doc = tmp`。`opts == NULL` は parser-core の既定値。同じ入力の通常のパースと同一の木（3.6）
 - 並行利用（12.1〜12.3）: 可変のグローバル状態を持たない。簡易 API は呼び出しごとに方言を作るため共有状態がない。プリセットを凍結した方言は parser-core の規則どおり複数のパーサから同時に使える（規則のコールバックは解析状態と文脈だけを書き換える）
-- 将来の GFM のプリセット（`src/gfm/`）も同じ形（単位の表と規則の生成関数）で、CommonMark の規則と GFM の規則を集める
+- 将来の GFM のプリセット（`src/gfm/`）も同じ形（規則の生成関数の表）で、CommonMark の規則と GFM の規則を集める
 
 **Implementation Notes**
 - Validation: `cmark_dialect_test.c`、`cmark_error_test.c`
@@ -817,7 +793,7 @@ amark_slice_t amark_syntax_rest_of_line(const amark_block_context_t *ctx);
 | Requirements | 3.2, 3.3, 3.4, 3.5 |
 
 **Contracts**: Service [x]
-- `amark_cmark_convert_to_html(data, len, parse_opts, html_opts, out)`: `out == NULL`、`len > 0 && data == NULL`: `AMARK_ERROR_INVALID_ARGUMENT`。宣言は `amark/cmark_html.h`。手順は 方言の生成（`AMARK_CMARK_ALL`）→ `amark_parser_parse(dialect, data, len, parse_opts, &doc)` → `amark_html_render(doc, html_opts, out)` → 文書の破棄 → 方言の破棄。`html_opts` の検証は `amark_html_render` に委ね、不正なら `AMARK_ERROR_INVALID_ARGUMENT` が返る（出力先は変わらない）
+- `amark_cmark_convert_to_html(data, len, parse_opts, html_opts, out)`: `out == NULL`、`len > 0 && data == NULL`: `AMARK_ERROR_INVALID_ARGUMENT`。宣言は `amark/cmark_html.h`。手順は 方言の生成（`amark_cmark_dialect_create`）→ `amark_parser_parse(dialect, data, len, parse_opts, &doc)` → `amark_html_render(doc, html_opts, out)` → 文書の破棄 → 方言の破棄。`html_opts` の検証は `amark_html_render` に委ね、不正なら `AMARK_ERROR_INVALID_ARGUMENT` が返る（出力先は変わらない）
 - 出力先は html-renderer が失敗時に呼び出し前の長さへ戻す。解析の失敗では出力先に何も書かない（3.5）
 - `html_opts == NULL` は html-renderer の既定値（生 HTML と危険な URL を出力しない、3.3）
 - 本体のソースで `amark/html.h`（`amark/cmark_html.h` 経由を含む）を include するのはこのファイルだけ
@@ -898,12 +874,12 @@ void test_spec_examples_free(test_spec_examples_item_t *examples, size_t count);
 - メモリ（9.6）: 計測アロケータの `bytes_peak`が入力長の定数倍（類型ごとに 64 倍以下）で、終了後 `live == 0`
 
 #### 単体テストと失敗注入
-- `syntax_rule_test.c`（RuleTest）: 17 規則それぞれの生成関数（`ext == NULL` の拒否を含む）と、生成した拡張の名前が `AMARK_SYNTAX_<RULE>_NAME` と一致し方言の接頭辞を含まないこと（1.1、1.6）、規則だけで組み立てた方言での外した構文の記法（HTML ブロックなしで `<div>` が段落のテキスト、インデントコードなしで字下げ行が段落、リンク参照定義なしで定義行が段落、強調なしで `*a*` がテキスト、1.4）、新しいノード種別がない（全文書の全ノードが標準種別、1.5）、自作の拡張との混在と `amark_dialect_set_priority` による優先順位の変更（1.7）
-- `cmark_dialect_test.c`: 0・未定義ビットの拒否（1.3）、一括追加と名前の重複での全か無か（1.2、2.5）、凍結済みで `INVALID_STATE`（2.4）、プリセットの拡張数 17・各拡張名が規則の拡張名と一致・未凍結・後から追加と規則の名前での取り外しができる（2.1〜2.3）、部分集合（2.2）、プリセットと規則の生成関数で同じ規則を並べた方言の解析結果が同一（1.8）、簡易パースと通常のパースの木の同一性（3.6）、簡易パースの文書が方言の破棄後も使える（3.1）、簡易変換の追記と既定の安全性（3.2、3.3）、`NULL` と長さの検査（3.4）、2 つのスレッドで同じ凍結済みの方言を使う解析（スレッドの API が使える環境だけ。C99 の範囲外のため任意、12.2、12.3）
+- `syntax_rule_test.c`（RuleTest）: 17 規則それぞれの生成関数（`ext == NULL` の拒否を含む）と、生成した拡張の名前が `AMARK_SYNTAX_<RULE>_NAME` と一致し方言の接頭辞を含まないこと（1.1、1.5）、規則だけで組み立てた方言での外した構文の記法（HTML ブロックなしで `<div>` が段落のテキスト、インデントコードなしで字下げ行が段落、リンク参照定義なしで定義行が段落、強調なしで `*a*` がテキスト、1.3）、新しいノード種別がない（全文書の全ノードが標準種別、1.4）、自作の拡張との混在と `amark_dialect_set_priority` による優先順位の変更（1.6）
+- `cmark_dialect_test.c`: `NULL` の拒否、プリセットの拡張数 17・各拡張名が規則の拡張名と一致・未凍結・後から自作の拡張を追加できる（2.1、2.3）、規則の拡張名での取り外しによる部分集合（`html_block` を外すと `<div>` の行が段落のテキスト、2.2）、プリセットと規則の生成関数で同じ規則を並べた方言の解析結果が同一（1.7）、簡易パースと通常のパースの木の同一性（3.6）、簡易パースの文書が方言の破棄後も使える（3.1）、簡易変換の追記と既定の安全性（3.2、3.3）、`NULL` と長さの検査（3.4）、2 つのスレッドで同じ凍結済みの方言を使う解析（スレッドの API が使える環境だけ。C99 の範囲外のため任意、12.2、12.3）
 - `syntax_block_test.c`: 仕様の例にない境界（9 桁と 10 桁の開始番号、見出しレベル 6 と 7、フェンスの長さ違いの閉じ、HTML ブロックの種類ごとの終了、リストの記号の変化での分割、空項目と空行、深さの上限の付近）と、外した構文との組み合わせ（4.1〜4.7、5.1〜5.8）
 - `syntax_inline_test.c`: 数値参照の範囲（6.2、6.3）、コードスパンの空白の規則（6.4、6.5）、文字参照のスペースと改行（6.6）、生 HTML とオートリンクの境界（6.7、6.8）、flanking の Unicode の句読点（記号 S を含む、7.1）、rule of 3（7.2）、リンクの各形と無効化（7.3〜7.6）、ラベルの畳み込み（7.7）、優先順位（7.8）、ラベル 999 / 1000 文字（5.8）、括弧 32 / 33 段（9.5）、展開量の上限の境界（9.4）
 - `syntax_data_test.c`: エンティティ表が昇順で重複がなく、`amp`、`ngE`（2 コードポイント）、`CounterClockwiseContourIntegral` を含み、`;` なしの名前を含まない（10.1）。`amark_unicode_is_punctuation` が `!`、`£`（Sc）、`、`（Po）で真、`a` で偽。`amark_unicode_is_whitespace` が U+3000 で真。句読点と Zs の表が昇順で重複がない。`ẞ` の畳み込みが `ss`（10.2）。生成物の先頭に出典と SHA-256 の記録がある（ソースを読む検査、10.3）
-- `cmark_error_test.c`: 規則の生成、方言の生成、一括追加、代表的な文書（全構文を含む）の解析、簡易変換について、失敗注入の網羅パターン（各回で `NO_MEMORY` かつ状態不変、または成功、後片付け後 `live == 0`、11.1〜11.3）。全例の文字列の UTF-8 妥当性（`amark_utf8_validate`、11.4）は ConformanceTest の各例でも確認する
+- `cmark_error_test.c`: 規則の生成、方言の生成、代表的な文書（全構文を含む）の解析、簡易変換について、失敗注入の網羅パターン（各回で `NO_MEMORY` かつ状態不変、または成功、後片付け後 `live == 0`、11.1〜11.3）。全例の文字列の UTF-8 妥当性（`amark_utf8_validate`、11.4）は ConformanceTest の各例でも確認する
 
 ### 統合
 
@@ -912,12 +888,12 @@ void test_spec_examples_free(test_spec_examples_item_t *examples, size_t count);
 **Contracts**: Batch [x]
 - Trigger: `cmake -S . -B build && cmake --build build && ctest --test-dir build`（静的・動的の両方、3 OS）
 - Input: Modified Files の一覧
-- Output: 8 つのテスト実行ファイルが CTest に登録され成功する。ヘッダ単独 include 検査が `amark/syntax.h`、`amark/cmark.h`、`amark/cmark_html.h` に適用され、`amark/syntax.h` と `amark/cmark.h` が `amark/html.h` なしでコンパイルできる。C++ 検査が規則の生成、プリセットの生成、簡易変換を呼んでリンクできる。動的ライブラリの公開シンボルは SyntaxPublicHeader の 17 関数、CommonmarkPublicHeader の 3 関数、CommonmarkHtmlHeader の 1 関数だけが増え、共有部品の `amark_syntax_*`（生成関数以外）と `amark_unicode_*` は export されない。テスト補助と抽出器は `amark_test_support` にだけ含まれる（8.7）。ビルドは Python を必要としない（10.4）。`THIRD_PARTY_NOTICES.md` がインストールされる
+- Output: 8 つのテスト実行ファイルが CTest に登録され成功する。ヘッダ単独 include 検査が `amark/syntax.h`、`amark/cmark.h`、`amark/cmark_html.h` に適用され、`amark/syntax.h` と `amark/cmark.h` が `amark/html.h` なしでコンパイルできる。C++ 検査が規則の生成、プリセットの生成、簡易変換を呼んでリンクできる。動的ライブラリの公開シンボルは SyntaxPublicHeader の 17 関数、CommonmarkPublicHeader の 2 関数、CommonmarkHtmlHeader の 1 関数だけが増え、共有部品の `amark_syntax_*`（生成関数以外）と `amark_unicode_*` は export されない。テスト補助と抽出器は `amark_test_support` にだけ含まれる（8.7）。ビルドは Python を必要としない（10.4）。`THIRD_PARTY_NOTICES.md` がインストールされる
 
 ## Data Models
 
 ### Domain Model
-- **値オブジェクト**: 規則（静的な記述子と構文）、CommonMark の単位（ビット。規則と 1 対 1）、リンク参照定義（定義テーブルが所有）、生成した表
+- **値オブジェクト**: 規則（静的な記述子と構文）、リンク参照定義（定義テーブルが所有）、生成した表
 - **集約**: 方言（拡張を所有、parser-core）。CommonMark はその中身を供給するだけ
 - **解析ごとの状態**: リストの記録のスタック、コードスパンの位置の記憶、HTML の記憶、展開量。いずれも拡張の解析状態に置き、ノードに持たせない。サイズ 0 は要求しない（foundation の Memory のライブラリ内の規則）: 解析状態の構造体は固定長、リストの記録のスタックとコードスパンの長さごとの記憶は最初に積む・記録する時点で 1 以上の容量を確保し（空の間は `NULL` と個数 0）、リンク参照定義の値は構造体と 2 つの文字列の NUL を含むため常に 1 バイト以上、ラベルの正規化は foundation のバッファに書く
 - **不変条件**: 木は標準種別だけ。木の文字列は妥当な UTF-8。同じ正規化ラベルの定義は最初のものだけ
@@ -933,9 +909,7 @@ void test_spec_examples_free(test_spec_examples_item_t *examples, size_t count);
 
 | エラー | 返す操作と条件 |
 |---|---|
-| `AMARK_ERROR_INVALID_ARGUMENT` | 必須引数の `NULL`（規則の生成関数を含む）、`0` または未定義のビット（`add_extensions`、`dialect_create`）、`len > 0 && data == NULL`、html-renderer が拒否する出力設定 |
-| `AMARK_ERROR_INVALID_STATE`（parser-core） | 凍結済みの方言への追加 |
-| `AMARK_ERROR_ALREADY_EXISTS`（node-tree） | 方言内の拡張名・構文名の重複 |
+| `AMARK_ERROR_INVALID_ARGUMENT` | 必須引数の `NULL`（規則の生成関数を含む）、`len > 0 && data == NULL`、html-renderer が拒否する出力設定 |
 | `AMARK_ERROR_NO_MEMORY` | すべての確保失敗 |
 | `AMARK_ERROR_OVERFLOW` | バッファのサイズ計算のあふれ（foundation） |
 

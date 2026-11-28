@@ -66,23 +66,32 @@
 ## Design Decisions
 
 ### Decision: 拡張の粒度と名前
-- **Context**: 要件 1.1、1.4、1.6
+- **Context**: 要件 1.1、1.3、1.5
 - **Alternatives Considered**: 上表
-- **Selected Approach**: 17 単位。拡張名と構文名は方言の接頭辞を付けない規則の名前とする（例: `html_block`。次の「規則と方言プリセットの分離」で `cmark_` 接頭辞から改めた）。CommonMark のプリセットでは単位をビットフラグの `#define` 定数（`uint32_t`）で指定し、集合はビットの論理和
+- **Selected Approach**: 17 単位。拡張名と構文名は方言の接頭辞を付けない規則の名前とする（例: `html_block`。次の「規則と方言プリセットの分離」で `cmark_` 接頭辞から改めた）。規則は規則ごとの生成関数で作り、部分集合はプリセットから拡張名で取り外して作る（ビットフラグによる選択は「規則の選択の API を持たない」で廃止）
 - **Rationale**: 取り外したい単位と仕様の構文が一致する。名前の衝突は parser-core の方言が検査する
 - **Trade-offs**: リンクと画像は分けない（`]` の処理が共有で、画像だけを外す用途が乏しい）。リンク参照定義はリンクと別にする（定義を外すと参照リンクが成立しない方言を作れる）
 - **Follow-up**: GFM が優先順位を挟めるよう、ブロックの開始判定の優先順位を 10 刻みにする
 
 ### Decision: 規則と方言プリセットの分離
-- **Context**: 要件 1.1、1.6、1.8。利用者は「強調」「テーブル」のような規則を、どの方言の出身かを意識せずに 1 つずつ使いたい。また将来の GFM は CommonMark の共有部品（文字の分類、文字参照、リンクの走査、桁の部品）と規則をそのまま使う
+- **Context**: 要件 1.1、1.5、1.7。利用者は「強調」「テーブル」のような規則を、どの方言の出身かを意識せずに 1 つずつ使いたい。また将来の GFM は CommonMark の共有部品（文字の分類、文字参照、リンクの走査、桁の部品）と規則をそのまま使う
 - **Alternatives Considered**:
   1. 方言ごとのモジュール（`src/cmark/` に規則と共有部品とプリセットを置き、GFM は `src/gfm/`）— GFM が `cmark_internal.h` を include するとモジュールの非公開境界が崩れる。規則の名前と生成が方言に結び付き（`amark_cmark_extension_create(AMARK_CMARK_EMPHASIS)`、拡張名 `cmark_emphasis`）、利用者が規則として参照しにくい。単位の表が全記述子を参照するため、1 規則だけを使っても全規則がリンクされる
   2. 規則の層（`src/syntax/`）とプリセットの層（`src/cmark/`、将来の `src/gfm/`）に分ける — 規則は方言に属さず、規則ごとの公開の生成関数と拡張名の定数を持つ。プリセットは規則の公開 API だけで方言を組み立てる
   3. 2 に加え、共有部品を `src/syntax/shared/` のように入れ子のディレクトリに分ける — steering の「ディレクトリはさらに入れ子にしない」に反する
-- **Selected Approach**: 2。`src/syntax/` はフラットに置き、ファイル名で役割を示す（共有部品は `syntax_chars.c` など、規則は `syntax_<規則名>.c`）。公開ヘッダは `amark/syntax.h` 1 つに全規則を置く。CommonMark のビットフラグはプリセットの選択の便宜として `amark/cmark.h` に残し、`amark_cmark_extension_create` と `amark_cmark_get_extension_name` は規則の生成関数と名前の定数に置き換える。定義テーブルの名前空間は `cmark.link` から規則の間の約束 `link` に改める。既定の優先順位は規則の記述子が持ち、方言ごとの上書きは parser-core の既存の `amark_dialect_set_priority` で行う
+- **Selected Approach**: 2。`src/syntax/` はフラットに置き、ファイル名で役割を示す（共有部品は `syntax_chars.c` など、規則は `syntax_<規則名>.c`）。公開ヘッダは `amark/syntax.h` 1 つに全規則を置く。`amark_cmark_extension_create` と `amark_cmark_get_extension_name` は規則の生成関数と名前の定数に置き換える。定義テーブルの名前空間は `cmark.link` から規則の間の約束 `link` に改める。既定の優先順位は規則の記述子が持ち、方言ごとの上書きは parser-core の既存の `amark_dialect_set_priority` で行う
 - **Rationale**: steering の「方言は拡張セット」をコードの配置と名前にそのまま反映できる。GFM は共有部品の変更を本仕様の改訂として扱えばよく、プリセット同士が互いの非公開ヘッダに依存しない。規則ごとに生成関数があるため、静的リンクでは使った規則だけがリンクされる。markdown-renderer と parser-core が参照する公開 API（`amark_cmark_parse`、`amark/cmark.h`、`AMARK_CMARK_SPEC_PATH`）は変わらない
 - **Trade-offs**: 公開関数が 17 個（GFM で更に）増える。共有部品は同梱の規則だけが使え、外部の拡張の作者には非公開のまま（steering の「本体と拡張で同じ API を使う」との差。公開するかは gfm の spec 作成時に、実際に必要な部品を見て判断する）
 - **Follow-up**: gfm の spec では、GFM の規則を `src/syntax/` と `amark/syntax.h` に足し、GFM のプリセットを `src/gfm/` に置く。拡張間の依存の宣言（例: タスクリストはリストの規則を前提とする）は当面プリセットの構成で満たし、必要になれば parser-core の改訂として扱う
+
+### Decision: 規則の選択の API を持たない
+- **Context**: 要件 2.2。規則と方言プリセットを分けた後、CommonMark の単位のビットフラグ（`AMARK_CMARK_*`、`amark_cmark_add_extensions`、`amark_cmark_dialect_create(constructs)`）を残すか
+- **Alternatives Considered**:
+  1. フラグを残す — 「生 HTML 以外の全部」を 1 回の呼び出しで作れる。一方で規則と 1 対 1 の定数を二重に管理し、規則の追加ごとに同期が要る。GFM のプリセットは CommonMark と GFM の規則を混ぜるため、フラグの体系が方言ごとに分かれて規則中心の考え方とずれる。32 ビットの上限、0・未定義ビットの検査と一括追加の全か無かの処理・テストもフラグのためだけに要る
+  2. フラグを廃止する — 部分集合はプリセットから `amark_dialect_remove_extension` と規則の拡張名の定数で取り外し、少数の規則だけの方言は規則の生成関数で組み立てる
+- **Selected Approach**: 2。`amark/cmark.h` は `amark_cmark_dialect_create(amark_dialect_t **)` と簡易 API だけを持つ。既存の方言に CommonMark の規則を足す `amark_cmark_add_extensions` も廃止する（プリセットを作ってから自作の拡張を足せば同じ方言になる。GFM のプリセットも `amark_cmark_dialect_create` の結果に GFM の規則を足して作れる）
+- **Rationale**: フラグで可能なことはすべて既存の API（規則の生成関数、parser-core の追加・取り外し）で代わりが利く。公開 API と二重管理が減る。他の spec はフラグを参照していない（markdown-renderer は `amark_cmark_parse` とテスト用の `AMARK_CMARK_SPEC_PATH` だけ）
+- **Trade-offs**: 部分集合を作るときにいったん全規則を生成してから外す手間と確保が増えるが、方言の生成は解析ごとではなく一度だけなので無視できる
 
 ### Decision: 簡易 API の形
 - **Context**: 要件 3

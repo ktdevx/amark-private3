@@ -28,24 +28,21 @@
 
 #### Acceptance Criteria
 1. The CommonMark Module shall 次の 17 の単位を、それぞれ規則ごとの公開関数で、方言プリセットを介さずに独立した拡張として生成できるようにする: thematic break、ATX 見出し、Setext 見出し、インデントコードブロック、フェンスコードブロック、HTML ブロック、リンク参照定義、ブロック引用、リスト（リストとリスト項目）、バックスラッシュエスケープ、エンティティ・数値文字参照、コードスパン、強調（強調と強い強調）、リンク（リンクと画像）、オートリンク、生 HTML、改行（ハード改行とソフト改行）
-2. When 利用者が CommonMark の構文の単位の集合をフラグで指定して方言への追加を要求する, the CommonMark Module shall 指定されたすべての単位の拡張を方言に追加するか、いずれかの追加に失敗した場合はどれも追加せずに方言を呼び出し前の状態に保つ
-3. If 単位の集合のフラグに定義されていない単位が指定される, the CommonMark Module shall 拡張を生成・追加せず不正な引数のエラーを返す
-4. Where 方言がある単位を含まない, the CommonMark Module shall その構文の記法を、その構文が存在しない場合の残りの構文の規則で解釈する（例: HTML ブロックがなければ `<div>` の行を段落のテキストとして扱う）
-5. The CommonMark Module shall 新しいノード種別を定義せず、node-tree の標準ノード種別だけで木を作る
-6. The CommonMark Module shall 各規則の拡張名を、方言の名前を含まない固定の名前（例: `emphasis`、`html_block`）として公開ヘッダの定数で提供し、利用者がその名前で方言から取り外せるようにする
-7. The CommonMark Module shall 各構文を、ライブラリ外の拡張と同じ公開拡張 API だけで提供し、利用者が CommonMark の拡張と自作の拡張を同じ方言に混在させ、優先順位を変更できるようにする
-8. The CommonMark Module shall 規則を方言プリセットに依存させず、CommonMark 方言プリセットを規則の公開 API だけで組み立てる（将来の GFM などのプリセットと利用者が、同じ規則を再利用できるようにする）
+2. If 規則の生成関数に出力先として空ポインタが渡される, the CommonMark Module shall 拡張を生成せず不正な引数のエラーを返す
+3. Where 方言がある規則を含まない, the CommonMark Module shall その構文の記法を、その構文が存在しない場合の残りの構文の規則で解釈する（例: HTML ブロックがなければ `<div>` の行を段落のテキストとして扱う）
+4. The CommonMark Module shall 新しいノード種別を定義せず、node-tree の標準ノード種別だけで木を作る
+5. The CommonMark Module shall 各規則の拡張名を、方言の名前を含まない固定の名前（例: `emphasis`、`html_block`）として公開ヘッダの定数で提供し、利用者がその名前で方言から取り外せるようにする
+6. The CommonMark Module shall 各構文を、ライブラリ外の拡張と同じ公開拡張 API だけで提供し、利用者が CommonMark の拡張と自作の拡張を同じ方言に混在させ、優先順位を変更できるようにする
+7. The CommonMark Module shall 規則を方言プリセットに依存させず、CommonMark 方言プリセットを規則の公開 API だけで組み立てる（将来の GFM などのプリセットと利用者が、同じ規則を再利用できるようにする）
 
 ### Requirement 2: CommonMark 方言プリセット
-**Objective:** As a ライブラリ利用者, I want 1 回の呼び出しで CommonMark 方言を得たい, so that 構文の一覧を知らなくても仕様どおりにパースできる
+**Objective:** As a ライブラリ利用者, I want 1 回の呼び出しで CommonMark 方言を得たい, so that 規則の一覧を知らなくても仕様どおりにパースできる
 
 #### Acceptance Criteria
-1. When 利用者が全構文を指定して方言の生成を要求する, the CommonMark Module shall 17 の単位をすべて含む、まだ凍結されていない方言を返す
-2. When 利用者が構文の単位の部分集合を指定して方言の生成を要求する, the CommonMark Module shall その単位だけを含む、まだ凍結されていない方言を返す
-3. While 生成した方言がまだ凍結されていない, the CommonMark Module shall 利用者がその方言に他の拡張を追加し、CommonMark の拡張を取り外せるようにする
-4. If 凍結済みの方言に CommonMark の拡張の追加が要求される, the CommonMark Module shall 方言を変えず不正な状態のエラーを返す
-5. If 追加しようとする拡張の名前が方言内の既存の拡張と重複する, the CommonMark Module shall 方言を変えず既に存在することを示すエラーを返す
-6. If 方言の生成の途中で失敗する, the CommonMark Module shall 作りかけの方言と拡張をすべて解放し、方言を返さずそのエラーを返す
+1. When 利用者が CommonMark 方言の生成を要求する, the CommonMark Module shall 17 の規則をすべて含む、まだ凍結されていない方言を返す
+2. When 利用者が生成した方言から規則の拡張名を指定して取り外す, the CommonMark Module shall 残りの規則だけで解析される方言にする（例: `html_block` を外した CommonMark 方言）
+3. While 生成した方言がまだ凍結されていない, the CommonMark Module shall 利用者がその方言に他の拡張を追加できるようにする
+4. If 方言の生成の途中で失敗する, the CommonMark Module shall 作りかけの方言と拡張をすべて解放し、方言を返さずそのエラーを返す
 
 ### Requirement 3: 簡易 API
 **Objective:** As a ライブラリ利用者, I want Markdown テキストから木または HTML を 1 回の呼び出しで得たい, so that 方言とパーサの寿命を管理せずに変換できる
